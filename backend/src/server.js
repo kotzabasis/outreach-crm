@@ -14,6 +14,7 @@ const trackingRoutes = require("./routes/tracking");
 const analyticsRoutes = require("./routes/analytics");
 const adminRoutes = require("./routes/admin");
 const offerRoutes = require("./routes/offers");
+const sendRoutes = require("./routes/send");
 const { startScheduler } = require("./lib/scheduler");
 const prisma = require("./db");
 
@@ -36,7 +37,9 @@ app.use(
     credentials: true, // required so the session cookie is sent cross-origin
   })
 );
-app.use(express.json({ limit: "1mb" }));
+// Bumped from 1mb: manual/sequence emails can carry base64 attachments
+// (capped at ~2MB/file, a few files) since there's no external file storage.
+app.use(express.json({ limit: "15mb" }));
 app.use(cookieParser());
 
 app.use(
@@ -75,6 +78,7 @@ app.use("/sequences", sequenceRoutes);
 app.use("/templates", templateRoutes);
 app.use("/admin", adminRoutes);
 app.use("/offers", offerRoutes);
+app.use("/send", sendRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/track", trackingRoutes); // no auth — see routes/tracking.js for why
 

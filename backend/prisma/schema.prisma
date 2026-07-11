@@ -29,6 +29,7 @@ model User {
   templates            Template[]
   offers               Offer[]
   contactNotes         ContactNote[]
+  emailLogs            EmailLog[]
   gmailAccount         GmailAccount?
   passwordResetTokens  PasswordResetToken[]
 }
@@ -54,14 +55,17 @@ model PasswordResetToken {
 // editing a template later never retroactively changes steps that already
 // used it, so an in-flight sequence can't change under an enrolled contact.
 model Template {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  subject   String
-  body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  subject     String
+  body        String
+  // [{filename, mimeType, contentBase64}] — small files only (capped at the
+  // app layer, ~2MB/file); simplest option with no external storage service.
+  attachments Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // A user's connected Gmail account, used only for sending. Separate from
@@ -101,6 +105,7 @@ model Contact {
   enrollments Enrollment[]
   offers      Offer[]
   notes       ContactNote[]
+  emailLogs   EmailLog[]
 
   @@index([userId, email])
   @@index([userId, category])
@@ -120,10 +125,13 @@ model Offer {
   title     String
   value     Float?
   currency  String   @default("EUR")
-  status    String   @default("draft") // draft | sent | accepted | declined
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status        String   @default("draft") // draft | sent | accepted | declined
+  notes         String?
+  // Freeform "why" behind an accepted/declined outcome — feeds the CRM
+  // business reporting (win rate + reasons breakdown), not just email metrics.
+  outcomeReason String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([userId, status])
   @@index([contactId])
@@ -161,9 +169,17 @@ model SequenceStep {
   sequence         Sequence  @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
   order            Int
   subject          String
-  body             String   // may contain {{first_name}}, {{company}} placeholders
+  body             String   // HTML, may contain {{name}}, {{company}}, {{email}} placeholders
   delayDays        Int      @default(0) // days after previous step (0 for the first step)
   sourceTemplateId String?  // informational only — which template this was copied from, if any
+  // Combinable gating conditions, evaluated by the scheduler right before
+  // sending — on top of (not instead of) delayDays. If unmet, this step is
+  // skipped (not retried) and the enrollment moves on to the next one.
+  // Shape: { requireEvent?: "opened"|"clicked"|"not_opened"|"not_clicked", requireTags?: string[] }
+  conditions       Json      @default("{}")
+  // [{filename, mimeType, contentBase64}] — copied in from the template at
+  // creation time, same rule as subject/body.
+  attachments      Json      @default("[]")
 
   emailLogs EmailLog[]
 
@@ -187,16 +203,31 @@ model Enrollment {
 }
 
 model EmailLog {
-  id             String    @id @default(uuid())
-  enrollmentId   String
-  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  stepId         String
-  step           SequenceStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  id             String      @id @default(uuid())
+  // Nullable because manual one-off sends (source = "manual") don't belong to
+  // an enrollment/step at all — only sequence-driven sends do.
+  enrollmentId   String?
+  enrollment     Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  stepId         String?
+  step           SequenceStep? @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  // Denormalized onto every row (not just derived via enrollment->contact) so
+  // manual sends and sequence sends share one query shape everywhere else in
+  // the app (Inbox view, contact timeline, analytics).
+  contactId      String
+  contact        Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject        String      @default("")
+  source         String      @default("sequence") // sequence | manual
+  attachments    Json        @default("[]") // kept for history/audit, same shape as SequenceStep.attachments
   gmailMessageId String?
-  trackingId     String    @unique
-  sentAt         DateTime  @default(now())
+  trackingId     String      @unique
+  sentAt         DateTime    @default(now())
 
   events TrackingEvent[]
+
+  @@index([userId, sentAt])
+  @@index([contactId])
 }
 
 model TrackingEvent {

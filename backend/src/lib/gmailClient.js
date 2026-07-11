@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { google } = require("googleapis");
 const { encrypt, decrypt } = require("./crypto");
 const prisma = require("../db");
@@ -65,7 +66,23 @@ function renderTemplate(template, contact) {
   return template
     .replaceAll("{{first_name}}", contact.name?.split(" ")[0] || "εκεί")
     .replaceAll("{{name}}", contact.name || "")
-    .replaceAll("{{company}}", contact.company || "εκεί");
+    .replaceAll("{{company}}", contact.company || "εκεί")
+    .replaceAll("{{email}}", contact.email || "");
+}
+
+// Non-ASCII (Greek, etc.) subject lines need RFC 2047 encoding — Gmail's raw
+// message format doesn't reliably round-trip a bare UTF-8 header otherwise.
+function encodeSubject(subject) {
+  if (/^[\x00-\x7F]*$/.test(subject)) return subject;
+  return `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
+}
+
+function toBase64Url(str) {
+  return Buffer.from(str, "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 // Wraps every http(s) link in the body with our /track/click redirect, and
@@ -79,30 +96,59 @@ function injectTracking(html, trackingId) {
   return `${withWrappedLinks}<br/>${pixel}`;
 }
 
-function buildRawMessage({ from, to, subject, html }) {
-  const messageParts = [
+// attachments: [{filename, mimeType, contentBase64}] — plain (unwrapped)
+// base64, size-validated upstream by lib/attachments.js.
+function buildRawMessage({ from, to, subject, html, attachments = [] }) {
+  const encodedSubject = encodeSubject(subject);
+
+  if (!attachments.length) {
+    const messageParts = [
+      `From: ${from}`,
+      `To: ${to}`,
+      "Content-Type: text/html; charset=utf-8",
+      "MIME-Version: 1.0",
+      `Subject: ${encodedSubject}`,
+      "",
+      html,
+    ];
+    return toBase64Url(messageParts.join("\r\n"));
+  }
+
+  const boundary = `bnd_${crypto.randomBytes(12).toString("hex")}`;
+  const parts = [
     `From: ${from}`,
     `To: ${to}`,
-    "Content-Type: text/html; charset=utf-8",
     "MIME-Version: 1.0",
-    `Subject: ${subject}`,
+    `Subject: ${encodedSubject}`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/html; charset=utf-8",
     "",
     html,
+    "",
   ];
-  const message = messageParts.join("\n");
-  return Buffer.from(message)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  for (const att of attachments) {
+    parts.push(
+      `--${boundary}`,
+      `Content-Type: ${att.mimeType}; name="${att.filename}"`,
+      "Content-Transfer-Encoding: base64",
+      `Content-Disposition: attachment; filename="${att.filename}"`,
+      "",
+      att.contentBase64.replace(/\s/g, ""),
+      ""
+    );
+  }
+  parts.push(`--${boundary}--`);
+  return toBase64Url(parts.join("\r\n"));
 }
 
-async function sendTrackedEmail({ gmailAccount, contact, subject, body, trackingId }) {
+async function sendTrackedEmail({ gmailAccount, contact, subject, body, trackingId, attachments = [] }) {
   const client = await getAuthedClientForGmailAccount(gmailAccount);
   const gmail = google.gmail({ version: "v1", auth: client });
 
   const renderedSubject = renderTemplate(subject, contact);
-  const renderedBodyHtml = renderTemplate(body, contact).replace(/\n/g, "<br/>");
+  const renderedBodyHtml = renderTemplate(body, contact);
   const htmlWithTracking = injectTracking(renderedBodyHtml, trackingId);
 
   const raw = buildRawMessage({
@@ -110,6 +156,7 @@ async function sendTrackedEmail({ gmailAccount, contact, subject, body, tracking
     to: contact.email,
     subject: renderedSubject,
     html: htmlWithTracking,
+    attachments,
   });
 
   const res = await gmail.users.messages.send({

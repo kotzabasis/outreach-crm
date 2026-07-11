@@ -2,6 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
+const { attachmentsSchema } = require("../lib/attachments");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -10,6 +11,7 @@ const templateSchema = z.object({
   name: z.string().min(1).max(200),
   subject: z.string().min(1).max(300),
   body: z.string().min(1).max(20000),
+  attachments: attachmentsSchema,
 });
 
 router.get("/", async (req, res) => {

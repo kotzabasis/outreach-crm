@@ -38,6 +38,48 @@ async function processDueEnrollments() {
   }
 }
 
+// Combinable gating conditions on a step (on top of, not instead of,
+// delayDays) — see SequenceStep.conditions in schema.prisma. If unmet, the
+// step is skipped outright (not retried later) and the enrollment advances.
+async function stepConditionsMet(step, enrollment, contact) {
+  const conditions = step.conditions || {};
+
+  if (Array.isArray(conditions.requireTags) && conditions.requireTags.length > 0) {
+    const contactTags = (contact.tags || "").split(",").map((t) => t.trim());
+    const hasAny = conditions.requireTags.some((t) => contactTags.includes(t));
+    if (!hasAny) return false;
+  }
+
+  if (conditions.requireEvent) {
+    const prevLog = await prisma.emailLog.findFirst({
+      where: { enrollmentId: enrollment.id },
+      orderBy: { sentAt: "desc" },
+      include: { events: true },
+    });
+    const opened = prevLog ? prevLog.events.some((e) => e.type === "open") : false;
+    const clicked = prevLog ? prevLog.events.some((e) => e.type === "click") : false;
+    if (conditions.requireEvent === "opened" && !opened) return false;
+    if (conditions.requireEvent === "clicked" && !clicked) return false;
+    if (conditions.requireEvent === "not_opened" && opened) return false;
+    if (conditions.requireEvent === "not_clicked" && clicked) return false;
+  }
+
+  return true;
+}
+
+async function advanceEnrollment(enrollment, sequence) {
+  const nextStep = sequence.steps[enrollment.currentStep + 1];
+  if (nextStep) {
+    const nextSendAt = new Date(Date.now() + nextStep.delayDays * 24 * 60 * 60 * 1000);
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { currentStep: enrollment.currentStep + 1, nextSendAt },
+    });
+  } else {
+    await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "completed" } });
+  }
+}
+
 async function sendNextStep(enrollment) {
   const { contact, sequence } = enrollment;
 
@@ -49,6 +91,14 @@ async function sendNextStep(enrollment) {
   const step = sequence.steps[enrollment.currentStep];
   if (!step) {
     await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "completed" } });
+    return;
+  }
+
+  if (!(await stepConditionsMet(step, enrollment, contact))) {
+    // Condition (event/tag) not satisfied — skip this step immediately and
+    // re-evaluate the next one on the next tick, rather than retrying this
+    // one forever.
+    await advanceEnrollment(enrollment, sequence);
     return;
   }
 
@@ -74,11 +124,21 @@ async function sendNextStep(enrollment) {
     subject: step.subject,
     body: step.body,
     trackingId,
+    attachments: Array.isArray(step.attachments) ? step.attachments : [],
   });
 
   await prisma.$transaction([
     prisma.emailLog.create({
-      data: { enrollmentId: enrollment.id, stepId: step.id, gmailMessageId, trackingId },
+      data: {
+        enrollmentId: enrollment.id,
+        stepId: step.id,
+        contactId: contact.id,
+        userId: sequence.userId,
+        subject: step.subject,
+        source: "sequence",
+        gmailMessageId,
+        trackingId,
+      },
     }),
     prisma.gmailAccount.update({ where: { id: gmailAccount.id }, data: { emailsSentToday: { increment: 1 } } }),
     prisma.contact.update({
@@ -87,16 +147,7 @@ async function sendNextStep(enrollment) {
     }),
   ]);
 
-  const nextStep = sequence.steps[enrollment.currentStep + 1];
-  if (nextStep) {
-    const nextSendAt = new Date(Date.now() + nextStep.delayDays * 24 * 60 * 60 * 1000);
-    await prisma.enrollment.update({
-      where: { id: enrollment.id },
-      data: { currentStep: enrollment.currentStep + 1, nextSendAt },
-    });
-  } else {
-    await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "completed" } });
-  }
+  await advanceEnrollment(enrollment, sequence);
 }
 
 function startScheduler() {

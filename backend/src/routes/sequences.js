@@ -2,9 +2,20 @@ const express = require("express");
 const { z } = require("zod");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
+const { attachmentsSchema } = require("../lib/attachments");
 
 const router = express.Router();
 router.use(requireAuth);
+
+// Combinable gating conditions — see SequenceStep.conditions in schema.prisma
+// and lib/scheduler.js stepConditionsMet() for how they're evaluated.
+const conditionsSchema = z
+  .object({
+    requireEvent: z.enum(["opened", "clicked", "not_opened", "not_clicked"]).optional().nullable(),
+    requireTags: z.array(z.string()).max(20).optional().default([]),
+  })
+  .optional()
+  .default({});
 
 // A step is either written inline (subject+body) or created from a saved
 // template (templateId) — the template's subject/body are copied in at
@@ -16,6 +27,8 @@ const stepSchema = z
     subject: z.string().min(1).max(300).optional(),
     body: z.string().min(1).max(20000).optional(),
     delayDays: z.number().int().min(0).max(60),
+    conditions: conditionsSchema,
+    attachments: attachmentsSchema,
   })
   .refine((s) => s.templateId || (s.subject && s.body), {
     message: "Provide either templateId or both subject and body",
@@ -26,9 +39,10 @@ const sequenceSchema = z.object({
   steps: z.array(stepSchema).min(1).max(20),
 });
 
-// Resolves each step to concrete {subject, body, delayDays, sourceTemplateId}
-// fields, fetching template content where needed. Throws if a templateId
-// doesn't belong to this user (caller should catch and 400).
+// Resolves each step to concrete {subject, body, delayDays, sourceTemplateId,
+// conditions, attachments} fields, fetching template content where needed.
+// Throws if a templateId doesn't belong to this user (caller should catch
+// and 400).
 async function resolveSteps(steps, userId) {
   const resolved = [];
   for (const step of steps) {
@@ -40,9 +54,18 @@ async function resolveSteps(steps, userId) {
         body: template.body,
         delayDays: step.delayDays,
         sourceTemplateId: template.id,
+        conditions: step.conditions,
+        attachments: template.attachments,
       });
     } else {
-      resolved.push({ subject: step.subject, body: step.body, delayDays: step.delayDays, sourceTemplateId: null });
+      resolved.push({
+        subject: step.subject,
+        body: step.body,
+        delayDays: step.delayDays,
+        sourceTemplateId: null,
+        conditions: step.conditions,
+        attachments: step.attachments,
+      });
     }
   }
   return resolved;
@@ -146,6 +169,8 @@ router.patch("/:id/steps/:stepId", async (req, res) => {
       subject: z.string().min(1).max(300).optional(),
       body: z.string().min(1).max(20000).optional(),
       delayDays: z.number().int().min(0).max(60).optional(),
+      conditions: conditionsSchema.optional(),
+      attachments: attachmentsSchema.optional(),
     })
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });

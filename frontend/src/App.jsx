@@ -6,7 +6,8 @@ import {
   CircleX, Reply, LogOut, MailCheck, Loader2, AlertTriangle,
   PhoneCall, RefreshCw, Phone, FileText, Copy, ArrowUp, ArrowDown,
   ShieldCheck, UserCheck, UserX, Sparkles, Euro, StickyNote,
-  CalendarClock, Download, Eye, Handshake
+  CalendarClock, Download, Eye, Handshake, Bold, Italic, Underline,
+  List, ListOrdered, Link as LinkIcon, UserPlus
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -81,6 +82,28 @@ function isFollowUpDue(value) {
   if (!value) return false;
   return new Date(value).getTime() <= Date.now();
 }
+
+// Mirrors backend/src/lib/attachments.js — no external file storage, so
+// attachments are capped hard and stored as base64 on the row.
+const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+const MAX_ATTACHMENTS = 5;
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const EVENT_CONDITIONS = [
+  { key: "", label: "Χωρίς συνθήκη" },
+  { key: "opened", label: "Μόνο αν άνοιξε το προηγούμενο" },
+  { key: "clicked", label: "Μόνο αν έκανε κλικ στο προηγούμενο" },
+  { key: "not_opened", label: "Μόνο αν ΔΕΝ άνοιξε το προηγούμενο" },
+  { key: "not_clicked", label: "Μόνο αν ΔΕΝ έκανε κλικ στο προηγούμενο" },
+];
 
 function fmtDate(value) {
   if (!value) return "—";
@@ -181,6 +204,104 @@ function TipBanner({ children, tone = "info" }) {
     <div className="flex items-start gap-2 rounded-lg px-3.5 py-2.5 text-xs mb-4" style={{ backgroundColor: `${toneColor}14`, color: C.ink }}>
       <Sparkles size={14} style={{ color: toneColor, marginTop: 1 }} className="shrink-0" />
       <span>{children}</span>
+    </div>
+  );
+}
+
+// ---------- Rich text editor ----------
+// Minimal Gmail-style toolbar over a contentEditable div — no external
+// dependency, since bold/lists/links/attachments are all the app needs.
+function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, minHeight = 140 }) {
+  const editorRef = useRef(null);
+  const fileRef = useRef(null);
+  const [attachError, setAttachError] = useState("");
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== (value || "")) {
+      editorRef.current.innerHTML = value || "";
+    }
+  }, [value]);
+
+  function exec(command, arg) {
+    editorRef.current?.focus();
+    document.execCommand(command, false, arg);
+    onChange(editorRef.current?.innerHTML || "");
+  }
+
+  function handleLink() {
+    const url = window.prompt("Σύνδεσμος (URL):", "https://");
+    if (url) exec("createLink", url);
+  }
+
+  async function handleFiles(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!onAttachmentsChange) return;
+    setAttachError("");
+    const next = [...attachments];
+    for (const file of files) {
+      if (next.length >= MAX_ATTACHMENTS) {
+        setAttachError(`Μέχρι ${MAX_ATTACHMENTS} αρχεία ανά email.`);
+        break;
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setAttachError(`Το "${file.name}" ξεπερνάει τα 2MB.`);
+        continue;
+      }
+      const contentBase64 = await fileToBase64(file);
+      next.push({ filename: file.name, mimeType: file.type || "application/octet-stream", contentBase64 });
+    }
+    onAttachmentsChange(next);
+  }
+
+  function removeAttachment(i) {
+    onAttachmentsChange(attachments.filter((_, idx) => idx !== i));
+  }
+
+  const ToolBtn = ({ onClick, title, children }) => (
+    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClick} title={title}
+      className="p-1.5 rounded hover:bg-white" style={{ color: C.ink }}>
+      {children}
+    </button>
+  );
+
+  return (
+    <div className="rounded-lg border overflow-hidden" style={{ borderColor: C.line }}>
+      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b flex-wrap" style={{ borderColor: C.line, backgroundColor: C.pale }}>
+        <ToolBtn onClick={() => exec("bold")} title="Έντονα"><Bold size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("italic")} title="Πλάγια"><Italic size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("underline")} title="Υπογράμμιση"><Underline size={14} /></ToolBtn>
+        <span className="w-px h-4 mx-1" style={{ backgroundColor: C.line }} />
+        <ToolBtn onClick={() => exec("insertUnorderedList")} title="Λίστα με κουκκίδες"><List size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("insertOrderedList")} title="Αριθμημένη λίστα"><ListOrdered size={14} /></ToolBtn>
+        <span className="w-px h-4 mx-1" style={{ backgroundColor: C.line }} />
+        <ToolBtn onClick={handleLink} title="Σύνδεσμος"><LinkIcon size={14} /></ToolBtn>
+        {onAttachmentsChange && (
+          <>
+            <input ref={fileRef} type="file" multiple className="hidden" onChange={handleFiles} />
+            <ToolBtn onClick={() => fileRef.current?.click()} title="Επισύναψη αρχείου"><Paperclip size={14} /></ToolBtn>
+          </>
+        )}
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable
+        onInput={() => onChange(editorRef.current?.innerHTML || "")}
+        className="px-3 py-2 text-sm outline-none overflow-auto"
+        style={{ color: C.ink, minHeight, maxHeight: minHeight * 2.4 }}
+        suppressContentEditableWarning
+      />
+      {attachError && <p className="text-[11px] px-3 pb-1.5" style={{ color: C.coral }}>{attachError}</p>}
+      {onAttachmentsChange && attachments.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap px-3 pb-2 pt-1">
+          {attachments.map((a, i) => (
+            <span key={i} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]" style={{ backgroundColor: C.pale, color: C.navy }}>
+              <Paperclip size={10} /> {a.filename}
+              <button type="button" onClick={() => removeAttachment(i)}><X size={10} /></button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -425,7 +546,7 @@ function NewContactModal({ onClose, onCreate }) {
   );
 }
 
-function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp }) {
+function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -480,7 +601,14 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       <div className="w-full max-w-lg h-full bg-white overflow-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white" style={{ borderColor: C.line }}>
           <h3 className="text-base font-semibold" style={{ color: C.ink }}>Στοιχεία επαφής</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+          <div className="flex items-center gap-3">
+            <button onClick={onCompose}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
+              style={{ backgroundColor: C.sky }}>
+              <Mail size={13} /> Αποστολή email
+            </button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+          </div>
         </div>
 
         {loading ? (
@@ -602,7 +730,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   );
 }
 
-function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport }) {
+function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -745,6 +873,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           onAddNote={onAddNote}
           onDeleteNote={onDeleteNote}
           onSetFollowUp={onSetFollowUp}
+          onCompose={() => { onCompose(detailContactId); setDetailContactId(null); }}
         />
       )}
       <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: C.line }}>
@@ -970,36 +1099,27 @@ function TemplateModal({ initial, onClose, onSave }) {
   const [name, setName] = useState(initial?.name || "");
   const [subject, setSubject] = useState(initial?.subject || "");
   const [body, setBody] = useState(initial?.body || "");
+  const [attachments, setAttachments] = useState(initial?.attachments || []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const bodyRef = useRef(null);
 
   function insertToken(token) {
-    const el = bodyRef.current;
-    if (!el) {
-      setBody((b) => b + token);
-      return;
-    }
-    const start = el.selectionStart ?? body.length;
-    const end = el.selectionEnd ?? body.length;
-    const next = body.slice(0, start) + token + body.slice(end);
-    setBody(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.selectionStart = el.selectionEnd = start + token.length;
-    });
+    setBody((b) => (b || "") + token);
   }
 
+  // Body is HTML now (rich text editor) — strip tags for word/char counts
+  // and spam-word checks so markup doesn't skew them.
+  const plainBody = body.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ");
   const subjectSpam = findSpamWords(subject);
-  const bodySpam = findSpamWords(body);
-  const hasUnsubscribeMention = /unsubscribe|διαγραφή|απεγγραφή/i.test(body);
+  const bodySpam = findSpamWords(plainBody);
+  const hasUnsubscribeMention = /unsubscribe|διαγραφή|απεγγραφή/i.test(plainBody);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setBusy(true);
     try {
-      await onSave({ name, subject, body });
+      await onSave({ name, subject, body, attachments });
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποθήκευση.");
@@ -1042,10 +1162,9 @@ function TemplateModal({ initial, onClose, onSave }) {
                 </button>
               ))}
             </div>
-            <textarea ref={bodyRef} required placeholder="Κείμενο μηνύματος" value={body} onChange={(e) => setBody(e.target.value)} rows={9}
-              className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
+            <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={180} />
             <div className="flex items-center justify-between">
-              <span className="text-[11px]" style={{ color: C.slate }}>{body.length} χαρακτήρες · {body.split(/\s+/).filter(Boolean).length} λέξεις</span>
+              <span className="text-[11px]" style={{ color: C.slate }}>{plainBody.trim().length} χαρακτήρες · {plainBody.split(/\s+/).filter(Boolean).length} λέξεις</span>
             </div>
             {bodySpam.length > 0 && (
               <p className="text-[11px]" style={{ color: C.amber }}>⚠ Πιθανές λέξεις spam-trigger: {bodySpam.join(", ")}</p>
@@ -1065,7 +1184,16 @@ function TemplateModal({ initial, onClose, onSave }) {
             <Card className="p-4" style={{ backgroundColor: C.pale }}>
               <div className="text-xs mb-2" style={{ color: C.slate }}>Προς: {MERGE_SAMPLE.name} &lt;{MERGE_SAMPLE.email}&gt;</div>
               <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{renderPreview(subject) || "—"}</div>
-              <div className="text-sm whitespace-pre-wrap" style={{ color: C.ink }}>{renderPreview(body) || "—"}</div>
+              <div className="text-sm" style={{ color: C.ink }} dangerouslySetInnerHTML={{ __html: renderPreview(body) || "—" }} />
+              {attachments.length > 0 && (
+                <div className="flex gap-1.5 flex-wrap mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
+                  {attachments.map((a, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]" style={{ backgroundColor: "#fff", color: C.navy }}>
+                      <Paperclip size={10} /> {a.filename}
+                    </span>
+                  ))}
+                </div>
+              )}
             </Card>
           </div>
         </form>
@@ -1086,7 +1214,7 @@ function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate
   async function handleDuplicate(t) {
     setBusyId(t.id);
     try {
-      await onCreate({ name: `${t.name} (copy)`, subject: t.subject, body: t.body });
+      await onCreate({ name: `${t.name} (copy)`, subject: t.subject, body: t.body, attachments: t.attachments || [] });
     } finally {
       setBusyId(null);
     }
@@ -1142,7 +1270,10 @@ function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate
                   </span>
                 </div>
                 <p className="text-xs mb-3" style={{ color: C.slate }}>
-                  {t.body.length > 160 ? `${t.body.slice(0, 160)}…` : t.body}
+                  {(() => {
+                    const plain = t.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+                    return plain.length > 160 ? `${plain.slice(0, 160)}…` : plain;
+                  })()}
                 </p>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setEditing(t)} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
@@ -1230,6 +1361,53 @@ function NewOfferModal({ contacts, onClose, onCreate }) {
   );
 }
 
+function OfferOutcomeReasonModal({ status, onClose, onConfirm }) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function handleConfirm(skip) {
+    setBusy(true);
+    try {
+      await onConfirm(skip ? "" : reason.trim());
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5">
+        <h3 className="text-sm font-semibold mb-1" style={{ color: C.ink }}>
+          {status === "accepted" ? "Γιατί έγινε δεκτή;" : "Γιατί απορρίφθηκε;"}
+        </h3>
+        <p className="text-xs mb-3" style={{ color: C.slate }}>
+          Προαιρετικό — τροφοδοτεί το CRM reporting (λόγοι έγκρισης/απόρριψης).
+        </p>
+        <textarea
+          autoFocus
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="π.χ. τιμή, timing, ανταγωνισμός…"
+          rows={3}
+          className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none mb-3"
+          style={{ borderColor: C.line, color: C.ink }}
+        />
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" disabled={busy} onClick={() => handleConfirm(true)}
+            className="rounded-lg px-3 py-2 text-sm font-medium border" style={{ borderColor: C.line, color: C.slate }}>
+            Παράλειψη
+          </button>
+          <button type="button" disabled={busy} onClick={() => handleConfirm(false)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function OfferCard({ offer, onChangeStatus, onDelete, busy }) {
   return (
     <Card className="p-3.5">
@@ -1246,6 +1424,9 @@ function OfferCard({ offer, onChangeStatus, onDelete, busy }) {
         <Euro size={13} /> {fmtMoney(offer.value, offer.currency)}
       </div>
       {offer.notes && <p className="text-xs mb-2 line-clamp-2" style={{ color: C.slate }}>{offer.notes}</p>}
+      {offer.outcomeReason && (
+        <p className="text-xs mb-2 italic line-clamp-2" style={{ color: C.slate }}>“{offer.outcomeReason}”</p>
+      )}
       <select
         value={offer.status}
         disabled={busy}
@@ -1262,11 +1443,26 @@ function OfferCard({ offer, onChangeStatus, onDelete, busy }) {
 function OffersView({ offers, contacts, loading, error, onReload, onCreate, onChangeStatus, onDelete }) {
   const [showNew, setShowNew] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [reasonPrompt, setReasonPrompt] = useState(null); // { id, status } | null
 
   async function handleChangeStatus(id, status) {
+    if (status === "accepted" || status === "declined") {
+      setReasonPrompt({ id, status });
+      return;
+    }
     setBusyId(id);
     try {
       await onChangeStatus(id, status);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleConfirmReason(reason) {
+    if (!reasonPrompt) return;
+    setBusyId(reasonPrompt.id);
+    try {
+      await onChangeStatus(reasonPrompt.id, reasonPrompt.status, reason);
     } finally {
       setBusyId(null);
     }
@@ -1288,6 +1484,13 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
   return (
     <div className="h-full overflow-auto">
       {showNew && <NewOfferModal contacts={contacts} onClose={() => setShowNew(false)} onCreate={onCreate} />}
+      {reasonPrompt && (
+        <OfferOutcomeReasonModal
+          status={reasonPrompt.status}
+          onClose={() => setReasonPrompt(null)}
+          onConfirm={handleConfirmReason}
+        />
+      )}
       <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Offers</h1>
@@ -1371,14 +1574,48 @@ function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown,
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium" style={{ color: C.ink }}>{step.subject}</span>
           </div>
-          <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: C.slate }}>{step.body}</p>
+          <div className="text-xs leading-relaxed [&_a]:underline" style={{ color: C.slate }} dangerouslySetInnerHTML={{ __html: step.body || "" }} />
+          {(step.conditions?.requireEvent || step.conditions?.requireTags?.length > 0) && (
+            <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2.5 border-t" style={{ borderColor: C.line }}>
+              {step.conditions?.requireEvent && (
+                <span className="text-[10px] rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: `${C.amber}1A`, color: "#7A5206" }}>
+                  {EVENT_CONDITIONS.find((c) => c.key === step.conditions.requireEvent)?.label}
+                </span>
+              )}
+              {(step.conditions?.requireTags || []).map((t) => (
+                <span key={t} className="text-[10px] rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>
+                  tag: {t}
+                </span>
+              ))}
+            </div>
+          )}
+          {Array.isArray(step.attachments) && step.attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {step.attachments.map((a, i) => (
+                <span key={i} className="text-[10px] rounded px-1.5 py-0.5 flex items-center gap-1" style={{ backgroundColor: C.pale, color: C.slate }}>
+                  <Paperclip size={10} /> {a.filename}
+                </span>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
     </div>
   );
 }
 
-function StepFields({ mode, setMode, templateId, setTemplateId, subject, setSubject, body, setBody, templates }) {
+function StepFields({
+  mode, setMode, templateId, setTemplateId, subject, setSubject, body, setBody,
+  attachments, setAttachments, conditions, setConditions, templates,
+}) {
+  const tagsText = (conditions.requireTags || []).join(", ");
+  function setTagsText(text) {
+    setConditions({
+      ...conditions,
+      requireTags: text.split(",").map((t) => t.trim()).filter(Boolean),
+    });
+  }
+
   return (
     <>
       {templates.length > 0 && (
@@ -1405,17 +1642,41 @@ function StepFields({ mode, setMode, templateId, setTemplateId, subject, setSubj
           <input required placeholder="Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})" value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
-          <textarea required placeholder="Κείμενο μηνύματος — χρήσιμα tokens: {{name}}, {{company}}" value={body}
-            onChange={(e) => setBody(e.target.value)} rows={3}
-            className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
+          <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={90} />
         </div>
       )}
+
+      <div className="grid grid-cols-2 gap-2 mt-2">
+        <select
+          value={conditions.requireEvent || ""}
+          onChange={(e) => setConditions({ ...conditions, requireEvent: e.target.value || null })}
+          className="rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white"
+          style={{ borderColor: C.line, color: C.ink }}
+        >
+          {EVENT_CONDITIONS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <input
+          value={tagsText}
+          onChange={(e) => setTagsText(e.target.value)}
+          placeholder="Μόνο για tags (χωρισμένα με κόμμα)…"
+          className="rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white"
+          style={{ borderColor: C.line, color: C.ink }}
+        />
+      </div>
     </>
   );
 }
 
 function emptyStep(index) {
-  return { mode: "inline", templateId: "", subject: "", body: "", delayDays: SUGGESTED_DELAYS[index] ?? 7 };
+  return {
+    mode: "inline",
+    templateId: "",
+    subject: "",
+    body: "",
+    delayDays: SUGGESTED_DELAYS[index] ?? 7,
+    conditions: { requireEvent: null, requireTags: [] },
+    attachments: [],
+  };
 }
 
 function NewSequenceModal({ onClose, onCreate, templates }) {
@@ -1441,8 +1702,8 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
     try {
       const payloadSteps = steps.map((s) =>
         s.mode === "template" && s.templateId
-          ? { templateId: s.templateId, delayDays: Number(s.delayDays) || 0 }
-          : { subject: s.subject, body: s.body, delayDays: Number(s.delayDays) || 0 }
+          ? { templateId: s.templateId, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
+          : { subject: s.subject, body: s.body, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
       );
       await onCreate({ name, steps: payloadSteps });
       onClose();
@@ -1496,6 +1757,8 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
                 templateId={step.templateId} setTemplateId={(v) => updateStep(i, { templateId: v })}
                 subject={step.subject} setSubject={(v) => updateStep(i, { subject: v })}
                 body={step.body} setBody={(v) => updateStep(i, { body: v })}
+                attachments={step.attachments} setAttachments={(v) => updateStep(i, { attachments: v })}
+                conditions={step.conditions} setConditions={(v) => updateStep(i, { conditions: v })}
                 templates={templates}
               />
             </Card>
@@ -1522,6 +1785,8 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
   const [templateId, setTemplateId] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [attachments, setAttachments] = useState([]);
+  const [conditions, setConditions] = useState({ requireEvent: null, requireTags: [] });
   const [delayDays, setDelayDays] = useState(suggestedDelay);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1533,8 +1798,8 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
     try {
       const payload =
         mode === "template"
-          ? { templateId, delayDays: Number(delayDays) || 0 }
-          : { subject, body, delayDays: Number(delayDays) || 0 };
+          ? { templateId, delayDays: Number(delayDays) || 0, conditions, attachments }
+          : { subject, body, delayDays: Number(delayDays) || 0, conditions, attachments };
       await onAdd(payload);
       onClose();
     } catch (err) {
@@ -1557,6 +1822,8 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
             templateId={templateId} setTemplateId={setTemplateId}
             subject={subject} setSubject={setSubject}
             body={body} setBody={setBody}
+            attachments={attachments} setAttachments={setAttachments}
+            conditions={conditions} setConditions={setConditions}
             templates={templates}
           />
           <div>
@@ -1715,7 +1982,73 @@ function pct(numerator, denominator) {
   return `${Math.round((numerator / denominator) * 100)}%`;
 }
 
-function AnalyticsView({ overview, timeline, loading, error, onReload }) {
+function CrmReportingSection({ crm }) {
+  if (!crm) return null;
+  const OFFER_STATUS_LABELS = { draft: "Πρόχειρες", sent: "Στάλθηκαν", accepted: "Έγιναν δεκτές", declined: "Απορρίφθηκαν" };
+  const pipelineData = ["draft", "sent", "accepted", "declined"].map((key) => ({
+    name: OFFER_STATUS_LABELS[key],
+    value: crm.offersByStatus?.[key] ?? 0,
+    fill: OFFER_STATUSES.find((s) => s.key === key)?.color || C.slate,
+  }));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-4">
+        <StatCard label="Επικοινωνήθηκαν" value={crm.contactsContacted} sub={`από ${crm.contactsTotal} επαφές`} color={C.sky} />
+        <StatCard label="Προσφορές" value={crm.offersTotal} sub="σύνολο" color={C.navy} />
+        <StatCard label="Win rate" value={crm.winRate == null ? "—" : `${Math.round(crm.winRate * 100)}%`} sub="αποδεκτές / αποφασισμένες" color={C.mint} />
+        <StatCard label="Αξία σε εξέλιξη" value={fmtMoney((crm.valueByStatus?.sent || 0) + (crm.valueByStatus?.draft || 0))} sub="draft + sent" color={C.amber} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-6">
+        <Card className="p-5">
+          <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Pipeline προσφορών</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={pipelineData} layout="vertical" margin={{ left: 20 }}>
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: C.ink }} axisLine={false} tickLine={false} width={100} />
+              <Tooltip />
+              <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                {pipelineData.map((d, i) => <React.Fragment key={i} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+
+        <Card className="p-5">
+          <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Αξία ανά κατάσταση</div>
+          <div className="space-y-2.5">
+            {["draft", "sent", "accepted", "declined"].map((key) => (
+              <div key={key} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                <span className="text-xs font-medium" style={{ color: C.ink }}>{OFFER_STATUS_LABELS[key]}</span>
+                <span className="text-xs" style={{ color: C.slate }}>{fmtMoney(crm.valueByStatus?.[key] || 0)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-5">
+        <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Συχνότερες αιτίες αποδοχής/απόρριψης</div>
+        {(!crm.declineReasons || crm.declineReasons.length === 0) ? (
+          <p className="text-sm py-6 text-center" style={{ color: C.slate }}>Δεν έχουν καταχωρηθεί αιτίες ακόμα.</p>
+        ) : (
+          <div className="space-y-2">
+            {crm.declineReasons.map((r, i) => (
+              <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                <span className="text-xs" style={{ color: C.ink }}>“{r.reason}”</span>
+                <span className="text-xs font-medium shrink-0 ml-3" style={{ color: C.slate }}>×{r.count}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function AnalyticsView({ overview, timeline, crmOverview, loading, error, onReload }) {
+  const [tab, setTab] = useState("email"); // email | crm
   const totals = overview?.totals || { sent: 0, opened: 0, clicked: 0, replied: 0 };
   const funnelData = [
     { name: "Στάλθηκαν", value: totals.sent, fill: C.navy },
@@ -1726,15 +2059,30 @@ function AnalyticsView({ overview, timeline, loading, error, onReload }) {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
-        <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
-        <p className="text-sm mt-0.5" style={{ color: C.slate }}>Απόδοση όλων των sequences</p>
+      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>
+            {tab === "email" ? "Απόδοση όλων των sequences" : "CRM reporting — pipeline & αποτελέσματα"}
+          </p>
+        </div>
+        <div className="flex rounded-lg p-0.5" style={{ backgroundColor: C.pale }}>
+          {[["email", "Email"], ["crm", "Business (CRM)"]].map(([key, label]) => (
+            <button key={key} type="button" onClick={() => setTab(key)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium"
+              style={{ backgroundColor: tab === key ? C.sky : "transparent", color: tab === key ? "#fff" : C.slate }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="px-8 py-6 space-y-6">
         <ErrorNote message={error} onRetry={onReload} />
         {loading ? (
           <Spinner label="Φόρτωση analytics…" />
+        ) : tab === "crm" ? (
+          <CrmReportingSection crm={crmOverview} />
         ) : (
           <>
             <div className="flex gap-4">
@@ -1858,12 +2206,42 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
   );
 }
 
-function ComposeModal({ onClose }) {
+function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContactId }) {
   const [minimized, setMinimized] = useState(false);
+  const [contactId, setContactId] = useState(initialContactId || "");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [attachments, setAttachments] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
+
+  async function handleSend(e) {
+    e.preventDefault();
+    if (!contactId) { setError("Επίλεξε παραλήπτη."); return; }
+    setError("");
+    setBusy(true);
+    try {
+      await onSend({ contactId, subject, body, attachments });
+      setSent(true);
+      setTimeout(onClose, 900);
+    } catch (err) {
+      if (err instanceof ApiError && err.data?.error === "gmail_not_connected") {
+        setError("Δεν έχεις συνδέσει Gmail — σύνδεσε το από το μπάνερ στην κορυφή για να στείλεις.");
+      } else if (err instanceof ApiError && err.data?.error === "contact_unsubscribed") {
+        setError("Η επαφή έχει κάνει unsubscribe — δεν επιτρέπεται αποστολή.");
+      } else {
+        setError(err instanceof ApiError ? err.message : "Η αποστολή απέτυχε.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div
-      className="fixed bottom-0 right-8 w-[420px] rounded-t-xl shadow-2xl bg-white border border-b-0 flex flex-col"
-      style={{ borderColor: C.line, height: minimized ? 48 : 460, zIndex: 50 }}
+      className="fixed bottom-0 right-8 w-[460px] rounded-t-xl shadow-2xl bg-white border border-b-0 flex flex-col"
+      style={{ borderColor: C.line, height: minimized ? 48 : 580, zIndex: 50 }}
     >
       <div className="flex items-center justify-between px-4 py-3 rounded-t-xl" style={{ backgroundColor: C.navy }}>
         <span className="text-sm font-medium text-white">Νέο μήνυμα</span>
@@ -1873,30 +2251,100 @@ function ComposeModal({ onClose }) {
         </div>
       </div>
       {!minimized && (
-        <div className="flex-1 flex flex-col">
+        <form onSubmit={handleSend} className="flex-1 flex flex-col overflow-auto">
           <div className="px-4 py-2.5 border-b text-sm" style={{ borderColor: C.line, color: C.ink }}>
-            <input placeholder="Προς" className="w-full outline-none" />
+            <select required value={contactId} onChange={(e) => setContactId(e.target.value)}
+              className="w-full outline-none bg-white" style={{ color: contactId ? C.ink : C.slate }}>
+              <option value="">Προς — επίλεξε επαφή…</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>{c.name ? `${c.name} <${c.email}>` : c.email}</option>
+              ))}
+            </select>
           </div>
           <div className="px-4 py-2.5 border-b text-sm" style={{ borderColor: C.line, color: C.ink }}>
-            <input placeholder="Θέμα" className="w-full outline-none" />
+            <input required placeholder="Θέμα" value={subject} onChange={(e) => setSubject(e.target.value)}
+              className="w-full outline-none" />
           </div>
-          <textarea
-            placeholder="Γράψε το μήνυμά σου…"
-            className="flex-1 px-4 py-3 text-sm outline-none resize-none"
-            style={{ color: C.ink }}
-          />
-          <div className="px-4 py-3 border-t text-xs" style={{ borderColor: C.line, color: C.slate }}>
-            Η χειροκίνητη αποστολή δεν είναι διαθέσιμη ακόμα — χρησιμοποίησε sequences για αποστολή μέσω Gmail.
+          <div className="flex-1 px-4 py-3 overflow-auto">
+            <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={160} />
           </div>
-        </div>
+          {!gmailConnected && (
+            <div className="px-4 py-2 text-xs" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
+              Δεν έχεις συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό.
+            </div>
+          )}
+          {error && <p className="px-4 py-2 text-xs" style={{ color: C.coral }}>{error}</p>}
+          <div className="px-4 py-3 border-t flex items-center justify-end gap-2" style={{ borderColor: C.line }}>
+            {sent ? (
+              <span className="text-sm font-medium" style={{ color: C.mint }}>Εστάλη ✓</span>
+            ) : (
+              <button type="submit" disabled={busy}
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
+                style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+                {busy && <Loader2 size={14} className="animate-spin" />} Αποστολή
+              </button>
+            )}
+          </div>
+        </form>
       )}
     </div>
   );
 }
 
 // ---------- Admin ----------
-function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, currentUserId }) {
+function NewAdminUserModal({ onClose, onCreate }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await onCreate({ email, password, name: name || undefined, isAdmin });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία χρήστη.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέος χρήστης</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input placeholder="Όνομα (προαιρετικό)" value={name} onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={password} onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <label className="flex items-center gap-2 text-sm" style={{ color: C.ink }}>
+            <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
+            Δικαιώματα admin
+          </label>
+          {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+          <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία χρήστη
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, currentUserId }) {
   const [busyId, setBusyId] = useState(null);
+  const [showNew, setShowNew] = useState(false);
 
   async function run(id, fn) {
     setBusyId(id);
@@ -1907,11 +2355,29 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
     }
   }
 
+  async function handleDelete(u) {
+    if (!window.confirm(`Διαγραφή του χρήστη ${u.email}; Θα διαγραφούν και όλα τα δεδομένα του (επαφές, sequences, κτλ).`)) return;
+    setBusyId(u.id);
+    try {
+      await onDeleteUser(u.id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const adminCount = users.filter((u) => u.isAdmin).length;
+
   return (
     <div className="h-full overflow-auto">
-      <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
-        <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Διαχείριση πρόσβασης</h1>
-        <p className="text-sm mt-0.5" style={{ color: C.slate }}>Έγκριση νέων λογαριασμών και διαχείριση δικαιωμάτων admin</p>
+      {showNew && <NewAdminUserModal onClose={() => setShowNew(false)} onCreate={onCreateUser} />}
+      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Διαχείριση πρόσβασης</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Έγκριση νέων λογαριασμών και διαχείριση δικαιωμάτων admin</p>
+        </div>
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
+          <UserPlus size={15} /> Νέος χρήστης
+        </button>
       </div>
       <div className="px-8 py-6">
         <ErrorNote message={error} onRetry={onReload} />
@@ -1977,6 +2443,12 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                             Αφαίρεση admin
                           </button>
                         )}
+                        {u.id !== currentUserId && !(u.isAdmin && adminCount <= 1) && (
+                          <button disabled={busyId === u.id} onClick={() => handleDelete(u)} title="Διαγραφή χρήστη"
+                            className="rounded-md p-1.5" style={{ color: C.coral }}>
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1996,6 +2468,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState("inbox");
   const [composeOpen, setComposeOpen] = useState(false);
+  const [composeContactId, setComposeContactId] = useState("");
   const [gmailNotice, setGmailNotice] = useState("");
 
   const [contacts, setContacts] = useState([]);
@@ -2008,6 +2481,7 @@ export default function App() {
 
   const [overview, setOverview] = useState(null);
   const [timeline, setTimeline] = useState([]);
+  const [crmOverview, setCrmOverview] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState("");
 
@@ -2057,9 +2531,14 @@ export default function App() {
     setAnalyticsLoading(true);
     setAnalyticsError("");
     try {
-      const [ov, tl] = await Promise.all([api.get("/analytics/overview"), api.get("/analytics/timeline?days=14")]);
+      const [ov, tl, crm] = await Promise.all([
+        api.get("/analytics/overview"),
+        api.get("/analytics/timeline?days=14"),
+        api.get("/analytics/crm-overview"),
+      ]);
       setOverview(ov);
       setTimeline(tl);
+      setCrmOverview(crm);
     } catch (err) {
       setAnalyticsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα analytics.");
     } finally {
@@ -2228,8 +2707,8 @@ export default function App() {
     await loadOffers();
   }
 
-  async function handleChangeOfferStatus(id, status) {
-    await api.patch(`/offers/${id}`, { status });
+  async function handleChangeOfferStatus(id, status, outcomeReason) {
+    await api.patch(`/offers/${id}`, outcomeReason !== undefined ? { status, outcomeReason } : { status });
     await loadOffers();
   }
 
@@ -2278,6 +2757,17 @@ export default function App() {
     await loadTemplates();
   }
 
+  async function handleManualSend(data) {
+    await api.post("/send", data);
+    await loadActivity();
+    await loadContacts();
+  }
+
+  function openComposeFor(contactId) {
+    setComposeContactId(contactId);
+    setComposeOpen(true);
+  }
+
   async function handleApproveUser(id) {
     await api.post(`/admin/users/${id}/approve`);
     await loadAdminUsers();
@@ -2292,6 +2782,14 @@ export default function App() {
   }
   async function handleDemoteUser(id) {
     await api.post(`/admin/users/${id}/demote`);
+    await loadAdminUsers();
+  }
+  async function handleCreateAdminUser(data) {
+    await api.post("/admin/users", data);
+    await loadAdminUsers();
+  }
+  async function handleDeleteAdminUser(id) {
+    await api.del(`/admin/users/${id}`);
     await loadAdminUsers();
   }
 
@@ -2396,6 +2894,7 @@ export default function App() {
               onBulkUpdate={handleBulkUpdateContacts}
               onBulkDelete={handleBulkDeleteContacts}
               onExport={handleExportContacts}
+              onCompose={openComposeFor}
             />
           )}
           {view === "sequences" && (
@@ -2435,7 +2934,7 @@ export default function App() {
             />
           )}
           {view === "analytics" && (
-            <AnalyticsView overview={overview} timeline={timeline} loading={analyticsLoading} error={analyticsError} onReload={loadAnalytics} />
+            <AnalyticsView overview={overview} timeline={timeline} crmOverview={crmOverview} loading={analyticsLoading} error={analyticsError} onReload={loadAnalytics} />
           )}
           {view === "admin" && user?.isAdmin && (
             <AdminView
@@ -2447,13 +2946,23 @@ export default function App() {
               onRevoke={handleRevokeUser}
               onPromote={handlePromoteUser}
               onDemote={handleDemoteUser}
+              onCreateUser={handleCreateAdminUser}
+              onDeleteUser={handleDeleteAdminUser}
               currentUserId={user.id}
             />
           )}
         </div>
       </div>
 
-      {composeOpen && <ComposeModal onClose={() => setComposeOpen(false)} />}
+      {composeOpen && (
+        <ComposeModal
+          onClose={() => { setComposeOpen(false); setComposeContactId(""); }}
+          contacts={contacts}
+          gmailConnected={!!user?.gmail}
+          initialContactId={composeContactId}
+          onSend={handleManualSend}
+        />
+      )}
     </div>
   );
 }

@@ -15,6 +15,9 @@ const offerSchema = z.object({
   currency: z.string().max(10).optional().default("EUR"),
   status: z.enum(STATUSES).optional().default("draft"),
   notes: z.string().max(5000).optional().nullable(),
+  // Freeform "why" behind an accepted/declined outcome — feeds the CRM
+  // business reporting breakdown, not just email open/click metrics.
+  outcomeReason: z.string().max(500).optional().nullable(),
 });
 
 router.get("/", async (req, res) => {
