@@ -195,6 +195,7 @@ router.post("/bulk-update", async (req, res) => {
   const patch = {};
   const body = req.body.data || {};
   for (const key of allowed) if (key in body) patch[key] = body[key];
+  if ("unsubscribed" in body) patch.unsubscribedAt = body.unsubscribed ? new Date() : null;
   const addTag = typeof req.body.addTag === "string" ? req.body.addTag.trim() : "";
 
   const contacts = await prisma.contact.findMany({ where: { id: { in: ids }, userId: req.user.id } });
@@ -230,6 +231,13 @@ router.patch("/:id", async (req, res) => {
   // it needs its own Date conversion rather than being passed through raw.
   if ("nextFollowUpAt" in req.body) {
     data.nextFollowUpAt = req.body.nextFollowUpAt ? new Date(req.body.nextFollowUpAt) : null;
+  }
+  // Keep the timestamp in lockstep with the flag, whichever direction it's
+  // flipped from (the email-footer unsubscribe link does the same in
+  // tracking.js) — so the UI always has a real "when" to show, not just a
+  // boolean.
+  if ("unsubscribed" in req.body) {
+    data.unsubscribedAt = req.body.unsubscribed ? new Date() : null;
   }
 
   const updated = await prisma.contact.update({ where: { id: contact.id }, data });

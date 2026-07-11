@@ -311,7 +311,23 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
 
   function handleLink() {
     const url = window.prompt("Σύνδεσμος (URL):", "https://");
-    if (url) exec("createLink", url);
+    if (!url) return;
+    // execCommand("createLink") silently does nothing if there's no active
+    // text selection — that looked like "the link just isn't there" to
+    // anyone who clicked the button without first highlighting text. Fall
+    // back to inserting the URL itself as the link text in that case.
+    const selection = window.getSelection();
+    const hasSelection =
+      selection && selection.toString().length > 0 && editorRef.current?.contains(selection.anchorNode);
+    if (hasSelection) {
+      exec("createLink", url);
+    } else {
+      editorRef.current?.focus();
+      const safeUrl = url.replace(/"/g, "&quot;");
+      const safeText = url.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      document.execCommand("insertHTML", false, `<a href="${safeUrl}">${safeText}</a>`);
+      onChange(editorRef.current?.innerHTML || "");
+    }
   }
 
   async function handleFiles(e) {
@@ -627,7 +643,7 @@ function NewContactModal({ onClose, onCreate }) {
   );
 }
 
-function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied }) {
+function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied, onToggleUnsubscribed }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -635,6 +651,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [savingNote, setSavingNote] = useState(false);
   const [followUp, setFollowUp] = useState("");
   const [markingReplied, setMarkingReplied] = useState(false);
+  const [togglingUnsub, setTogglingUnsub] = useState(false);
 
   async function handleMarkReplied() {
     setMarkingReplied(true);
@@ -643,6 +660,16 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       await load();
     } finally {
       setMarkingReplied(false);
+    }
+  }
+
+  async function handleToggleUnsubscribed() {
+    setTogglingUnsub(true);
+    try {
+      await onToggleUnsubscribed(contactId, !detail.unsubscribed);
+      await load();
+    } finally {
+      setTogglingUnsub(false);
     }
   }
 
@@ -725,6 +752,24 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
               <div className="flex gap-1.5 flex-wrap mt-2">
                 {(detail.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
                 {detail.category && <CategoryChip>{detail.category}</CategoryChip>}
+              </div>
+              <div className="mt-3">
+                {detail.unsubscribed ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14` }}>
+                    <span className="text-xs font-medium flex items-center gap-1.5" style={{ color: C.coral }}>
+                      <CircleX size={13} /> Unsubscribed{detail.unsubscribedAt ? ` · ${fmtDate(detail.unsubscribedAt)}` : ""}
+                    </span>
+                    <button onClick={handleToggleUnsubscribed} disabled={togglingUnsub}
+                      className="text-xs font-medium underline shrink-0" style={{ color: C.coral, opacity: togglingUnsub ? 0.6 : 1 }}>
+                      Ακύρωση
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={handleToggleUnsubscribed} disabled={togglingUnsub}
+                    className="text-xs font-medium underline" style={{ color: C.slate, opacity: togglingUnsub ? 0.6 : 1 }}>
+                    Επισήμανση ως unsubscribed
+                  </button>
+                )}
               </div>
             </div>
 
@@ -828,7 +873,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   );
 }
 
-function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, openContactId, onOpenContactHandled }) {
+function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, openContactId, onOpenContactHandled }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -983,6 +1028,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           onSetFollowUp={onSetFollowUp}
           onCompose={() => { onCompose(detailContactId); setDetailContactId(null); }}
           onMarkReplied={onMarkReplied}
+          onToggleUnsubscribed={onToggleUnsubscribed}
         />
       )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-5 border-b" style={{ borderColor: C.line }}>
@@ -1150,7 +1196,18 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
                   </td>
                   <td className="py-3">
-                    <div className="font-medium" style={{ color: C.ink }}>{c.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium" style={{ color: C.ink }}>{c.name}</span>
+                      {c.unsubscribed && (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-[10px] font-medium rounded-md px-1 py-0.5 shrink-0"
+                          style={{ color: C.coral, backgroundColor: `${C.coral}14` }}
+                          title={c.unsubscribedAt ? `Unsubscribed · ${fmtDate(c.unsubscribedAt)}` : "Unsubscribed"}
+                        >
+                          <CircleX size={10} /> Unsub
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs" style={{ color: C.slate }}>{c.email}</div>
                   </td>
                   <td className="py-3" style={{ color: C.ink }}>
@@ -2843,6 +2900,28 @@ export default function App() {
     if (authState === "authed" && user?.isAdmin) loadAdminUsers();
   }, [authState, user, loadAdminUsers]);
 
+  // Analytics/Inbox numbers otherwise only change on the actions we happen to
+  // remember to refresh after (see handleManualSend etc. above) — that misses
+  // tracking events (opens/clicks/unsubscribes) which land asynchronously
+  // whenever the recipient acts, with no corresponding frontend call at all.
+  // Re-pull the relevant data the moment the user actually looks at that tab,
+  // plus a background poll everywhere else so the sidebar counts and the
+  // Analytics stat board stay current without needing a manual reload.
+  useEffect(() => {
+    if (authState !== "authed") return;
+    if (view === "analytics") loadAnalytics();
+    if (view === "inbox") loadActivity();
+  }, [view, authState, loadAnalytics, loadActivity]);
+
+  useEffect(() => {
+    if (authState !== "authed") return;
+    const id = setInterval(() => {
+      loadAnalytics();
+      loadActivity();
+    }, 30000);
+    return () => clearInterval(id);
+  }, [authState, loadAnalytics, loadActivity]);
+
   async function handleLogout() {
     try {
       await api.post("/auth/logout");
@@ -2893,6 +2972,7 @@ export default function App() {
   async function handleBulkUpdateContacts(ids, data, addTag) {
     await api.post("/contacts/bulk-update", { ids, data, addTag });
     await loadContacts();
+    if ("unsubscribed" in (data || {}) || "status" in (data || {})) await loadAnalytics();
   }
 
   async function handleBulkDeleteContacts(ids) {
@@ -2973,8 +3053,10 @@ export default function App() {
 
   async function handleManualSend(data) {
     await api.post("/send", data);
-    await loadActivity();
-    await loadContacts();
+    // Sends move the sent/opened/reply counts on the Analytics board and the
+    // Inbox list — refresh both immediately instead of waiting for a tab
+    // switch or the next poll (see the polling effect below).
+    await Promise.all([loadActivity(), loadContacts(), loadAnalytics()]);
   }
 
   function openComposeFor(contactId) {
@@ -2984,8 +3066,12 @@ export default function App() {
 
   async function handleMarkReplied(contactId) {
     await api.post(`/contacts/${contactId}/mark-replied`);
-    await loadContacts();
-    await loadSequences();
+    await Promise.all([loadContacts(), loadSequences(), loadAnalytics()]);
+  }
+
+  async function handleToggleUnsubscribed(contactId, next) {
+    await api.patch(`/contacts/${contactId}`, { unsubscribed: next });
+    await Promise.all([loadContacts(), loadAnalytics()]);
   }
 
   function handleSelectFromSearch(contactId) {
@@ -3140,6 +3226,7 @@ export default function App() {
               onExport={handleExportContacts}
               onCompose={openComposeFor}
               onMarkReplied={handleMarkReplied}
+              onToggleUnsubscribed={handleToggleUnsubscribed}
               openContactId={pendingOpenContactId}
               onOpenContactHandled={() => setPendingOpenContactId("")}
             />

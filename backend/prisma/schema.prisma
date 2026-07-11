@@ -98,6 +98,7 @@ model Contact {
   tags           String   @default("") // comma-separated; fine at this scale
   status         String   @default("new") // new | contacted | opened | replied | bounced | unsubscribed
   unsubscribed   Boolean  @default(false)
+  unsubscribedAt DateTime? // when unsubscribed flipped true — via the email footer link, or manually in-app
   lastActivityAt DateTime?
   nextFollowUpAt DateTime? // manual reminder date, independent of automatic sequence sends
   createdAt      DateTime @default(now())

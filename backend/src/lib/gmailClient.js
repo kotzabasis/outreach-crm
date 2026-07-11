@@ -89,10 +89,18 @@ function toBase64Url(str) {
 // a visible unsubscribe footer (required for real cold outreach — a hidden
 // pixel alone isn't enough for deliverability/compliance), and a 1x1 tracking
 // pixel for opens. trackingId ties all three back to one EmailLog row.
+//
+// Only rewrites real href="..." attributes (from the rich-text editor's link
+// button) — NOT a blind scan for "http(s)://" anywhere in the string. An
+// earlier version did the latter and it corrupted every <a href> tag: the
+// naive regex matched past the closing quote and into the visible link text
+// (stopping only at the next "<" or whitespace), mangling the markup and
+// producing broken links plus garbled rendering downstream.
 function injectTracking(html, trackingId) {
   const withWrappedLinks = html.replace(
-    /https?:\/\/[^\s<]+/g,
-    (url) => `${process.env.BASE_URL}/track/click/${trackingId}?url=${encodeURIComponent(url)}`
+    /href=(["'])(https?:\/\/[^"']+)\1/g,
+    (match, quote, url) =>
+      `href=${quote}${process.env.BASE_URL}/track/click/${trackingId}?url=${encodeURIComponent(url)}${quote}`
   );
   const unsubscribeUrl = `${process.env.BASE_URL}/track/unsubscribe/${trackingId}`;
   const footer = `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:11px;color:#94a3b8;">Αν δεν θέλεις να λαμβάνεις άλλα emails, <a href="${unsubscribeUrl}" style="color:#94a3b8;text-decoration:underline;">κάνε unsubscribe εδώ</a>.</div>`;
@@ -110,6 +118,7 @@ function buildRawMessage({ from, to, subject, html, attachments = [] }) {
       `From: ${from}`,
       `To: ${to}`,
       "Content-Type: text/html; charset=utf-8",
+      "Content-Transfer-Encoding: 8bit",
       "MIME-Version: 1.0",
       `Subject: ${encodedSubject}`,
       "",
@@ -128,6 +137,7 @@ function buildRawMessage({ from, to, subject, html, attachments = [] }) {
     "",
     `--${boundary}`,
     "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
     "",
     html,
     "",

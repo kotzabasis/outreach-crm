@@ -71,6 +71,15 @@ const forgotPasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
+// This is an API-only server with no UI of its own — the actual app lives on
+// Vercel. Visiting this bare URL in a browser used to 404 with Express's
+// default "Cannot GET /", which looked like the backend was broken. It
+// isn't — there's just nothing to serve at the root. Replace the confusing
+// 404 with a short explanation instead.
+app.get("/", (req, res) =>
+  res.json({ ok: true, service: "SDLoop API", note: "This is the backend API. The app itself is at the Vercel URL." })
+);
+
 app.use("/auth/forgot-password", forgotPasswordLimiter);
 app.use("/auth", authLimiter, authRoutes);
 app.use("/contacts", contactRoutes);

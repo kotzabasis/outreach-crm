@@ -77,7 +77,9 @@ router.get("/unsubscribe/:trackingId", async (req, res) => {
   const emailLog = await prisma.emailLog.findUnique({ where: { trackingId } }).catch(() => null);
 
   if (emailLog) {
-    await prisma.contact.update({ where: { id: emailLog.contactId }, data: { unsubscribed: true } }).catch(() => {});
+    await prisma.contact
+      .update({ where: { id: emailLog.contactId }, data: { unsubscribed: true, unsubscribedAt: new Date() } })
+      .catch(() => {});
   }
 
   // Always show the same confirmation, whether or not the tracking id was
