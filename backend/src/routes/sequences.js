@@ -133,6 +133,53 @@ router.delete("/:id/steps/:stepId", async (req, res) => {
   res.json({ ok: true });
 });
 
+// Edit an existing step's copy/timing in place (doesn't touch already-sent
+// EmailLogs — those keep whatever was sent, which is correct history).
+router.patch("/:id/steps/:stepId", async (req, res) => {
+  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!sequence) return res.status(404).json({ error: "not_found" });
+  const step = await prisma.sequenceStep.findFirst({ where: { id: req.params.stepId, sequenceId: sequence.id } });
+  if (!step) return res.status(404).json({ error: "not_found" });
+
+  const parsed = z
+    .object({
+      subject: z.string().min(1).max(300).optional(),
+      body: z.string().min(1).max(20000).optional(),
+      delayDays: z.number().int().min(0).max(60).optional(),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const updated = await prisma.sequenceStep.update({ where: { id: step.id }, data: parsed.data });
+  res.json(updated);
+});
+
+// Reorder steps — the body must list exactly the sequence's current step ids,
+// in the desired new order. Used by the up/down controls in the sequence
+// editor so best-practice cadence tweaks don't require delete+recreate.
+router.post("/:id/steps/reorder", async (req, res) => {
+  const sequence = await prisma.sequence.findFirst({
+    where: { id: req.params.id, userId: req.user.id },
+    include: { steps: true },
+  });
+  if (!sequence) return res.status(404).json({ error: "not_found" });
+
+  const stepIds = Array.isArray(req.body.stepIds) ? req.body.stepIds : [];
+  const validIds = new Set(sequence.steps.map((s) => s.id));
+  const sameSet = stepIds.length === sequence.steps.length && stepIds.every((id) => validIds.has(id));
+  if (!sameSet) {
+    return res.status(400).json({ error: "stepIds_must_match_existing_steps" });
+  }
+
+  await prisma.$transaction(stepIds.map((id, i) => prisma.sequenceStep.update({ where: { id }, data: { order: i } })));
+
+  const updated = await prisma.sequence.findFirst({
+    where: { id: sequence.id },
+    include: { steps: { orderBy: { order: "asc" } } },
+  });
+  res.json(updated);
+});
+
 // Enroll one or more contacts. Each contact starts at step 0, sent ~immediately
 // (staggered by a few seconds so the scheduler doesn't fire 500 sends at once).
 router.post("/:id/enroll", async (req, res) => {

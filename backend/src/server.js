@@ -12,7 +12,10 @@ const sequenceRoutes = require("./routes/sequences");
 const templateRoutes = require("./routes/templates");
 const trackingRoutes = require("./routes/tracking");
 const analyticsRoutes = require("./routes/analytics");
+const adminRoutes = require("./routes/admin");
+const offerRoutes = require("./routes/offers");
 const { startScheduler } = require("./lib/scheduler");
+const prisma = require("./db");
 
 for (const required of ["SESSION_SECRET", "ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]) {
   if (!process.env[required]) {
@@ -70,6 +73,8 @@ app.use("/auth", authLimiter, authRoutes);
 app.use("/contacts", contactRoutes);
 app.use("/sequences", sequenceRoutes);
 app.use("/templates", templateRoutes);
+app.use("/admin", adminRoutes);
+app.use("/offers", offerRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/track", trackingRoutes); // no auth — see routes/tracking.js for why
 
@@ -79,8 +84,27 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: isProd ? "internal_error" : err.message });
 });
 
+// Safety net for the invite/approval-gated signup model: if the DB somehow
+// has zero admins (e.g. this feature shipped after the first account already
+// existed), promote the oldest account so there's always someone who can
+// approve everyone else. No-op once an admin exists. Runs on every boot —
+// cheap, idempotent.
+async function ensureBootstrapAdmin() {
+  try {
+    const adminExists = await prisma.user.findFirst({ where: { isAdmin: true } });
+    if (adminExists) return;
+    const oldest = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+    if (!oldest) return; // no users yet — the next registration will bootstrap itself
+    await prisma.user.update({ where: { id: oldest.id }, data: { isAdmin: true, approved: true } });
+    console.log(`Bootstrapped admin access for ${oldest.email}`);
+  } catch (err) {
+    console.error("ensureBootstrapAdmin failed:", err.message);
+  }
+}
+
 const port = process.env.PORT || 4000;
 app.listen(port, () => {
   console.log(`Outreach CRM backend listening on port ${port}`);
   startScheduler();
+  ensureBootstrapAdmin();
 });

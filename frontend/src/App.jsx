@@ -3,7 +3,10 @@ import {
   Mail, Send, Users, BarChart3, Layers, Search, Upload, Plus, X,
   Clock, Tag, ChevronRight, Trash2, Pencil, MoreVertical, Paperclip,
   Minus, Maximize2, ChevronDown, Building2, CircleCheck, CircleDot,
-  CircleX, Reply, LogOut, MailCheck, Loader2, AlertTriangle
+  CircleX, Reply, LogOut, MailCheck, Loader2, AlertTriangle,
+  PhoneCall, RefreshCw, Phone, FileText, Copy, ArrowUp, ArrowDown,
+  ShieldCheck, UserCheck, UserX, Sparkles, Euro, StickyNote,
+  CalendarClock, Download, Eye, Handshake
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -26,6 +29,32 @@ const C = {
   line: "#E2E8F0",
 };
 
+// Cold-outreach best-practice cadence: immediate, then 3/7/14/21/30 days —
+// gives ~3-5 touches, which is the sweet spot most sales/outreach guides
+// converge on before diminishing returns / spam fatigue set in.
+const SUGGESTED_DELAYS = [0, 3, 7, 14, 21, 30];
+
+const MERGE_SAMPLE = { name: "Μαρία Παπαδοπούλου", company: "Acme A.E.", email: "maria@acme.gr" };
+const SPAM_WORDS = [
+  "δωρεάν", "εγγύηση", "click here", "κάνε κλικ εδώ", "act now", "τώρα αμέσως",
+  "100%", "no obligation", "χωρίς καμία δέσμευση", "buy now", "αγόρασε τώρα",
+  "urgent", "επείγον", "cash", "μετρητά", "winner", "νικητής", "risk-free",
+  "χωρίς ρίσκο", "limited time", "περιορισμένος χρόνος",
+];
+
+function renderPreview(text) {
+  if (!text) return "";
+  return text
+    .split("{{name}}").join(MERGE_SAMPLE.name)
+    .split("{{company}}").join(MERGE_SAMPLE.company)
+    .split("{{email}}").join(MERGE_SAMPLE.email);
+}
+
+function findSpamWords(text) {
+  const lower = (text || "").toLowerCase();
+  return SPAM_WORDS.filter((w) => lower.includes(w.toLowerCase()));
+}
+
 const statusMeta = {
   new:         { label: "Νέο",        color: C.slate, Icon: CircleDot },
   contacted:   { label: "Στάλθηκε",   color: C.sky,   Icon: Send },
@@ -34,6 +63,24 @@ const statusMeta = {
   bounced:     { label: "Bounce",     color: C.coral, Icon: CircleX },
   unsubscribed:{ label: "Unsubscribed", color: C.slate, Icon: CircleX },
 };
+
+const OFFER_STATUSES = [
+  { key: "draft", label: "Πρόχειρο", color: C.slate },
+  { key: "sent", label: "Στάλθηκε", color: C.sky },
+  { key: "accepted", label: "Έγινε δεκτό", color: C.mint },
+  { key: "declined", label: "Απορρίφθηκε", color: C.coral },
+];
+
+function fmtMoney(value, currency = "EUR") {
+  if (value == null || value === "") return "—";
+  const symbol = currency === "EUR" ? "€" : currency === "USD" ? "$" : `${currency} `;
+  return `${symbol}${Number(value).toLocaleString("el-GR", { maximumFractionDigits: 2 })}`;
+}
+
+function isFollowUpDue(value) {
+  if (!value) return false;
+  return new Date(value).getTime() <= Date.now();
+}
 
 function fmtDate(value) {
   if (!value) return "—";
@@ -67,6 +114,15 @@ function TagChip({ children }) {
   );
 }
 
+function CategoryChip({ children }) {
+  if (!children) return <span style={{ color: C.slate }}>—</span>;
+  return (
+    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: `${C.sky}14`, color: C.sky }}>
+      {children}
+    </span>
+  );
+}
+
 function NavItem({ icon: Icon, label, active, onClick, count }) {
   return (
     <button
@@ -86,9 +142,9 @@ function NavItem({ icon: Icon, label, active, onClick, count }) {
   );
 }
 
-function Card({ children, className = "" }) {
+function Card({ children, className = "", style }) {
   return (
-    <div className={`rounded-2xl bg-white border ${className}`} style={{ borderColor: C.line }}>
+    <div className={`rounded-2xl bg-white border ${className}`} style={{ borderColor: C.line, ...style }}>
       {children}
     </div>
   );
@@ -119,6 +175,47 @@ function ErrorNote({ message, onRetry }) {
   );
 }
 
+function TipBanner({ children, tone = "info" }) {
+  const toneColor = tone === "warn" ? C.amber : C.sky;
+  return (
+    <div className="flex items-start gap-2 rounded-lg px-3.5 py-2.5 text-xs mb-4" style={{ backgroundColor: `${toneColor}14`, color: C.ink }}>
+      <Sparkles size={14} style={{ color: toneColor, marginTop: 1 }} className="shrink-0" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+// ---------- Brand ----------
+function Logo({ size = 34 }) {
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <div
+        className="w-full h-full rounded-xl flex items-center justify-center"
+        style={{ background: `linear-gradient(135deg, ${C.sky}, ${C.navy})`, boxShadow: "0 3px 10px rgba(22,59,115,0.35)" }}
+      >
+        <PhoneCall size={size * 0.5} strokeWidth={2.2} className="text-white" />
+      </div>
+      <span
+        className="absolute -bottom-1 -right-1 flex items-center justify-center rounded-full"
+        style={{ width: size * 0.42, height: size * 0.42, backgroundColor: C.mint, border: "2px solid #fff" }}
+      >
+        <RefreshCw size={size * 0.22} strokeWidth={3} className="text-white" />
+      </span>
+    </div>
+  );
+}
+
+function Brand({ size = 34, textSize = "text-lg" }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <Logo size={size} />
+      <span className={`${textSize} font-semibold`} style={{ color: C.ink, fontFamily: "Sora, sans-serif", letterSpacing: "-0.01em" }}>
+        SD<span style={{ color: C.sky }}>Loop</span>
+      </span>
+    </div>
+  );
+}
+
 // ---------- Auth ----------
 function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState("login"); // "login" | "register"
@@ -127,19 +224,39 @@ function AuthScreen({ onAuthenticated }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  function switchMode(m) {
+    setMode(m);
+    setError("");
+    setInfo("");
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setInfo("");
     setBusy(true);
     try {
-      const user =
-        mode === "login"
-          ? await api.post("/auth/login", { email, password })
-          : await api.post("/auth/register", { email, password, name: name || undefined });
-      onAuthenticated(user);
+      if (mode === "login") {
+        const user = await api.post("/auth/login", { email, password });
+        onAuthenticated(user);
+      } else {
+        const result = await api.post("/auth/register", { email, password, name: name || undefined });
+        if (result && result.pending) {
+          // Access is invite/approval-gated — new accounts wait for an admin.
+          setInfo(result.message || "Ο λογαριασμός δημιουργήθηκε. Περιμένει έγκριση από διαχειριστή.");
+          setMode("login");
+        } else {
+          onAuthenticated(result);
+        }
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Κάτι πήγε στραβά. Δοκίμασε ξανά.");
+      if (err instanceof ApiError && err.status === 403 && err.data?.error === "account_pending_approval") {
+        setError("Ο λογαριασμός σου εκκρεμεί έγκρισης από διαχειριστή. Δοκίμασε ξανά αργότερα.");
+      } else {
+        setError(err instanceof ApiError ? err.message : "Κάτι πήγε στραβά. Δοκίμασε ξανά.");
+      }
     } finally {
       // Never leave the password sitting in memory longer than necessary,
       // success or failure.
@@ -151,11 +268,8 @@ function AuthScreen({ onAuthenticated }) {
   return (
     <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: C.navy }}>
-            <Layers size={18} className="text-white" />
-          </div>
-          <span className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Loop</span>
+        <div className="flex items-center justify-center mb-8">
+          <Brand size={38} textSize="text-2xl" />
         </div>
 
         <Card className="p-6">
@@ -164,7 +278,7 @@ function AuthScreen({ onAuthenticated }) {
               <button
                 key={m}
                 type="button"
-                onClick={() => { setMode(m); setError(""); }}
+                onClick={() => switchMode(m)}
                 className="flex-1 rounded-md py-1.5 text-sm font-medium transition-colors"
                 style={{ backgroundColor: mode === m ? "#fff" : "transparent", color: mode === m ? C.navy : C.slate }}
               >
@@ -172,6 +286,10 @@ function AuthScreen({ onAuthenticated }) {
               </button>
             ))}
           </div>
+
+          {info && (
+            <p className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: `${C.mint}14`, color: C.mint }}>{info}</p>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-3">
             {mode === "register" && (
@@ -215,6 +333,12 @@ function AuthScreen({ onAuthenticated }) {
               )}
             </div>
 
+            {mode === "register" && (
+              <p className="text-[11px] rounded-lg px-3 py-2" style={{ backgroundColor: C.pale, color: C.navy }}>
+                Η πρόσβαση εγκρίνεται από διαχειριστή — μετά την εγγραφή θα περιμένεις έγκριση πριν μπορέσεις να συνδεθείς.
+              </p>
+            )}
+
             {error && (
               <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>
             )}
@@ -251,9 +375,9 @@ function GmailBanner({ user }) {
   );
 }
 
-// ---------- Views ----------
+// ---------- Contacts ----------
 function NewContactModal({ onClose, onCreate }) {
-  const [form, setForm] = useState({ name: "", email: "", company: "", tags: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", category: "", tags: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -283,7 +407,11 @@ function NewContactModal({ onClose, onCreate }) {
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input placeholder="Τηλέφωνο" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <input placeholder="Εταιρεία" value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input placeholder="Κατηγορία (π.χ. Lead, Πελάτης, Συνεργάτης)" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <input placeholder="Ετικέτες (χωρισμένες με κόμμα)" value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
@@ -297,23 +425,228 @@ function NewContactModal({ onClose, onCreate }) {
   );
 }
 
-function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll }) {
+function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [noteText, setNoteText] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [followUp, setFollowUp] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await onLoad(contactId);
+      setDetail(data);
+      setFollowUp(data.nextFollowUpAt ? data.nextFollowUpAt.slice(0, 10) : "");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στοιχεία επαφής.");
+    } finally {
+      setLoading(false);
+    }
+  }, [contactId, onLoad]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleAddNote(e) {
+    e.preventDefault();
+    if (!noteText.trim()) return;
+    setSavingNote(true);
+    try {
+      await onAddNote(contactId, noteText.trim());
+      setNoteText("");
+      await load();
+    } catch {
+      // best-effort — the note box just stays populated if it failed
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  async function handleFollowUpChange(value) {
+    setFollowUp(value);
+    try {
+      await onSetFollowUp(contactId, value || null);
+    } catch {
+      // ignore — value stays as typed, next reload will reconcile
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <div className="w-full max-w-lg h-full bg-white overflow-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white" style={{ borderColor: C.line }}>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Στοιχεία επαφής</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+        </div>
+
+        {loading ? (
+          <Spinner label="Φόρτωση…" />
+        ) : error ? (
+          <div className="p-6"><ErrorNote message={error} onRetry={load} /></div>
+        ) : detail ? (
+          <div className="p-6 space-y-6">
+            <div>
+              <div className="text-lg font-semibold" style={{ color: C.ink }}>{detail.name}</div>
+              <div className="text-sm" style={{ color: C.slate }}>{detail.email}</div>
+              <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: C.slate }}>
+                {detail.phone && <span className="flex items-center gap-1"><Phone size={12} /> {detail.phone}</span>}
+                {detail.company && <span className="flex items-center gap-1"><Building2 size={12} /> {detail.company}</span>}
+              </div>
+              <div className="flex gap-1.5 flex-wrap mt-2">
+                {(detail.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
+                {detail.category && <CategoryChip>{detail.category}</CategoryChip>}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
+                <CalendarClock size={13} /> Επόμενη υπενθύμιση
+              </label>
+              <input
+                type="date"
+                value={followUp}
+                onChange={(e) => handleFollowUpChange(e.target.value)}
+                className="rounded-lg px-3 py-2 text-sm border outline-none"
+                style={{ borderColor: C.line, color: C.ink }}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
+                <Euro size={14} /> Προσφορές ({detail.offers?.length || 0})
+              </div>
+              {(!detail.offers || detail.offers.length === 0) ? (
+                <p className="text-xs" style={{ color: C.slate }}>Καμία προσφορά ακόμα.</p>
+              ) : (
+                <div className="space-y-2">
+                  {detail.offers.map((o) => (
+                    <div key={o.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                      <span className="text-xs font-medium" style={{ color: C.ink }}>{o.title}</span>
+                      <span className="text-xs" style={{ color: C.slate }}>{fmtMoney(o.value, o.currency)} · {OFFER_STATUSES.find((s) => s.key === o.status)?.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
+                <Mail size={14} /> Ιστορικό αποστολών ({detail.timeline?.length || 0})
+              </div>
+              {(!detail.timeline || detail.timeline.length === 0) ? (
+                <p className="text-xs" style={{ color: C.slate }}>Δεν έχει σταλεί κανένα email ακόμα.</p>
+              ) : (
+                <div className="space-y-2">
+                  {detail.timeline.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{t.subject}</div>
+                        <div className="text-[11px]" style={{ color: C.slate }}>{t.sequenceName} · {fmtDate(t.sentAt)}</div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {t.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>Άνοιξε</span>}
+                        {t.clicked && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.amber}1A`, color: C.amber }}>Κλικ</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
+                <StickyNote size={14} /> Σημειώσεις ({detail.notes?.length || 0})
+              </div>
+              <form onSubmit={handleAddNote} className="flex gap-2 mb-3">
+                <input
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="Νέα σημείωση…"
+                  className="flex-1 rounded-lg px-3 py-2 text-sm border outline-none"
+                  style={{ borderColor: C.line, color: C.ink }}
+                />
+                <button type="submit" disabled={savingNote || !noteText.trim()} className="rounded-lg px-3 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky, opacity: savingNote ? 0.7 : 1 }}>
+                  {savingNote ? <Loader2 size={14} className="animate-spin" /> : "Προσθήκη"}
+                </button>
+              </form>
+              {(!detail.notes || detail.notes.length === 0) ? (
+                <p className="text-xs" style={{ color: C.slate }}>Καμία σημείωση ακόμα.</p>
+              ) : (
+                <div className="space-y-2">
+                  {detail.notes.map((n) => (
+                    <div key={n.id} className="flex items-start justify-between gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                      <div className="min-w-0">
+                        <p className="text-xs whitespace-pre-wrap" style={{ color: C.ink }}>{n.body}</p>
+                        <p className="text-[11px] mt-1" style={{ color: C.slate }}>{fmtDate(n.createdAt)}</p>
+                      </div>
+                      <button
+                        onClick={async () => { await onDeleteNote(contactId, n.id); load(); }}
+                        className="shrink-0"
+                        style={{ color: C.coral }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [tagFilter, setTagFilter] = useState("all");
+  const [onlyDue, setOnlyDue] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [enrollSeqId, setEnrollSeqId] = useState("");
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkTag, setBulkTag] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [uploadNote, setUploadNote] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [detailContactId, setDetailContactId] = useState(null);
   const fileRef = useRef(null);
+
+  const categories = useMemo(() => {
+    const set = new Set(contacts.map((c) => (c.category || "").trim()).filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [contacts]);
+
+  const allTags = useMemo(() => {
+    const set = new Set();
+    contacts.forEach((c) =>
+      (c.tags || "").split(",").map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t))
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [contacts]);
 
   const filtered = useMemo(() => {
     return contacts.filter((c) => {
-      const matchesQuery = (c.name + c.email + (c.company || "")).toLowerCase().includes(query.toLowerCase());
+      const matchesQuery = (c.name + c.email + (c.company || "") + (c.phone || "")).toLowerCase().includes(query.toLowerCase());
       const matchesStatus = statusFilter === "all" || c.status === statusFilter;
-      return matchesQuery && matchesStatus;
+      const matchesCategory = categoryFilter === "all" || (c.category || "").trim() === categoryFilter;
+      const matchesTag =
+        tagFilter === "all" ||
+        (c.tags || "").split(",").map((t) => t.trim()).includes(tagFilter);
+      const matchesDue = !onlyDue || isFollowUpDue(c.nextFollowUpAt);
+      return matchesQuery && matchesStatus && matchesCategory && matchesTag && matchesDue;
     });
-  }, [contacts, query, statusFilter]);
+  }, [contacts, query, statusFilter, categoryFilter, tagFilter, onlyDue]);
+
+  const dueCount = useMemo(() => contacts.filter((c) => isFollowUpDue(c.nextFollowUpAt)).length, [contacts]);
 
   function toggleSelected(id) {
     setSelected((prev) => {
@@ -351,19 +684,90 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
     }
   }
 
+  async function handleBulkCategory() {
+    if (!bulkCategory || selected.size === 0) return;
+    setBulkBusy(true);
+    try {
+      await onBulkUpdate(Array.from(selected), { category: bulkCategory });
+      setBulkCategory("");
+    } catch (err) {
+      setUploadNote(err instanceof ApiError ? err.message : "Η μαζική ενέργεια απέτυχε.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleBulkTag() {
+    if (!bulkTag.trim() || selected.size === 0) return;
+    setBulkBusy(true);
+    try {
+      await onBulkUpdate(Array.from(selected), {}, bulkTag.trim());
+      setBulkTag("");
+    } catch (err) {
+      setUploadNote(err instanceof ApiError ? err.message : "Η μαζική ενέργεια απέτυχε.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    try {
+      await onBulkDelete(Array.from(selected));
+      setSelected(new Set());
+    } catch (err) {
+      setUploadNote(err instanceof ApiError ? err.message : "Η διαγραφή απέτυχε.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await onExport();
+    } catch (err) {
+      setUploadNote(err instanceof ApiError ? err.message : "Η εξαγωγή απέτυχε.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {showNew && <NewContactModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
+      {detailContactId && (
+        <ContactDetailDrawer
+          contactId={detailContactId}
+          onClose={() => setDetailContactId(null)}
+          onLoad={onLoadDetail}
+          onAddNote={onAddNote}
+          onDeleteNote={onDeleteNote}
+          onSetFollowUp={onSetFollowUp}
+        />
+      )}
       <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Επαφές</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{contacts.length} επαφές συνολικά</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>
+            {contacts.length} επαφές συνολικά{dueCount > 0 ? ` · ${dueCount} με εκκρεμή υπενθύμιση` : ""}
+          </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border"
+            style={{ borderColor: C.line, color: C.ink, opacity: exporting ? 0.6 : 1 }}
+          >
+            {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Εξαγωγή CSV
+          </button>
           <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
+            title="Στήλες CSV: name, email, phone, company, category, tags"
             className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border"
             style={{ borderColor: C.line, color: C.ink, opacity: uploading ? 0.6 : 1 }}
           >
@@ -384,13 +788,13 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
         </div>
       )}
 
-      <div className="flex items-center gap-3 px-6 py-3 border-b" style={{ borderColor: C.line }}>
+      <div className="flex items-center gap-3 px-6 py-3 border-b flex-wrap" style={{ borderColor: C.line }}>
         <div className="flex items-center gap-2 rounded-lg px-3 py-2 flex-1 max-w-sm" style={{ backgroundColor: C.pale }}>
           <Search size={15} style={{ color: C.slate }} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Αναζήτηση ονόματος, email, εταιρείας…"
+            placeholder="Αναζήτηση ονόματος, email, τηλεφώνου, εταιρείας…"
             className="bg-transparent outline-none text-sm flex-1"
             style={{ color: C.ink }}
           />
@@ -407,8 +811,33 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           ))}
         </select>
 
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="rounded-lg px-3 py-2 text-sm border outline-none"
+          style={{ borderColor: C.line, color: C.ink }}
+        >
+          <option value="all">Όλες οι κατηγορίες</option>
+          {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+        </select>
+
+        <select
+          value={tagFilter}
+          onChange={(e) => setTagFilter(e.target.value)}
+          className="rounded-lg px-3 py-2 text-sm border outline-none"
+          style={{ borderColor: C.line, color: C.ink }}
+        >
+          <option value="all">Όλες οι ετικέτες</option>
+          {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+
+        <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.slate }}>
+          <input type="checkbox" checked={onlyDue} onChange={(e) => setOnlyDue(e.target.checked)} />
+          Μόνο εκκρεμείς υπενθυμίσεις
+        </label>
+
         {selected.size > 0 && (
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 flex-wrap ml-auto">
             <span className="text-xs font-medium" style={{ color: C.slate }}>{selected.size} επιλεγμένες</span>
             <select
               value={enrollSeqId}
@@ -427,6 +856,29 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
             >
               Εγγραφή
             </button>
+            <input
+              value={bulkCategory}
+              onChange={(e) => setBulkCategory(e.target.value)}
+              placeholder="Νέα κατηγορία…"
+              className="w-32 rounded-lg px-2 py-1.5 text-xs border outline-none"
+              style={{ borderColor: C.line, color: C.ink }}
+            />
+            <button onClick={handleBulkCategory} disabled={bulkBusy || !bulkCategory} className="rounded-lg px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
+              Ορισμός κατηγορίας
+            </button>
+            <input
+              value={bulkTag}
+              onChange={(e) => setBulkTag(e.target.value)}
+              placeholder="Νέα ετικέτα…"
+              className="w-28 rounded-lg px-2 py-1.5 text-xs border outline-none"
+              style={{ borderColor: C.line, color: C.ink }}
+            />
+            <button onClick={handleBulkTag} disabled={bulkBusy || !bulkTag.trim()} className="rounded-lg px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
+              Προσθήκη ετικέτας
+            </button>
+            <button onClick={handleBulkDelete} disabled={bulkBusy} className="rounded-lg px-2.5 py-1.5 text-xs font-medium" style={{ color: C.coral }}>
+              Διαγραφή
+            </button>
           </div>
         )}
       </div>
@@ -441,11 +893,15 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
               <tr className="text-left" style={{ color: C.slate }}>
                 <th className="font-medium pb-3 w-8"></th>
                 <th className="font-medium pb-3">Όνομα</th>
+                <th className="font-medium pb-3">Τηλέφωνο</th>
                 <th className="font-medium pb-3">Εταιρεία</th>
+                <th className="font-medium pb-3">Κατηγορία</th>
                 <th className="font-medium pb-3">Κατάσταση</th>
                 <th className="font-medium pb-3">Sequence</th>
                 <th className="font-medium pb-3">Ετικέτες</th>
+                <th className="font-medium pb-3">Υπενθύμιση</th>
                 <th className="font-medium pb-3">Τελ. ενέργεια</th>
+                <th className="font-medium pb-3 w-8"></th>
               </tr>
             </thead>
             <tbody>
@@ -460,10 +916,17 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
                   </td>
                   <td className="py-3" style={{ color: C.ink }}>
                     <div className="flex items-center gap-1.5">
+                      <Phone size={13} style={{ color: C.slate }} />
+                      {c.phone || "—"}
+                    </div>
+                  </td>
+                  <td className="py-3" style={{ color: C.ink }}>
+                    <div className="flex items-center gap-1.5">
                       <Building2 size={13} style={{ color: C.slate }} />
                       {c.company || "—"}
                     </div>
                   </td>
+                  <td className="py-3"><CategoryChip>{c.category}</CategoryChip></td>
                   <td className="py-3"><Pill status={c.status} /></td>
                   <td className="py-3" style={{ color: C.ink }}>
                     {c.currentSequence ? `${c.currentSequence} · βήμα ${c.currentStep}` : "—"}
@@ -473,11 +936,26 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
                       {(c.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
                     </div>
                   </td>
+                  <td className="py-3">
+                    {c.nextFollowUpAt ? (
+                      <span
+                        className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-1.5 py-0.5"
+                        style={{ color: isFollowUpDue(c.nextFollowUpAt) ? C.coral : C.slate, backgroundColor: isFollowUpDue(c.nextFollowUpAt) ? `${C.coral}14` : "transparent" }}
+                      >
+                        <CalendarClock size={12} /> {fmtDate(c.nextFollowUpAt)}
+                      </span>
+                    ) : "—"}
+                  </td>
                   <td className="py-3 text-xs" style={{ color: C.slate }}>{fmtDate(c.lastActivityAt)}</td>
+                  <td className="py-3">
+                    <button onClick={() => setDetailContactId(c.id)} style={{ color: C.slate }} title="Στοιχεία επαφής">
+                      <Eye size={15} />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="py-10 text-center text-sm" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</td></tr>
+                <tr><td colSpan={11} className="py-10 text-center text-sm" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</td></tr>
               )}
             </tbody>
           </table>
@@ -487,36 +965,212 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
   );
 }
 
-function SequenceStep({ step, index, isLast }) {
+// ---------- Templates ----------
+function TemplateModal({ initial, onClose, onSave }) {
+  const [name, setName] = useState(initial?.name || "");
+  const [subject, setSubject] = useState(initial?.subject || "");
+  const [body, setBody] = useState(initial?.body || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const bodyRef = useRef(null);
+
+  function insertToken(token) {
+    const el = bodyRef.current;
+    if (!el) {
+      setBody((b) => b + token);
+      return;
+    }
+    const start = el.selectionStart ?? body.length;
+    const end = el.selectionEnd ?? body.length;
+    const next = body.slice(0, start) + token + body.slice(end);
+    setBody(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + token.length;
+    });
+  }
+
+  const subjectSpam = findSpamWords(subject);
+  const bodySpam = findSpamWords(body);
+  const hasUnsubscribeMention = /unsubscribe|διαγραφή|απεγγραφή/i.test(body);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await onSave({ name, subject, body });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποθήκευση.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="flex gap-4">
-      <div className="flex flex-col items-center">
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white" style={{ backgroundColor: C.navy }}>
-          {index + 1}
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-3xl p-5 max-h-[88vh] overflow-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{initial ? "Επεξεργασία template" : "Νέο template"}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
-        {!isLast && <div className="w-px flex-1 mt-1" style={{ backgroundColor: C.line, minHeight: 32 }} />}
-      </div>
-      <div className="flex-1 pb-6">
-        <div className="flex items-center gap-2 text-xs mb-1.5" style={{ color: C.slate }}>
-          <Clock size={12} />
-          {step.delayDays === 0 ? "Άμεση αποστολή" : `${step.delayDays} ημέρες μετά`}
-        </div>
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-medium" style={{ color: C.ink }}>{step.subject}</span>
+        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-5">
+          <div className="space-y-3">
+            <input required placeholder="Όνομα template" value={name} onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+
+            <div>
+              <input required placeholder="Θέμα" value={subject} onChange={(e) => setSubject(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[11px]" style={{ color: subject.length > 60 ? C.amber : C.slate }}>
+                  {subject.length} χαρακτήρες {subject.length > 60 ? "(συνιστάται κάτω από 60 για καλύτερο open rate)" : ""}
+                </span>
+              </div>
+              {subjectSpam.length > 0 && (
+                <p className="text-[11px] mt-1" style={{ color: C.amber }}>⚠ Πιθανές λέξεις spam-trigger: {subjectSpam.join(", ")}</p>
+              )}
+            </div>
+
+            <div className="flex gap-1.5 flex-wrap">
+              <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
+              {["{{name}}", "{{company}}", "{{email}}"].map((tok) => (
+                <button key={tok} type="button" onClick={() => insertToken(tok)}
+                  className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
+                  {tok}
+                </button>
+              ))}
+            </div>
+            <textarea ref={bodyRef} required placeholder="Κείμενο μηνύματος" value={body} onChange={(e) => setBody(e.target.value)} rows={9}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
+            <div className="flex items-center justify-between">
+              <span className="text-[11px]" style={{ color: C.slate }}>{body.length} χαρακτήρες · {body.split(/\s+/).filter(Boolean).length} λέξεις</span>
+            </div>
+            {bodySpam.length > 0 && (
+              <p className="text-[11px]" style={{ color: C.amber }}>⚠ Πιθανές λέξεις spam-trigger: {bodySpam.join(", ")}</p>
+            )}
+            {!hasUnsubscribeMention && body.length > 0 && (
+              <TipBanner>Best practice: πρόσθεσε μια γραμμή απεγγραφής/unsubscribe στο τέλος — βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails.</TipBanner>
+            )}
+
+            {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+            <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+              {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+            </button>
           </div>
-          <p className="text-xs leading-relaxed" style={{ color: C.slate }}>{step.body}</p>
-        </Card>
+
+          <div>
+            <p className="text-xs font-medium mb-2" style={{ color: C.slate }}>Προεπισκόπηση (με δείγμα δεδομένων)</p>
+            <Card className="p-4" style={{ backgroundColor: C.pale }}>
+              <div className="text-xs mb-2" style={{ color: C.slate }}>Προς: {MERGE_SAMPLE.name} &lt;{MERGE_SAMPLE.email}&gt;</div>
+              <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{renderPreview(subject) || "—"}</div>
+              <div className="text-sm whitespace-pre-wrap" style={{ color: C.ink }}>{renderPreview(body) || "—"}</div>
+            </Card>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate, onDelete }) {
+  const [editing, setEditing] = useState(null); // null | "new" | template object
+  const [busyId, setBusyId] = useState(null);
+
+  async function handleSave(data) {
+    if (editing === "new") await onCreate(data);
+    else await onUpdate(editing.id, data);
+  }
+
+  async function handleDuplicate(t) {
+    setBusyId(t.id);
+    try {
+      await onCreate({ name: `${t.name} (copy)`, subject: t.subject, body: t.body });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDelete(t) {
+    setBusyId(t.id);
+    try {
+      await onDelete(t.id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="h-full overflow-auto">
+      {editing && (
+        <TemplateModal
+          initial={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSave={handleSave}
+        />
+      )}
+      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Templates</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{templates.length} αποθηκευμένα templates</p>
+        </div>
+        <button onClick={() => setEditing("new")} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky }}>
+          <Plus size={15} /> Νέο template
+        </button>
+      </div>
+      <div className="px-8 py-6">
+        <ErrorNote message={error} onRetry={onReload} />
+        {loading ? (
+          <Spinner label="Φόρτωση templates…" />
+        ) : templates.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
+            <FileText size={28} strokeWidth={1.5} />
+            Δεν υπάρχουν templates ακόμα.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {templates.map((t) => (
+              <Card key={t.id} className="p-4">
+                <div className="flex items-start justify-between mb-2 gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate" style={{ color: C.ink }}>{t.name}</div>
+                    <div className="text-xs truncate mt-0.5" style={{ color: C.slate }}>{t.subject}</div>
+                  </div>
+                  <span className="text-[11px] font-medium rounded-full px-2 py-0.5 shrink-0" style={{ backgroundColor: C.pale, color: C.navy }}>
+                    {t.usageCount || 0}× σε χρήση
+                  </span>
+                </div>
+                <p className="text-xs mb-3" style={{ color: C.slate }}>
+                  {t.body.length > 160 ? `${t.body.slice(0, 160)}…` : t.body}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setEditing(t)} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
+                    <Pencil size={12} /> Επεξεργασία
+                  </button>
+                  <button onClick={() => handleDuplicate(t)} disabled={busyId === t.id} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
+                    <Copy size={12} /> Αντιγραφή
+                  </button>
+                  <button onClick={() => handleDelete(t)} disabled={busyId === t.id} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium ml-auto" style={{ color: C.coral }}>
+                    <Trash2 size={12} /> Διαγραφή
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function NewSequenceModal({ onClose, onCreate }) {
-  const [name, setName] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [delayDays, setDelayDays] = useState(0);
+// ---------- Offers (mini deals/pipeline) ----------
+function NewOfferModal({ contacts, onClose, onCreate }) {
+  const [contactId, setContactId] = useState("");
+  const [title, setTitle] = useState("");
+  const [value, setValue] = useState("");
+  const [currency, setCurrency] = useState("EUR");
+  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -525,35 +1179,47 @@ function NewSequenceModal({ onClose, onCreate }) {
     setError("");
     setBusy(true);
     try {
-      await onCreate({ name, steps: [{ subject, body, delayDays: Number(delayDays) || 0 }] });
+      await onCreate({
+        contactId,
+        title,
+        value: value === "" ? null : Number(value),
+        currency,
+        notes: notes || null,
+      });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία sequence.");
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία προσφοράς.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέο sequence</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέα προσφορά</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <input required placeholder="Όνομα sequence" value={name} onChange={(e) => setName(e.target.value)}
+          <select required value={contactId} onChange={(e) => setContactId(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }}>
+            <option value="">Επιλέξε επαφή…</option>
+            {contacts.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.email})</option>)}
+          </select>
+          <input required placeholder="Τίτλος προσφοράς" value={title} onChange={(e) => setTitle(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <p className="text-xs font-medium" style={{ color: C.slate }}>Πρώτο βήμα</p>
-          <input required placeholder="Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})" value={subject} onChange={(e) => setSubject(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <textarea required placeholder="Κείμενο μηνύματος" value={body} onChange={(e) => setBody(e.target.value)} rows={4}
-            className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
-          <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Καθυστέρηση (ημέρες)</label>
-            <input type="number" min={0} max={60} value={delayDays} onChange={(e) => setDelayDays(e.target.value)}
-              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <div className="flex gap-2">
+            <input type="number" min={0} step="0.01" placeholder="Αξία" value={value} onChange={(e) => setValue(e.target.value)}
+              className="flex-1 rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)}
+              className="w-24 rounded-lg px-2 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }}>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+            </select>
           </div>
+          <textarea placeholder="Σημειώσεις (προαιρετικό)" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
             {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία
@@ -564,9 +1230,355 @@ function NewSequenceModal({ onClose, onCreate }) {
   );
 }
 
-function SequencesView({ sequences, loading, error, onReload, onCreate }) {
+function OfferCard({ offer, onChangeStatus, onDelete, busy }) {
+  return (
+    <Card className="p-3.5">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold truncate" style={{ color: C.ink }}>{offer.title}</div>
+          <div className="text-xs truncate mt-0.5" style={{ color: C.slate }}>{offer.contact?.name || "—"}</div>
+        </div>
+        <button onClick={() => onDelete(offer.id)} disabled={busy} className="shrink-0" style={{ color: C.coral }}>
+          <Trash2 size={13} />
+        </button>
+      </div>
+      <div className="flex items-center gap-1 text-sm font-medium mb-2" style={{ color: C.navy }}>
+        <Euro size={13} /> {fmtMoney(offer.value, offer.currency)}
+      </div>
+      {offer.notes && <p className="text-xs mb-2 line-clamp-2" style={{ color: C.slate }}>{offer.notes}</p>}
+      <select
+        value={offer.status}
+        disabled={busy}
+        onChange={(e) => onChangeStatus(offer.id, e.target.value)}
+        className="w-full rounded-md px-2 py-1.5 text-xs border outline-none"
+        style={{ borderColor: C.line, color: C.ink }}
+      >
+        {OFFER_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+      </select>
+    </Card>
+  );
+}
+
+function OffersView({ offers, contacts, loading, error, onReload, onCreate, onChangeStatus, onDelete }) {
+  const [showNew, setShowNew] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  async function handleChangeStatus(id, status) {
+    setBusyId(id);
+    try {
+      await onChangeStatus(id, status);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDelete(id) {
+    setBusyId(id);
+    try {
+      await onDelete(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const totalValue = offers
+    .filter((o) => o.status !== "declined")
+    .reduce((sum, o) => sum + (Number(o.value) || 0), 0);
+
+  return (
+    <div className="h-full overflow-auto">
+      {showNew && <NewOfferModal contacts={contacts} onClose={() => setShowNew(false)} onCreate={onCreate} />}
+      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Offers</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>
+            {offers.length} προσφορές · σύνολο ενεργών {fmtMoney(totalValue)}
+          </p>
+        </div>
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky }}>
+          <Plus size={15} /> Νέα προσφορά
+        </button>
+      </div>
+      <div className="px-8 py-6">
+        <ErrorNote message={error} onRetry={onReload} />
+        {loading ? (
+          <Spinner label="Φόρτωση προσφορών…" />
+        ) : offers.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
+            <Handshake size={28} strokeWidth={1.5} />
+            Δεν υπάρχουν προσφορές ακόμα.
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-4">
+            {OFFER_STATUSES.map((col) => (
+              <div key={col.key}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color }} />
+                  <span className="text-xs font-semibold" style={{ color: C.ink }}>{col.label}</span>
+                  <span className="text-xs" style={{ color: C.slate }}>
+                    {offers.filter((o) => o.status === col.key).length}
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {offers.filter((o) => o.status === col.key).map((offer) => (
+                    <OfferCard
+                      key={offer.id}
+                      offer={offer}
+                      busy={busyId === offer.id}
+                      onChangeStatus={handleChangeStatus}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Sequences ----------
+function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown, canMoveUp, canMoveDown, busy }) {
+  return (
+    <div className="flex gap-4">
+      <div className="flex flex-col items-center">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white" style={{ backgroundColor: C.navy }}>
+          {index + 1}
+        </div>
+        {!isLast && <div className="w-px flex-1 mt-1" style={{ backgroundColor: C.line, minHeight: 32 }} />}
+      </div>
+      <div className="flex-1 pb-6">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
+            <Clock size={12} />
+            {step.delayDays === 0 ? "Άμεση αποστολή" : `${step.delayDays} ημέρες μετά`}
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={onMoveUp} disabled={!canMoveUp || busy} className="rounded p-1" style={{ opacity: canMoveUp ? 1 : 0.3, color: C.slate }} title="Μετακίνηση πάνω">
+              <ArrowUp size={13} />
+            </button>
+            <button onClick={onMoveDown} disabled={!canMoveDown || busy} className="rounded p-1" style={{ opacity: canMoveDown ? 1 : 0.3, color: C.slate }} title="Μετακίνηση κάτω">
+              <ArrowDown size={13} />
+            </button>
+            <button onClick={onDelete} disabled={busy} className="rounded p-1" style={{ color: C.coral }} title="Διαγραφή βήματος">
+              <Trash2 size={13} />
+            </button>
+          </div>
+        </div>
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-medium" style={{ color: C.ink }}>{step.subject}</span>
+          </div>
+          <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: C.slate }}>{step.body}</p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function StepFields({ mode, setMode, templateId, setTemplateId, subject, setSubject, body, setBody, templates }) {
+  return (
+    <>
+      {templates.length > 0 && (
+        <div className="flex rounded-lg p-0.5 mb-3 w-fit" style={{ backgroundColor: "#fff" }}>
+          {["inline", "template"].map((m) => (
+            <button key={m} type="button"
+              onClick={() => setMode(m)}
+              className="rounded-md px-2.5 py-1 text-[11px] font-medium"
+              style={{ backgroundColor: mode === m ? C.sky : "transparent", color: mode === m ? "#fff" : C.slate }}
+            >
+              {m === "inline" ? "Νέο κείμενο" : "Από template"}
+            </button>
+          ))}
+        </div>
+      )}
+      {mode === "template" ? (
+        <select required value={templateId} onChange={(e) => setTemplateId(e.target.value)}
+          className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+          <option value="">Επιλέξε template…</option>
+          {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      ) : (
+        <div className="space-y-2">
+          <input required placeholder="Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})" value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
+          <textarea required placeholder="Κείμενο μηνύματος — χρήσιμα tokens: {{name}}, {{company}}" value={body}
+            onChange={(e) => setBody(e.target.value)} rows={3}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
+        </div>
+      )}
+    </>
+  );
+}
+
+function emptyStep(index) {
+  return { mode: "inline", templateId: "", subject: "", body: "", delayDays: SUGGESTED_DELAYS[index] ?? 7 };
+}
+
+function NewSequenceModal({ onClose, onCreate, templates }) {
+  const [name, setName] = useState("");
+  const [steps, setSteps] = useState([emptyStep(0)]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function updateStep(i, patch) {
+    setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  }
+  function addStep() {
+    setSteps((prev) => [...prev, emptyStep(prev.length)]);
+  }
+  function removeStep(i) {
+    setSteps((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const payloadSteps = steps.map((s) =>
+        s.mode === "template" && s.templateId
+          ? { templateId: s.templateId, delayDays: Number(s.delayDays) || 0 }
+          : { subject: s.subject, body: s.body, delayDays: Number(s.delayDays) || 0 }
+      );
+      await onCreate({ name, steps: payloadSteps });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία sequence.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-2xl p-5 max-h-[85vh] overflow-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέο sequence</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+
+        {steps.length < 3 && (
+          <TipBanner tone="warn">
+            Best practice: 3–5 follow-ups ανεβάζουν σημαντικά τα ποσοστά απάντησης. Σκέψου να προσθέσεις ακόμη βήματα πριν δημιουργήσεις το sequence.
+          </TipBanner>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input required placeholder="Όνομα sequence" value={name} onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+
+          {steps.map((step, i) => (
+            <Card key={i} className="p-4" style={{ backgroundColor: C.pale }}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold" style={{ color: C.navy }}>Βήμα {i + 1}</span>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-xs" style={{ color: C.slate }}>
+                    <Clock size={12} />
+                    <input type="number" min={0} max={60} value={step.delayDays}
+                      onChange={(e) => updateStep(i, { delayDays: e.target.value })}
+                      className="w-14 rounded-md px-1.5 py-1 text-xs border outline-none" style={{ borderColor: C.line }} />
+                    ημέρες μετά
+                  </label>
+                  {steps.length > 1 && (
+                    <button type="button" onClick={() => removeStep(i)} style={{ color: C.coral }}>
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <StepFields
+                mode={step.mode} setMode={(m) => updateStep(i, { mode: m })}
+                templateId={step.templateId} setTemplateId={(v) => updateStep(i, { templateId: v })}
+                subject={step.subject} setSubject={(v) => updateStep(i, { subject: v })}
+                body={step.body} setBody={(v) => updateStep(i, { body: v })}
+                templates={templates}
+              />
+            </Card>
+          ))}
+
+          <button type="button" onClick={addStep}
+            className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium border"
+            style={{ borderColor: C.line, color: C.navy }}>
+            <Plus size={14} /> Προσθήκη βήματος {steps.length < SUGGESTED_DELAYS.length ? `(προτείνεται: ${SUGGESTED_DELAYS[steps.length]} ημέρες)` : ""}
+          </button>
+
+          {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+          <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία ({steps.length} βήματα)
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
+  const [mode, setMode] = useState("inline");
+  const [templateId, setTemplateId] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [delayDays, setDelayDays] = useState(suggestedDelay);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const payload =
+        mode === "template"
+          ? { templateId, delayDays: Number(delayDays) || 0 }
+          : { subject, body, delayDays: Number(delayDays) || 0 };
+      await onAdd(payload);
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η προσθήκη βήματος.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέο βήμα</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <StepFields
+            mode={mode} setMode={setMode}
+            templateId={templateId} setTemplateId={setTemplateId}
+            subject={subject} setSubject={setSubject}
+            body={body} setBody={setBody}
+            templates={templates}
+          />
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Καθυστέρηση (ημέρες)</label>
+            <input type="number" min={0} max={60} value={delayDays} onChange={(e) => setDelayDays(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
+          {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+          <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Προσθήκη
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+function SequencesView({ sequences, loading, error, onReload, onCreate, templates, onAddStep, onDeleteStep, onReorderStep }) {
   const [activeId, setActiveId] = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [showAddStep, setShowAddStep] = useState(false);
+  const [busyStepId, setBusyStepId] = useState(null);
 
   useEffect(() => {
     if (sequences.length > 0 && !sequences.some((s) => s.id === activeId)) {
@@ -576,9 +1588,44 @@ function SequencesView({ sequences, loading, error, onReload, onCreate }) {
 
   const active = sequences.find((s) => s.id === activeId);
 
+  async function handleDeleteStep(stepId) {
+    if (!active) return;
+    setBusyStepId(stepId);
+    try {
+      await onDeleteStep(active.id, stepId);
+    } finally {
+      setBusyStepId(null);
+    }
+  }
+
+  async function handleMove(stepId, direction) {
+    if (!active) return;
+    const ids = active.steps.map((s) => s.id);
+    const i = ids.indexOf(stepId);
+    const j = direction === "up" ? i - 1 : i + 1;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    setBusyStepId(stepId);
+    try {
+      await onReorderStep(active.id, ids);
+    } finally {
+      setBusyStepId(null);
+    }
+  }
+
+  const nextSuggestedDelay = active ? SUGGESTED_DELAYS[active.steps.length] ?? 7 : 0;
+
   return (
     <div className="flex h-full">
-      {showNew && <NewSequenceModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
+      {showNew && <NewSequenceModal onClose={() => setShowNew(false)} onCreate={onCreate} templates={templates} />}
+      {showAddStep && active && (
+        <AddStepModal
+          onClose={() => setShowAddStep(false)}
+          templates={templates}
+          suggestedDelay={nextSuggestedDelay}
+          onAdd={(payload) => onAddStep(active.id, payload)}
+        />
+      )}
       <div className="w-72 border-r flex flex-col" style={{ borderColor: C.line }}>
         <div className="flex items-center justify-between px-5 py-5 border-b" style={{ borderColor: C.line }}>
           <h2 className="text-base font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Sequences</h2>
@@ -619,10 +1666,29 @@ function SequencesView({ sequences, loading, error, onReload, onCreate }) {
                   {active.stats?.sent ?? 0} στάλθηκαν · {active.stats?.opened ?? 0} ανοίχτηκαν · {active.stats?.replied ?? 0} απαντήσεις
                 </p>
               </div>
+              <button onClick={() => setShowAddStep(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
+                <Plus size={14} /> Προσθήκη βήματος
+              </button>
             </div>
             <div className="px-8 py-8 max-w-2xl">
+              {active.steps.length < 3 && (
+                <TipBanner tone="warn">
+                  Αυτό το sequence έχει {active.steps.length} {active.steps.length === 1 ? "βήμα" : "βήματα"}. Best practice: 3–5 follow-ups δίνουν σημαντικά καλύτερα reply rates.
+                </TipBanner>
+              )}
               {active.steps.map((step, i) => (
-                <SequenceStep key={step.id} step={step} index={i} isLast={i === active.steps.length - 1} />
+                <SequenceStepCard
+                  key={step.id}
+                  step={step}
+                  index={i}
+                  isLast={i === active.steps.length - 1}
+                  canMoveUp={i > 0}
+                  canMoveDown={i < active.steps.length - 1}
+                  busy={busyStepId === step.id}
+                  onMoveUp={() => handleMove(step.id, "up")}
+                  onMoveDown={() => handleMove(step.id, "down")}
+                  onDelete={() => handleDeleteStep(step.id)}
+                />
               ))}
             </div>
           </>
@@ -828,6 +1894,102 @@ function ComposeModal({ onClose }) {
   );
 }
 
+// ---------- Admin ----------
+function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, currentUserId }) {
+  const [busyId, setBusyId] = useState(null);
+
+  async function run(id, fn) {
+    setBusyId(id);
+    try {
+      await fn(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="h-full overflow-auto">
+      <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Διαχείριση πρόσβασης</h1>
+        <p className="text-sm mt-0.5" style={{ color: C.slate }}>Έγκριση νέων λογαριασμών και διαχείριση δικαιωμάτων admin</p>
+      </div>
+      <div className="px-8 py-6">
+        <ErrorNote message={error} onRetry={onReload} />
+        {loading ? (
+          <Spinner label="Φόρτωση χρηστών…" />
+        ) : (
+          <Card className="p-0 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
+                  <th className="font-medium px-4 py-2.5">Χρήστης</th>
+                  <th className="font-medium px-4 py-2.5">Κατάσταση</th>
+                  <th className="font-medium px-4 py-2.5">Ρόλος</th>
+                  <th className="font-medium px-4 py-2.5">Εγγραφή</th>
+                  <th className="font-medium px-4 py-2.5 text-right">Ενέργειες</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id} className="border-t" style={{ borderColor: C.line }}>
+                    <td className="px-4 py-3">
+                      <div className="font-medium" style={{ color: C.ink }}>{u.name || "—"}</div>
+                      <div className="text-xs" style={{ color: C.slate }}>{u.email}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.approved ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.mint }}><UserCheck size={13} /> Εγκεκριμένος</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.amber }}><UserX size={13} /> Εκκρεμεί</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.isAdmin ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.navy }}><ShieldCheck size={13} /> Admin</span>
+                      ) : (
+                        <span className="text-xs" style={{ color: C.slate }}>Χρήστης</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(u.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 justify-end">
+                        {!u.approved && (
+                          <button disabled={busyId === u.id} onClick={() => run(u.id, onApprove)}
+                            className="rounded-md px-2.5 py-1 text-xs font-medium text-white" style={{ backgroundColor: C.mint }}>
+                            Έγκριση
+                          </button>
+                        )}
+                        {u.approved && u.id !== currentUserId && (
+                          <button disabled={busyId === u.id} onClick={() => run(u.id, onRevoke)}
+                            className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.coral }}>
+                            Ανάκληση
+                          </button>
+                        )}
+                        {!u.isAdmin && (
+                          <button disabled={busyId === u.id} onClick={() => run(u.id, onPromote)}
+                            className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.navy }}>
+                            Ανάδειξη σε admin
+                          </button>
+                        )}
+                        {u.isAdmin && u.id !== currentUserId && (
+                          <button disabled={busyId === u.id} onClick={() => run(u.id, onDemote)}
+                            className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
+                            Αφαίρεση admin
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------- App ----------
 export default function App() {
   const [authState, setAuthState] = useState("loading"); // loading | anon | authed
@@ -852,6 +2014,18 @@ export default function App() {
   const [activity, setActivity] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState("");
+
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState("");
+
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
+
+  const [offers, setOffers] = useState([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+  const [offersError, setOffersError] = useState("");
 
   const loadContacts = useCallback(async () => {
     setContactsLoading(true);
@@ -905,12 +2079,50 @@ export default function App() {
     }
   }, []);
 
+  const loadTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    setTemplatesError("");
+    try {
+      setTemplates(await api.get("/templates"));
+    } catch (err) {
+      setTemplatesError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα templates.");
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, []);
+
+  const loadAdminUsers = useCallback(async () => {
+    setAdminLoading(true);
+    setAdminError("");
+    try {
+      setAdminUsers(await api.get("/admin/users"));
+    } catch (err) {
+      setAdminError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι χρήστες.");
+    } finally {
+      setAdminLoading(false);
+    }
+  }, []);
+
+  const loadOffers = useCallback(async () => {
+    setOffersLoading(true);
+    setOffersError("");
+    try {
+      setOffers(await api.get("/offers"));
+    } catch (err) {
+      setOffersError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι προσφορές.");
+    } finally {
+      setOffersLoading(false);
+    }
+  }, []);
+
   const refreshAll = useCallback(() => {
     loadContacts();
     loadSequences();
     loadAnalytics();
     loadActivity();
-  }, [loadContacts, loadSequences, loadAnalytics, loadActivity]);
+    loadTemplates();
+    loadOffers();
+  }, [loadContacts, loadSequences, loadAnalytics, loadActivity, loadTemplates, loadOffers]);
 
   // Session check on mount, plus handling the redirect back from Google OAuth
   // (?gmail_connected=1|0) without leaving it sitting in the address bar.
@@ -938,6 +2150,10 @@ export default function App() {
     if (authState === "authed") refreshAll();
   }, [authState, refreshAll]);
 
+  useEffect(() => {
+    if (authState === "authed" && user?.isAdmin) loadAdminUsers();
+  }, [authState, user, loadAdminUsers]);
+
   async function handleLogout() {
     try {
       await api.post("/auth/logout");
@@ -952,6 +2168,9 @@ export default function App() {
     setOverview(null);
     setTimeline([]);
     setActivity([]);
+    setTemplates([]);
+    setAdminUsers([]);
+    setOffers([]);
   }
 
   async function handleCreateContact(data) {
@@ -965,6 +2184,60 @@ export default function App() {
     return result;
   }
 
+  async function handleLoadContactDetail(id) {
+    return api.get(`/contacts/${id}`);
+  }
+
+  async function handleAddContactNote(contactId, body) {
+    await api.post(`/contacts/${contactId}/notes`, { body });
+  }
+
+  async function handleDeleteContactNote(contactId, noteId) {
+    await api.del(`/contacts/${contactId}/notes/${noteId}`);
+  }
+
+  async function handleSetFollowUp(contactId, date) {
+    await api.patch(`/contacts/${contactId}`, { nextFollowUpAt: date });
+    await loadContacts();
+  }
+
+  async function handleBulkUpdateContacts(ids, data, addTag) {
+    await api.post("/contacts/bulk-update", { ids, data, addTag });
+    await loadContacts();
+  }
+
+  async function handleBulkDeleteContacts(ids) {
+    await api.post("/contacts/bulk-delete", { ids });
+    await loadContacts();
+  }
+
+  async function handleExportContacts() {
+    const blob = await api.downloadBlob("/contacts/export");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "contacts.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleCreateOffer(data) {
+    await api.post("/offers", data);
+    await loadOffers();
+  }
+
+  async function handleChangeOfferStatus(id, status) {
+    await api.patch(`/offers/${id}`, { status });
+    await loadOffers();
+  }
+
+  async function handleDeleteOffer(id) {
+    await api.del(`/offers/${id}`);
+    await loadOffers();
+  }
+
   async function handleEnroll(contactIds, sequenceId) {
     await api.post(`/sequences/${sequenceId}/enroll`, { contactIds });
     await Promise.all([loadContacts(), loadSequences()]);
@@ -973,6 +2246,53 @@ export default function App() {
   async function handleCreateSequence(data) {
     await api.post("/sequences", data);
     await loadSequences();
+  }
+
+  async function handleAddStep(sequenceId, payload) {
+    await api.post(`/sequences/${sequenceId}/steps`, payload);
+    await loadSequences();
+  }
+
+  async function handleDeleteStep(sequenceId, stepId) {
+    await api.del(`/sequences/${sequenceId}/steps/${stepId}`);
+    await loadSequences();
+  }
+
+  async function handleReorderStep(sequenceId, stepIds) {
+    await api.post(`/sequences/${sequenceId}/steps/reorder`, { stepIds });
+    await loadSequences();
+  }
+
+  async function handleCreateTemplate(data) {
+    await api.post("/templates", data);
+    await loadTemplates();
+  }
+
+  async function handleUpdateTemplate(id, data) {
+    await api.patch(`/templates/${id}`, data);
+    await loadTemplates();
+  }
+
+  async function handleDeleteTemplate(id) {
+    await api.del(`/templates/${id}`);
+    await loadTemplates();
+  }
+
+  async function handleApproveUser(id) {
+    await api.post(`/admin/users/${id}/approve`);
+    await loadAdminUsers();
+  }
+  async function handleRevokeUser(id) {
+    await api.post(`/admin/users/${id}/revoke`);
+    await loadAdminUsers();
+  }
+  async function handlePromoteUser(id) {
+    await api.post(`/admin/users/${id}/promote`);
+    await loadAdminUsers();
+  }
+  async function handleDemoteUser(id) {
+    await api.post(`/admin/users/${id}/demote`);
+    await loadAdminUsers();
   }
 
   if (authState === "loading") {
@@ -998,17 +2318,16 @@ export default function App() {
     inbox: activity.length,
     contacts: contacts.length,
     sequences: sequences.filter((s) => s.active).length,
+    templates: templates.length,
+    offers: offers.length,
   };
 
   return (
     <div className="flex h-screen w-full" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
       {/* Sidebar */}
       <div className="w-60 border-r flex flex-col shrink-0" style={{ borderColor: C.line, backgroundColor: "#FFFFFF" }}>
-        <div className="px-5 py-5 flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: C.navy }}>
-            <Layers size={16} className="text-white" />
-          </div>
-          <span className="text-lg font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Loop</span>
+        <div className="px-5 py-5">
+          <Brand size={32} textSize="text-base" />
         </div>
 
         <div className="px-3">
@@ -1025,7 +2344,12 @@ export default function App() {
           <NavItem icon={Mail} label="Απεσταλμένα" active={view === "inbox"} onClick={() => setView("inbox")} count={counts.inbox} />
           <NavItem icon={Users} label="Επαφές" active={view === "contacts"} onClick={() => setView("contacts")} count={counts.contacts} />
           <NavItem icon={Layers} label="Sequences" active={view === "sequences"} onClick={() => setView("sequences")} count={counts.sequences} />
+          <NavItem icon={FileText} label="Templates" active={view === "templates"} onClick={() => setView("templates")} count={counts.templates} />
+          <NavItem icon={Handshake} label="Offers" active={view === "offers"} onClick={() => setView("offers")} count={counts.offers} />
           <NavItem icon={BarChart3} label="Analytics" active={view === "analytics"} onClick={() => setView("analytics")} />
+          {user?.isAdmin && (
+            <NavItem icon={ShieldCheck} label="Admin" active={view === "admin"} onClick={() => setView("admin")} />
+          )}
         </div>
 
         <div className="px-5 py-4 border-t flex items-center gap-2.5" style={{ borderColor: C.line }}>
@@ -1065,13 +2389,66 @@ export default function App() {
               onUpload={handleUploadCsv}
               onCreate={handleCreateContact}
               onEnroll={handleEnroll}
+              onLoadDetail={handleLoadContactDetail}
+              onAddNote={handleAddContactNote}
+              onDeleteNote={handleDeleteContactNote}
+              onSetFollowUp={handleSetFollowUp}
+              onBulkUpdate={handleBulkUpdateContacts}
+              onBulkDelete={handleBulkDeleteContacts}
+              onExport={handleExportContacts}
             />
           )}
           {view === "sequences" && (
-            <SequencesView sequences={sequences} loading={sequencesLoading} error={sequencesError} onReload={loadSequences} onCreate={handleCreateSequence} />
+            <SequencesView
+              sequences={sequences}
+              loading={sequencesLoading}
+              error={sequencesError}
+              onReload={loadSequences}
+              onCreate={handleCreateSequence}
+              templates={templates}
+              onAddStep={handleAddStep}
+              onDeleteStep={handleDeleteStep}
+              onReorderStep={handleReorderStep}
+            />
+          )}
+          {view === "templates" && (
+            <TemplatesView
+              templates={templates}
+              loading={templatesLoading}
+              error={templatesError}
+              onReload={loadTemplates}
+              onCreate={handleCreateTemplate}
+              onUpdate={handleUpdateTemplate}
+              onDelete={handleDeleteTemplate}
+            />
+          )}
+          {view === "offers" && (
+            <OffersView
+              offers={offers}
+              contacts={contacts}
+              loading={offersLoading}
+              error={offersError}
+              onReload={loadOffers}
+              onCreate={handleCreateOffer}
+              onChangeStatus={handleChangeOfferStatus}
+              onDelete={handleDeleteOffer}
+            />
           )}
           {view === "analytics" && (
             <AnalyticsView overview={overview} timeline={timeline} loading={analyticsLoading} error={analyticsError} onReload={loadAnalytics} />
+          )}
+          {view === "admin" && user?.isAdmin && (
+            <AdminView
+              users={adminUsers}
+              loading={adminLoading}
+              error={adminError}
+              onReload={loadAdminUsers}
+              onApprove={handleApproveUser}
+              onRevoke={handleRevokeUser}
+              onPromote={handlePromoteUser}
+              onDemote={handleDemoteUser}
+              currentUserId={user.id}
+            />
           )}
         </div>
       </div>

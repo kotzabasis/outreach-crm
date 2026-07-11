@@ -23,22 +23,29 @@ const upload = multer({
 const contactSchema = z.object({
   name: z.string().min(1).max(200),
   email: z.string().email(),
+  phone: z.string().max(50).optional().default(""),
   company: z.string().max(200).optional().default(""),
+  category: z.string().max(100).optional().default(""),
   tags: z.string().max(300).optional().default(""),
 });
 
 router.get("/", async (req, res) => {
-  const { status, q } = req.query;
+  const { status, q, category, tag } = req.query;
   const contacts = await prisma.contact.findMany({
     where: {
       userId: req.user.id,
       ...(status && status !== "all" ? { status: String(status) } : {}),
+      ...(category && category !== "all" ? { category: String(category) } : {}),
+      // tags is a comma-separated string column — "contains" is good enough
+      // filtering at this scale without a separate join table.
+      ...(tag && tag !== "all" ? { tags: { contains: String(tag) } } : {}),
       ...(q
         ? {
             OR: [
               { name: { contains: String(q) } },
               { email: { contains: String(q) } },
               { company: { contains: String(q) } },
+              { phone: { contains: String(q) } },
             ],
           }
         : {}),
@@ -62,6 +69,59 @@ router.get("/", async (req, res) => {
   }));
 
   res.json(withEnrollment);
+});
+
+// Literal GET paths must be registered before GET "/:id" so Express doesn't
+// swallow them as an :id lookup.
+router.get("/export", async (req, res) => {
+  const contacts = await prisma.contact.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: "desc" } });
+  const header = ["name", "email", "phone", "company", "category", "tags", "status"];
+  const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const rows = contacts.map((c) => header.map((h) => escape(c[h])).join(","));
+  const csv = [header.join(","), ...rows].join("\n");
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="contacts.csv"');
+  res.send(csv);
+});
+
+// Full detail for the contact drawer: send timeline across all sequences,
+// plus offers and notes. Kept separate from the list endpoint (GET "/")
+// which stays lightweight for the table view.
+router.get("/:id", async (req, res) => {
+  const contact = await prisma.contact.findFirst({
+    where: { id: req.params.id, userId: req.user.id },
+    include: {
+      enrollments: {
+        include: {
+          sequence: { select: { name: true } },
+          emailLogs: {
+            include: { step: { select: { subject: true } }, events: { select: { type: true, occurredAt: true } } },
+            orderBy: { sentAt: "desc" },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+      offers: { orderBy: { updatedAt: "desc" } },
+      notes: { orderBy: { createdAt: "desc" } },
+    },
+  });
+  if (!contact) return res.status(404).json({ error: "not_found" });
+
+  const timeline = contact.enrollments
+    .flatMap((enr) =>
+      enr.emailLogs.map((log) => ({
+        id: log.id,
+        sequenceName: enr.sequence.name,
+        subject: log.step.subject,
+        sentAt: log.sentAt,
+        opened: log.events.some((e) => e.type === "open"),
+        clicked: log.events.some((e) => e.type === "click"),
+      }))
+    )
+    .sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt));
+
+  const { enrollments, ...rest } = contact;
+  res.json({ ...rest, timeline });
 });
 
 router.post("/", async (req, res) => {
@@ -94,7 +154,9 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     const candidate = {
       name: row.name || row.Name || row.email || row.Email || "",
       email: (row.email || row.Email || "").trim().toLowerCase(),
+      phone: row.phone || row.Phone || row.telephone || row.Telephone || "",
       company: row.company || row.Company || "",
+      category: row.category || row.Category || "",
       tags: row.tags || row.Tags || "",
     };
     const parsed = contactSchema.safeParse(candidate);
@@ -118,13 +180,55 @@ router.post("/upload", upload.single("file"), async (req, res) => {
   res.json(results);
 });
 
+// Bulk category/status update (+ optionally append one tag) across many
+// contacts at once — e.g. selecting 40 rows and setting them all to
+// category "Πελάτης". Tags are additive on purpose: bulk "replace all tags"
+// would be too easy to fat-finger into wiping existing tags.
+router.post("/bulk-update", async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+  if (ids.length === 0) return res.status(400).json({ error: "no_ids_provided" });
+  if (ids.length > 1000) return res.status(400).json({ error: "max_1000_ids" });
+
+  const allowed = ["category", "status", "unsubscribed"];
+  const patch = {};
+  const body = req.body.data || {};
+  for (const key of allowed) if (key in body) patch[key] = body[key];
+  const addTag = typeof req.body.addTag === "string" ? req.body.addTag.trim() : "";
+
+  const contacts = await prisma.contact.findMany({ where: { id: { in: ids }, userId: req.user.id } });
+
+  const updates = contacts.map((c) => {
+    const data = { ...patch };
+    if (addTag) {
+      const existingTags = (c.tags || "").split(",").map((t) => t.trim()).filter(Boolean);
+      if (!existingTags.includes(addTag)) data.tags = [...existingTags, addTag].join(", ");
+    }
+    return prisma.contact.update({ where: { id: c.id }, data });
+  });
+
+  await prisma.$transaction(updates);
+  res.json({ updated: updates.length });
+});
+
+router.post("/bulk-delete", async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+  if (ids.length === 0) return res.status(400).json({ error: "no_ids_provided" });
+  const result = await prisma.contact.deleteMany({ where: { id: { in: ids }, userId: req.user.id } });
+  res.json({ deleted: result.count });
+});
+
 router.patch("/:id", async (req, res) => {
   const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
   if (!contact) return res.status(404).json({ error: "not_found" });
 
-  const allowed = ["name", "company", "tags", "status", "unsubscribed"];
+  const allowed = ["name", "phone", "company", "category", "tags", "status", "unsubscribed"];
   const data = {};
   for (const key of allowed) if (key in req.body) data[key] = req.body[key];
+  // Manual follow-up reminder — independent of automatic sequence sends, so
+  // it needs its own Date conversion rather than being passed through raw.
+  if ("nextFollowUpAt" in req.body) {
+    data.nextFollowUpAt = req.body.nextFollowUpAt ? new Date(req.body.nextFollowUpAt) : null;
+  }
 
   const updated = await prisma.contact.update({ where: { id: contact.id }, data });
   res.json(updated);
@@ -134,6 +238,36 @@ router.delete("/:id", async (req, res) => {
   const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
   if (!contact) return res.status(404).json({ error: "not_found" });
   await prisma.contact.delete({ where: { id: contact.id } });
+  res.json({ ok: true });
+});
+
+// --- Notes (freeform CRM notes on a contact) ---
+router.get("/:id/notes", async (req, res) => {
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!contact) return res.status(404).json({ error: "not_found" });
+  const notes = await prisma.contactNote.findMany({ where: { contactId: contact.id }, orderBy: { createdAt: "desc" } });
+  res.json(notes);
+});
+
+router.post("/:id/notes", async (req, res) => {
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!contact) return res.status(404).json({ error: "not_found" });
+
+  const parsed = z.object({ body: z.string().min(1).max(5000) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const note = await prisma.contactNote.create({
+    data: { contactId: contact.id, userId: req.user.id, body: parsed.data.body },
+  });
+  res.status(201).json(note);
+});
+
+router.delete("/:id/notes/:noteId", async (req, res) => {
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!contact) return res.status(404).json({ error: "not_found" });
+  const note = await prisma.contactNote.findFirst({ where: { id: req.params.noteId, contactId: contact.id } });
+  if (!note) return res.status(404).json({ error: "not_found" });
+  await prisma.contactNote.delete({ where: { id: note.id } });
   res.json({ ok: true });
 });
 

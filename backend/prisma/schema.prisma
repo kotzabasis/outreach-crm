@@ -16,11 +16,19 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
+  // Access is invite/approval-gated, not open self-registration: new accounts
+  // start unapproved and can't log in until an admin approves them. The very
+  // first user ever created is auto-promoted to admin+approved (bootstrap),
+  // see auth.js register + server.js startup safety net.
+  isAdmin      Boolean  @default(false)
+  approved     Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   contacts             Contact[]
   sequences            Sequence[]
   templates            Template[]
+  offers               Offer[]
+  contactNotes         ContactNote[]
   gmailAccount         GmailAccount?
   passwordResetTokens  PasswordResetToken[]
 }
@@ -80,16 +88,59 @@ model Contact {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name           String
   email          String
+  phone          String?  @default("")
   company        String?
+  category       String?  @default("") // free-text bucket, e.g. Lead / Πελάτης / Συνεργάτης — used for filtering
   tags           String   @default("") // comma-separated; fine at this scale
   status         String   @default("new") // new | contacted | opened | replied | bounced | unsubscribed
   unsubscribed   Boolean  @default(false)
   lastActivityAt DateTime?
+  nextFollowUpAt DateTime? // manual reminder date, independent of automatic sequence sends
   createdAt      DateTime @default(now())
 
   enrollments Enrollment[]
+  offers      Offer[]
+  notes       ContactNote[]
 
   @@index([userId, email])
+  @@index([userId, category])
+  @@index([userId, nextFollowUpAt])
+}
+
+// A lightweight deal/pipeline tracker — separate from Sequence/EmailLog
+// because an offer's lifecycle (draft -> sent -> accepted/declined) is a
+// sales-side concern, not an email-send-side one, and a contact may have
+// several offers over time.
+model Offer {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  title     String
+  value     Float?
+  currency  String   @default("EUR")
+  status    String   @default("draft") // draft | sent | accepted | declined
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([contactId])
+}
+
+// Freeform CRM notes on a contact, for follow-up context that doesn't fit
+// any structured field.
+model ContactNote {
+  id        String   @id @default(uuid())
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([contactId])
 }
 
 model Sequence {

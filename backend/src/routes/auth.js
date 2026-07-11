@@ -24,6 +24,8 @@ function publicUser(user, gmailAccount) {
     id: user.id,
     email: user.email,
     name: user.name,
+    isAdmin: user.isAdmin,
+    approved: user.approved,
     gmail: gmailAccount ? { email: gmailAccount.email, connectedAt: gmailAccount.createdAt } : null,
   };
 }
@@ -40,10 +42,24 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ error: "invalid_email_or_password" });
   }
 
+  // Access is invite/approval-gated: nobody can self-serve their way in.
+  // Exception: the very first account ever created bootstraps itself as
+  // admin+approved, so there's always someone able to approve everyone else.
+  const isFirstUser = (await prisma.user.count()) === 0;
+
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
-    data: { email: email.toLowerCase(), passwordHash, name },
+    data: { email: email.toLowerCase(), passwordHash, name, isAdmin: isFirstUser, approved: isFirstUser },
   });
+
+  if (!isFirstUser) {
+    // Account created but not approved yet — no session, can't log in until
+    // an admin approves them from the Admin view.
+    return res.status(201).json({
+      pending: true,
+      message: "Ο λογαριασμός δημιουργήθηκε. Περιμένει έγκριση από διαχειριστή πριν μπορέσεις να συνδεθείς.",
+    });
+  }
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
@@ -67,6 +83,10 @@ router.post("/login", async (req, res) => {
 
   if (!user || !valid) {
     return res.status(401).json({ error: "invalid_email_or_password" });
+  }
+
+  if (!user.approved) {
+    return res.status(403).json({ error: "account_pending_approval" });
   }
 
   const gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: user.id } });

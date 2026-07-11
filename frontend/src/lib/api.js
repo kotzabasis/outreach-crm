@@ -61,4 +61,21 @@ export const api = {
     form.append("file", file);
     return request(path, { method: "POST", body: form, isForm: true });
   },
+  // For file downloads (CSV export) — needs the session cookie like every
+  // other call, but returns a Blob instead of parsed JSON.
+  async downloadBlob(path) {
+    let res;
+    try {
+      res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+    } catch {
+      throw new ApiError(0, { error: "Δεν ήταν δυνατή η επικοινωνία με τον server. Δοκίμασε ξανά σε λίγο." });
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      let data = null;
+      try { data = JSON.parse(text); } catch { data = text; }
+      throw new ApiError(res.status, data);
+    }
+    return res.blob();
+  },
 };

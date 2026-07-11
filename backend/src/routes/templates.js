@@ -17,7 +17,18 @@ router.get("/", async (req, res) => {
     where: { userId: req.user.id },
     orderBy: { updatedAt: "desc" },
   });
-  res.json(templates);
+
+  // sourceTemplateId is an informational string field (not a Prisma relation,
+  // by design — see schema.prisma), so usage is counted with a groupBy rather
+  // than an include. Lets the UI show "used in N sequence steps" per template.
+  const counts = await prisma.sequenceStep.groupBy({
+    by: ["sourceTemplateId"],
+    where: { sourceTemplateId: { in: templates.map((t) => t.id) } },
+    _count: { _all: true },
+  });
+  const countById = Object.fromEntries(counts.map((c) => [c.sourceTemplateId, c._count._all]));
+
+  res.json(templates.map((t) => ({ ...t, usageCount: countById[t.id] || 0 })));
 });
 
 router.get("/:id", async (req, res) => {
