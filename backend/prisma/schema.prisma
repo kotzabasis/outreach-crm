@@ -237,5 +237,15 @@ model TrackingEvent {
   emailLog    EmailLog @relation(fields: [emailLogId], references: [id], onDelete: Cascade)
   type        String   // open | click
   url         String?  // only set for click events
+  userAgent   String?  // raw UA of whatever requested the pixel/link — kept for audits
+  // Pixel opens are notoriously unreliable: Gmail/Google auto-fetch tracking
+  // pixels on delivery via a well-documented bot User-Agent (see
+  // isLikelyBotOpen in routes/tracking.js), and viewing your own sent copy in
+  // the Sent folder fires the exact same pixel as a genuine recipient open.
+  // isBot flags opens we're confident aren't a real human looking at the
+  // email, so they're excluded from "opened" everywhere (contact status,
+  // analytics, sequence "wait for open" conditions) instead of inflating
+  // open rates.
+  isBot       Boolean  @default(false)
   occurredAt  DateTime @default(now())
 }

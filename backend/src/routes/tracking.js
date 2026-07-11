@@ -21,6 +21,29 @@ const TRANSPARENT_GIF = Buffer.from(
   "base64"
 );
 
+// Pixel opens are notoriously unreliable, not just noisy: since ~2018 Gmail
+// itself fetches every tracking pixel the instant a message is delivered
+// (separate from the Google Image Proxy, which only fires on a genuine human
+// open) via a well-documented, distinctive signature — a User-Agent string
+// that impersonates Chrome, Safari AND the long-dead EdgeHTML 12 all at
+// once, which no real browser has ever done. On top of that, Gmail sends
+// leave an identical copy in the sender's own Sent folder (see
+// gmailClient.js) — the *sender* opening that copy fires this exact same
+// pixel, indistinguishable from the recipient opening it. Neither case is a
+// real recipient looking at the email, so both get filtered out instead of
+// silently inflating "opened".
+const BOT_UA_SIGNATURE = /Chrome\/42\.0\.2311\.135.*Safari.*Edge\/12\.246/i;
+// Belt-and-suspenders for the fast-self-open case (different/no UA): no
+// human notices an email and opens it within a couple seconds of it landing
+// — that's either the bot above or the sender glancing at their own Sent
+// copy right after hitting send.
+const FAST_OPEN_WINDOW_MS = 10 * 1000;
+
+function isLikelyBotOpen(userAgent, sentAt) {
+  if (BOT_UA_SIGNATURE.test(userAgent || "")) return true;
+  return Date.now() - new Date(sentAt).getTime() < FAST_OPEN_WINDOW_MS;
+}
+
 router.get("/open/:trackingId.png", async (req, res) => {
   res.set("Content-Type", "image/gif");
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
@@ -28,14 +51,19 @@ router.get("/open/:trackingId.png", async (req, res) => {
   const { trackingId } = req.params;
   const emailLog = await prisma.emailLog.findUnique({ where: { trackingId } }).catch(() => null);
   if (emailLog) {
-    await prisma.trackingEvent.create({ data: { emailLogId: emailLog.id, type: "open" } }).catch(() => {});
+    const userAgent = req.headers["user-agent"] || "";
+    const isBot = isLikelyBotOpen(userAgent, emailLog.sentAt);
+    await prisma.trackingEvent.create({ data: { emailLogId: emailLog.id, type: "open", userAgent, isBot } }).catch(() => {});
     // contactId is denormalized directly onto EmailLog (see schema.prisma) —
     // works for both sequence and manual sends. Going through
     // enrollment.contactId here would throw for manual sends, which have no
-    // enrollmentId.
-    await prisma.contact
-      .update({ where: { id: emailLog.contactId }, data: { status: "opened", lastActivityAt: new Date() } })
-      .catch(() => {});
+    // enrollmentId. Only a confirmed-real open moves the contact's status —
+    // a bot/self-open shouldn't make a contact look engaged when they aren't.
+    if (!isBot) {
+      await prisma.contact
+        .update({ where: { id: emailLog.contactId }, data: { status: "opened", lastActivityAt: new Date() } })
+        .catch(() => {});
+    }
   }
   // Always return the pixel, even for an unknown id — never reveal whether a
   // tracking id is valid to whoever's requesting it.

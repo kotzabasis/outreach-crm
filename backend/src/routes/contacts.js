@@ -93,15 +93,17 @@ router.get("/:id", async (req, res) => {
   const contact = await prisma.contact.findFirst({
     where: { id: req.params.id, userId: req.user.id },
     include: {
-      enrollments: {
+      // Queried directly off the contact (EmailLog.contactId is denormalized
+      // — see schema.prisma) instead of through enrollments, so a manual,
+      // one-off send (no enrollment at all) shows up in the history too.
+      // The old enrollment-only query silently hid every manual send from a
+      // contact's timeline.
+      emailLogs: {
         include: {
-          sequence: { select: { name: true } },
-          emailLogs: {
-            include: { step: { select: { subject: true } }, events: { select: { type: true, occurredAt: true } } },
-            orderBy: { sentAt: "desc" },
-          },
+          enrollment: { select: { sequence: { select: { name: true } } } },
+          events: { orderBy: { occurredAt: "asc" } },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { sentAt: "desc" },
       },
       offers: { orderBy: { updatedAt: "desc" } },
       notes: { orderBy: { createdAt: "desc" } },
@@ -109,20 +111,22 @@ router.get("/:id", async (req, res) => {
   });
   if (!contact) return res.status(404).json({ error: "not_found" });
 
-  const timeline = contact.enrollments
-    .flatMap((enr) =>
-      enr.emailLogs.map((log) => ({
-        id: log.id,
-        sequenceName: enr.sequence.name,
-        subject: log.step.subject,
-        sentAt: log.sentAt,
-        opened: log.events.some((e) => e.type === "open"),
-        clicked: log.events.some((e) => e.type === "click"),
-      }))
-    )
-    .sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt));
+  // One row per actual send, with the full tracking-event trace attached
+  // (not just collapsed opened/clicked booleans) — including bot-filtered
+  // opens, flagged as such, so it's clear when something happened, and why
+  // an open might not count toward "opened".
+  const timeline = contact.emailLogs.map((log) => ({
+    id: log.id,
+    source: log.source,
+    sequenceName: log.enrollment?.sequence?.name || null,
+    subject: log.subject,
+    sentAt: log.sentAt,
+    opened: log.events.some((e) => e.type === "open" && !e.isBot),
+    clicked: log.events.some((e) => e.type === "click"),
+    events: log.events.map((e) => ({ type: e.type, occurredAt: e.occurredAt, isBot: e.isBot, url: e.url })),
+  }));
 
-  const { enrollments, ...rest } = contact;
+  const { emailLogs, ...rest } = contact;
   res.json({ ...rest, timeline });
 });
 

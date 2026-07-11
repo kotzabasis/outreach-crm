@@ -18,23 +18,37 @@ router.get("/overview", async (req, res) => {
   const perSequence = sequences.map((seq) => {
     const logs = seq.enrollments.flatMap((e) => e.emailLogs);
     const sent = logs.length;
-    const opened = logs.filter((l) => l.events.some((e) => e.type === "open")).length;
+    const opened = logs.filter((l) => l.events.some((e) => e.type === "open" && !e.isBot)).length;
     const clicked = logs.filter((l) => l.events.some((e) => e.type === "click")).length;
     const replied = seq.enrollments.filter((e) => e.status === "replied").length;
     return { id: seq.id, name: seq.name, sent, opened, clicked, replied };
   });
 
-  const totals = perSequence.reduce(
-    (acc, s) => ({
-      sent: acc.sent + s.sent,
-      opened: acc.opened + s.opened,
-      clicked: acc.clicked + s.clicked,
-      replied: acc.replied + s.replied,
-    }),
-    { sent: 0, opened: 0, clicked: 0, replied: 0 }
-  );
+  // Totals used to be just the sum of perSequence, which silently dropped
+  // every manual/one-off send (ComposeModal) — those don't belong to any
+  // enrollment, so they never appeared in a sequence's emailLogs at all.
+  // Anyone testing or doing outreach manually would see a near-empty top-line
+  // Analytics board even though sends were actually happening. Compute
+  // totals from every EmailLog for this user instead — sequence AND manual
+  // alike, same denormalized-EmailLog pattern used everywhere else in the app.
+  const allLogs = await prisma.emailLog.findMany({
+    where: { userId: req.user.id },
+    include: { events: true },
+  });
+  const sent = allLogs.length;
+  const opened = allLogs.filter((l) => l.events.some((e) => e.type === "open" && !e.isBot)).length;
+  const clicked = allLogs.filter((l) => l.events.some((e) => e.type === "click")).length;
+  // "Replied" has no per-email flag (see mark-replied route) — it's tracked
+  // on the contact. Count contacts we've actually emailed at least once who
+  // are now marked replied, so the rate still means "of the people I
+  // contacted, how many replied" regardless of whether that reply came from
+  // a sequence step or a manual email.
+  const emailedContactIds = [...new Set(allLogs.map((l) => l.contactId))];
+  const replied = await prisma.contact.count({
+    where: { userId: req.user.id, status: "replied", id: { in: emailedContactIds } },
+  });
 
-  res.json({ totals, perSequence });
+  res.json({ totals: { sent, opened, clicked, replied }, perSequence });
 });
 
 // Recent sends — manual and sequence-driven alike — for the "Sent" / inbox
@@ -48,14 +62,14 @@ router.get("/activity", async (req, res) => {
     include: {
       contact: { select: { email: true, name: true } },
       enrollment: { select: { status: true, sequence: { select: { name: true } } } },
-      events: { select: { type: true } },
+      events: { select: { type: true, isBot: true, occurredAt: true, url: true }, orderBy: { occurredAt: "asc" } },
     },
     orderBy: { sentAt: "desc" },
     take: limit,
   });
 
   const activity = logs.map((log) => {
-    const opened = log.events.some((e) => e.type === "open");
+    const opened = log.events.some((e) => e.type === "open" && !e.isBot);
     const clicked = log.events.some((e) => e.type === "click");
     let status = "contacted";
     if (log.enrollment?.status === "bounced") status = "bounced";
@@ -71,6 +85,12 @@ router.get("/activity", async (req, res) => {
       status,
       source: log.source,
       sequenceName: log.enrollment?.sequence?.name || null,
+      // Full per-send trace (not just the collapsed opened/clicked booleans
+      // above) — including bot-filtered opens, flagged as such, so it's
+      // visible *why* a given open didn't count instead of it just silently
+      // not showing up. This is what backs the expandable trace in the
+      // Inbox row on the frontend.
+      events: log.events.map((e) => ({ type: e.type, occurredAt: e.occurredAt, isBot: e.isBot, url: e.url })),
     };
   });
 
@@ -83,14 +103,14 @@ router.get("/timeline", async (req, res) => {
 
   const events = await prisma.trackingEvent.findMany({
     where: { occurredAt: { gte: since }, emailLog: { userId: req.user.id } },
-    select: { type: true, occurredAt: true },
+    select: { type: true, occurredAt: true, isBot: true },
   });
 
   const byDay = {};
   for (const e of events) {
     const day = e.occurredAt.toISOString().slice(0, 10);
     byDay[day] = byDay[day] || { day, opens: 0, clicks: 0 };
-    if (e.type === "open") byDay[day].opens++;
+    if (e.type === "open" && !e.isBot) byDay[day].opens++;
     if (e.type === "click") byDay[day].clicks++;
   }
 

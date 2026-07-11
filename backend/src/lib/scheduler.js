@@ -56,7 +56,10 @@ async function stepConditionsMet(step, enrollment, contact) {
       orderBy: { sentAt: "desc" },
       include: { events: true },
     });
-    const opened = prevLog ? prevLog.events.some((e) => e.type === "open") : false;
+    // Bot/self opens (see isLikelyBotOpen in routes/tracking.js) don't count
+    // — a "wait until opened" step shouldn't fire just because Gmail's
+    // prefetch bot hit the pixel on delivery.
+    const opened = prevLog ? prevLog.events.some((e) => e.type === "open" && !e.isBot) : false;
     const clicked = prevLog ? prevLog.events.some((e) => e.type === "click") : false;
     if (conditions.requireEvent === "opened" && !opened) return false;
     if (conditions.requireEvent === "clicked" && !clicked) return false;

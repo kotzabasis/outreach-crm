@@ -116,6 +116,52 @@ function fmtDate(value) {
   return d.toLocaleDateString("el-GR", { day: "2-digit", month: "short" });
 }
 
+// Always shows date + time — used in the per-send event trace, where fmtDate's
+// "just the time if it's today" shorthand would be ambiguous across a list of
+// events that might span several days.
+function fmtDateTime(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.toLocaleDateString("el-GR", { day: "2-digit", month: "short" })}, ${d.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+// Renders the chronological trace for one sent email: when it was sent, when
+// (if ever) it was genuinely opened/clicked, and — transparently — any open
+// that got filtered out as a bot/self-view (see isLikelyBotOpen in
+// tracking.js) instead of just silently not counting it. Shared between the
+// Inbox row expansion and the contact detail drawer's timeline.
+function EventTrace({ sentAt, events = [] }) {
+  const items = [
+    { key: "sent", label: "Στάλθηκε", at: sentAt, kind: "sent" },
+    ...events.map((e, i) => ({
+      key: `${e.type}-${i}`,
+      label:
+        e.type === "open"
+          ? e.isBot
+            ? "Άνοιγμα αγνοήθηκε (αυτόματο/bot, όχι πραγματικό)"
+            : "Άνοιξε"
+          : `Κλικ σε σύνδεσμο${e.url ? `: ${e.url}` : ""}`,
+      at: e.occurredAt,
+      kind: e.type === "open" ? (e.isBot ? "bot" : "open") : "click",
+    })),
+  ];
+  return (
+    <div className="space-y-1.5">
+      {items.map((it) => (
+        <div key={it.key} className="flex items-center gap-2 text-[11px]" style={{ color: it.kind === "bot" ? C.slate : C.ink, opacity: it.kind === "bot" ? 0.75 : 1 }}>
+          {it.kind === "sent" && <Send size={11} style={{ color: C.slate }} className="shrink-0" />}
+          {it.kind === "open" && <Eye size={11} style={{ color: C.sky }} className="shrink-0" />}
+          {it.kind === "bot" && <Info size={11} style={{ color: C.slate }} className="shrink-0" />}
+          {it.kind === "click" && <LinkIcon size={11} style={{ color: C.amber }} className="shrink-0" />}
+          <span className="truncate">{it.label}</span>
+          <span className="ml-auto shrink-0 pl-2" style={{ color: C.slate }}>{fmtDateTime(it.at)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---------- Small building blocks ----------
 function Pill({ status }) {
   const meta = statusMeta[status] || statusMeta.new;
@@ -718,6 +764,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [followUp, setFollowUp] = useState("");
   const [markingReplied, setMarkingReplied] = useState(false);
   const [togglingUnsub, setTogglingUnsub] = useState(false);
+  const [expandedLogId, setExpandedLogId] = useState(null);
 
   async function handleMarkReplied() {
     setMarkingReplied(true);
@@ -878,18 +925,35 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                 <p className="text-xs" style={{ color: C.slate }}>Δεν έχει σταλεί κανένα email ακόμα.</p>
               ) : (
                 <div className="space-y-2">
-                  {detail.timeline.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{t.subject}</div>
-                        <div className="text-[11px]" style={{ color: C.slate }}>{t.sequenceName} · {fmtDate(t.sentAt)}</div>
+                  {detail.timeline.map((t) => {
+                    const open = expandedLogId === t.id;
+                    return (
+                      <div key={t.id} className="rounded-lg overflow-hidden" style={{ backgroundColor: C.pale }}>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedLogId(open ? null : t.id)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-left"
+                        >
+                          <div className="min-w-0 flex items-center gap-1.5">
+                            <ChevronRight size={12} style={{ color: C.slate, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} className="shrink-0" />
+                            <div className="min-w-0">
+                              <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{t.subject}</div>
+                              <div className="text-[11px]" style={{ color: C.slate }}>{t.sequenceName || "Χειροκίνητο"} · {fmtDate(t.sentAt)}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {t.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>Άνοιξε</span>}
+                            {t.clicked && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.amber}1A`, color: C.amber }}>Κλικ</span>}
+                          </div>
+                        </button>
+                        {open && (
+                          <div className="px-3 pb-2.5 pl-7">
+                            <EventTrace sentAt={t.sentAt} events={t.events} />
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {t.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>Άνοιξε</span>}
-                        {t.clicked && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.amber}1A`, color: C.amber }}>Κλικ</span>}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2352,7 +2416,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-            {tab === "email" ? "Απόδοση όλων των sequences" : "CRM reporting — pipeline & αποτελέσματα"}
+            {tab === "email" ? "Απόδοση όλων των αποστολών — sequences και χειροκίνητα emails" : "CRM reporting — pipeline & αποτελέσματα"}
           </p>
         </div>
         <div className="flex rounded-lg p-0.5" style={{ backgroundColor: C.pale }}>
@@ -2449,12 +2513,14 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
 }
 
 function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
+  const [expandedId, setExpandedId] = useState(null);
+
   return (
     <div className="h-full overflow-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Απεσταλμένα</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Emails που στάλθηκαν μέσω sequences</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Όλα τα emails που στάλθηκαν — sequences και χειροκίνητα. Πάτησε ένα για το trace.</p>
         </div>
         <button
           onClick={() => setComposeOpen(true)}
@@ -2474,21 +2540,38 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
             Δεν έχει σταλεί κανένα email ακόμα.
           </div>
         ) : (
-          activity.map((m) => (
-            <div key={m.id} className="flex items-center justify-between py-3.5 border-b" style={{ borderColor: C.line }}>
-              <div className="flex items-center gap-3 min-w-0">
-                <Mail size={16} style={{ color: C.slate }} />
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{m.subject}</div>
-                  <div className="text-xs truncate" style={{ color: C.slate }}>προς {m.toName || m.to}</div>
-                </div>
+          activity.map((m) => {
+            const isOpen = expandedId === m.id;
+            return (
+              <div key={m.id} className="border-b" style={{ borderColor: C.line }}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isOpen ? null : m.id)}
+                  className="w-full flex items-center justify-between py-3.5 text-left"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <ChevronRight size={14} style={{ color: C.slate, transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} className="shrink-0" />
+                    <Mail size={16} style={{ color: C.slate }} className="shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{m.subject}</div>
+                      <div className="text-xs truncate" style={{ color: C.slate }}>
+                        προς {m.toName || m.to}{m.sequenceName ? ` · ${m.sequenceName}` : " · χειροκίνητο"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 shrink-0">
+                    <Pill status={m.status} />
+                    <span className="text-xs" style={{ color: C.slate }}>{fmtDate(m.sentAt)}</span>
+                  </div>
+                </button>
+                {isOpen && (
+                  <div className="pl-9 pb-3.5 pr-3">
+                    <EventTrace sentAt={m.sentAt} events={m.events} />
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-4 shrink-0">
-                <Pill status={m.status} />
-                <span className="text-xs" style={{ color: C.slate }}>{fmtDate(m.sentAt)}</span>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
