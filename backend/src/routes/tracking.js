@@ -29,16 +29,12 @@ router.get("/open/:trackingId.png", async (req, res) => {
   const emailLog = await prisma.emailLog.findUnique({ where: { trackingId } }).catch(() => null);
   if (emailLog) {
     await prisma.trackingEvent.create({ data: { emailLogId: emailLog.id, type: "open" } }).catch(() => {});
+    // contactId is denormalized directly onto EmailLog (see schema.prisma) —
+    // works for both sequence and manual sends. Going through
+    // enrollment.contactId here would throw for manual sends, which have no
+    // enrollmentId.
     await prisma.contact
-      .findFirst({ where: { id: (await prisma.enrollment.findUnique({ where: { id: emailLog.enrollmentId } }))?.contactId } })
-      .then((contact) =>
-        contact
-          ? prisma.contact.update({
-              where: { id: contact.id },
-              data: { status: "opened", lastActivityAt: new Date() },
-            })
-          : null
-      )
+      .update({ where: { id: emailLog.contactId }, data: { status: "opened", lastActivityAt: new Date() } })
       .catch(() => {});
   }
   // Always return the pixel, even for an unknown id — never reveal whether a
@@ -63,15 +59,36 @@ router.get("/click/:trackingId", async (req, res) => {
     await prisma.trackingEvent
       .create({ data: { emailLogId: emailLog.id, type: "click", url: target.toString() } })
       .catch(() => {});
-    const enrollment = await prisma.enrollment.findUnique({ where: { id: emailLog.enrollmentId } });
-    if (enrollment) {
-      await prisma.contact
-        .update({ where: { id: enrollment.contactId }, data: { lastActivityAt: new Date() } })
-        .catch(() => {});
-    }
+    await prisma.contact
+      .update({ where: { id: emailLog.contactId }, data: { lastActivityAt: new Date() } })
+      .catch(() => {});
   }
 
   res.redirect(302, target.toString());
+});
+
+// Public, unauthenticated, hit directly from the link in the email footer
+// (see gmailClient.js injectTracking). Ties back to the specific send via
+// trackingId, then flips the contact's unsubscribed flag — the scheduler
+// already checks this before every sequence step, so no other bookkeeping
+// is needed here.
+router.get("/unsubscribe/:trackingId", async (req, res) => {
+  const { trackingId } = req.params;
+  const emailLog = await prisma.emailLog.findUnique({ where: { trackingId } }).catch(() => null);
+
+  if (emailLog) {
+    await prisma.contact.update({ where: { id: emailLog.contactId }, data: { unsubscribed: true } }).catch(() => {});
+  }
+
+  // Always show the same confirmation, whether or not the tracking id was
+  // valid — never reveal anything about the underlying data to the visitor.
+  res.set("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="el"><head><meta charset="utf-8"><title>Unsubscribed</title></head>
+<body style="font-family:sans-serif;max-width:480px;margin:80px auto;text-align:center;color:#10192B;">
+  <h2>Έγινε η απεγγραφή σου.</h2>
+  <p style="color:#64748B;">Δεν θα λαμβάνεις άλλα emails.</p>
+</body></html>`);
 });
 
 module.exports = router;

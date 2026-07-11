@@ -46,6 +46,8 @@ router.get("/", async (req, res) => {
               { email: { contains: String(q) } },
               { company: { contains: String(q) } },
               { phone: { contains: String(q) } },
+              { tags: { contains: String(q) } },
+              { category: { contains: String(q) } },
             ],
           }
         : {}),
@@ -239,6 +241,26 @@ router.delete("/:id", async (req, res) => {
   if (!contact) return res.status(404).json({ error: "not_found" });
   await prisma.contact.delete({ where: { id: contact.id } });
   res.json({ ok: true });
+});
+
+// We deliberately don't read the connected Gmail inbox (see gmailClient.js —
+// only gmail.send is requested), so replies can't be detected automatically.
+// This is the manual fallback: mark the contact as replied, and stop any
+// in-flight sequence for them so they don't keep getting follow-ups.
+router.post("/:id/mark-replied", async (req, res) => {
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!contact) return res.status(404).json({ error: "not_found" });
+
+  await prisma.enrollment.updateMany({
+    where: { contactId: contact.id, status: "active" },
+    data: { status: "replied" },
+  });
+
+  const updated = await prisma.contact.update({
+    where: { id: contact.id },
+    data: { status: "replied", lastActivityAt: new Date() },
+  });
+  res.json(updated);
 });
 
 // --- Notes (freeform CRM notes on a contact) ---

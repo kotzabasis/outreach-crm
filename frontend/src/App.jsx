@@ -7,7 +7,7 @@ import {
   PhoneCall, RefreshCw, Phone, FileText, Copy, ArrowUp, ArrowDown,
   ShieldCheck, UserCheck, UserX, Sparkles, Euro, StickyNote,
   CalendarClock, Download, Eye, Handshake, Bold, Italic, Underline,
-  List, ListOrdered, Link as LinkIcon, UserPlus
+  List, ListOrdered, Link as LinkIcon, UserPlus, Menu
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -162,6 +162,87 @@ function NavItem({ icon: Icon, label, active, onClick, count }) {
         <span className="text-xs font-semibold" style={{ color: active ? C.navy : C.slate }}>{count}</span>
       )}
     </button>
+  );
+}
+
+// Lives in the sidebar, but works from any view — debounced query against
+// GET /contacts?q=, jumps into the Contacts view and opens the picked
+// contact's detail drawer via App's pendingOpenContactId relay.
+function GlobalSearch({ onSelectContact }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    if (!query.trim()) {
+      setResults([]);
+      setOpen(false);
+      return;
+    }
+    setLoading(true);
+    let cancelled = false;
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const data = await api.get(`/contacts?q=${encodeURIComponent(query.trim())}`);
+        if (cancelled) return; // a newer query/clear already superseded this response
+        setResults(data.slice(0, 8));
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setOpen(true);
+        }
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
+  function handleSelect(contact) {
+    onSelectContact(contact.id);
+    setQuery("");
+    setResults([]);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative px-3 mb-3">
+      <div className="relative">
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: C.slate }} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Αναζήτηση επαφών…"
+          className="w-full rounded-lg pl-8 pr-3 py-2 text-xs border outline-none"
+          style={{ borderColor: C.line, color: C.ink, backgroundColor: C.pale }}
+        />
+      </div>
+      {open && (
+        <div className="absolute left-3 right-3 mt-1 rounded-lg border bg-white shadow-lg z-50 overflow-hidden max-h-64 overflow-y-auto" style={{ borderColor: C.line }}>
+          {loading ? (
+            <div className="px-3 py-2 text-xs" style={{ color: C.slate }}>Αναζήτηση…</div>
+          ) : results.length === 0 ? (
+            <div className="px-3 py-2 text-xs" style={{ color: C.slate }}>Καμία επαφή.</div>
+          ) : (
+            results.map((c) => (
+              <button key={c.id} type="button" onClick={() => handleSelect(c)}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex flex-col">
+                <span className="font-medium truncate" style={{ color: C.ink }}>{c.name || c.email}</span>
+                <span className="truncate" style={{ color: C.slate }}>{c.email}{c.company ? ` · ${c.company}` : ""}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -546,13 +627,24 @@ function NewContactModal({ onClose, onCreate }) {
   );
 }
 
-function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose }) {
+function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [followUp, setFollowUp] = useState("");
+  const [markingReplied, setMarkingReplied] = useState(false);
+
+  async function handleMarkReplied() {
+    setMarkingReplied(true);
+    try {
+      await onMarkReplied(contactId);
+      await load();
+    } finally {
+      setMarkingReplied(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -602,6 +694,12 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
         <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white" style={{ borderColor: C.line }}>
           <h3 className="text-base font-semibold" style={{ color: C.ink }}>Στοιχεία επαφής</h3>
           <div className="flex items-center gap-3">
+            <button onClick={handleMarkReplied} disabled={markingReplied}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border"
+              style={{ borderColor: C.line, color: C.mint, opacity: markingReplied ? 0.6 : 1 }}
+              title="Δεν διαβάζουμε το inbox σου — σημείωσε το χειροκίνητα όταν κάποιος απαντήσει, για να σταματήσει το sequence και να μετρήσει σωστά το reply rate.">
+              <Reply size={13} /> Mark ως απάντησε
+            </button>
             <button onClick={onCompose}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
               style={{ backgroundColor: C.sky }}>
@@ -730,7 +828,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   );
 }
 
-function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose }) {
+function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, openContactId, onOpenContactHandled }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -747,6 +845,16 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
   const [exporting, setExporting] = useState(false);
   const [detailContactId, setDetailContactId] = useState(null);
   const fileRef = useRef(null);
+
+  // Lets the global search box (in the sidebar) jump straight into a
+  // contact's detail drawer from any view, without lifting detailContactId
+  // itself up to App — App just hands us the id once and we take it from there.
+  useEffect(() => {
+    if (openContactId) {
+      setDetailContactId(openContactId);
+      onOpenContactHandled();
+    }
+  }, [openContactId, onOpenContactHandled]);
 
   const categories = useMemo(() => {
     const set = new Set(contacts.map((c) => (c.category || "").trim()).filter(Boolean));
@@ -874,16 +982,17 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           onDeleteNote={onDeleteNote}
           onSetFollowUp={onSetFollowUp}
           onCompose={() => { onCompose(detailContactId); setDetailContactId(null); }}
+          onMarkReplied={onMarkReplied}
         />
       )}
-      <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Επαφές</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
             {contacts.length} επαφές συνολικά{dueCount > 0 ? ` · ${dueCount} με εκκρεμή υπενθύμιση` : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleExport}
             disabled={exporting}
@@ -1017,6 +1126,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
         {loading ? (
           <Spinner label="Φόρτωση επαφών…" />
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left" style={{ color: C.slate }}>
@@ -1088,6 +1198,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
@@ -1135,7 +1246,7 @@ function TemplateModal({ initial, onClose, onSave }) {
           <h3 className="text-base font-semibold" style={{ color: C.ink }}>{initial ? "Επεξεργασία template" : "Νέο template"}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
-        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-5">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-3">
             <input required placeholder="Όνομα template" value={name} onChange={(e) => setName(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
@@ -1238,7 +1349,7 @@ function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate
           onSave={handleSave}
         />
       )}
-      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Templates</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>{templates.length} αποθηκευμένα templates</p>
@@ -1257,7 +1368,7 @@ function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate
             Δεν υπάρχουν templates ακόμα.
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {templates.map((t) => (
               <Card key={t.id} className="p-4">
                 <div className="flex items-start justify-between mb-2 gap-2">
@@ -1491,7 +1602,7 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
           onConfirm={handleConfirmReason}
         />
       )}
-      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Offers</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
@@ -1512,7 +1623,7 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
             Δεν υπάρχουν προσφορές ακόμα.
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {OFFER_STATUSES.map((col) => (
               <div key={col.key}>
                 <div className="flex items-center gap-2 mb-3">
@@ -1543,9 +1654,57 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
 }
 
 // ---------- Sequences ----------
-function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown, canMoveUp, canMoveDown, busy }) {
+function TestSendModal({ defaultEmail, onClose, onSend }) {
+  const [email, setEmail] = useState(defaultEmail || "");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(""); // "" | "sent" | error message
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setResult("");
+    try {
+      await onSend(email);
+      setResult("sent");
+    } catch (err) {
+      setResult(err instanceof ApiError ? err.message : "Η δοκιμαστική αποστολή απέτυχε.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-sm p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold" style={{ color: C.ink }}>Δοκιμαστική αποστολή</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="email για δοκιμή"
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          {result === "sent" ? (
+            <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.mint}14`, color: C.mint }}>Στάλθηκε! Έλεγξε το inbox σου.</p>
+          ) : result ? (
+            <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{result}</p>
+          ) : null}
+          <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Αποστολή δοκιμής
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown, canMoveUp, canMoveDown, busy, onTestSend, defaultTestEmail }) {
+  const [showTestSend, setShowTestSend] = useState(false);
   return (
     <div className="flex gap-4">
+      {showTestSend && (
+        <TestSendModal defaultEmail={defaultTestEmail} onClose={() => setShowTestSend(false)} onSend={onTestSend} />
+      )}
       <div className="flex flex-col items-center">
         <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white" style={{ backgroundColor: C.navy }}>
           {index + 1}
@@ -1559,6 +1718,9 @@ function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown,
             {step.delayDays === 0 ? "Άμεση αποστολή" : `${step.delayDays} ημέρες μετά`}
           </div>
           <div className="flex items-center gap-1">
+            <button onClick={() => setShowTestSend(true)} disabled={busy} className="rounded p-1" style={{ color: C.sky }} title="Δοκιμαστική αποστολή">
+              <Send size={13} />
+            </button>
             <button onClick={onMoveUp} disabled={!canMoveUp || busy} className="rounded p-1" style={{ opacity: canMoveUp ? 1 : 0.3, color: C.slate }} title="Μετακίνηση πάνω">
               <ArrowUp size={13} />
             </button>
@@ -1646,7 +1808,7 @@ function StepFields({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2 mt-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
         <select
           value={conditions.requireEvent || ""}
           onChange={(e) => setConditions({ ...conditions, requireEvent: e.target.value || null })}
@@ -1841,7 +2003,7 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
   );
 }
 
-function SequencesView({ sequences, loading, error, onReload, onCreate, templates, onAddStep, onDeleteStep, onReorderStep }) {
+function SequencesView({ sequences, loading, error, onReload, onCreate, templates, onAddStep, onDeleteStep, onReorderStep, onTestSend, userEmail }) {
   const [activeId, setActiveId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [showAddStep, setShowAddStep] = useState(false);
@@ -1926,7 +2088,7 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
         <ErrorNote message={error} onRetry={onReload} />
         {active ? (
           <>
-            <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
               <div>
                 <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{active.name}</h1>
                 <p className="text-sm mt-0.5" style={{ color: C.slate }}>
@@ -1955,6 +2117,8 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
                   onMoveUp={() => handleMove(step.id, "up")}
                   onMoveDown={() => handleMove(step.id, "down")}
                   onDelete={() => handleDeleteStep(step.id)}
+                  onTestSend={(testEmail) => onTestSend(active.id, step.id, testEmail)}
+                  defaultTestEmail={userEmail}
                 />
               ))}
             </div>
@@ -1993,14 +2157,14 @@ function CrmReportingSection({ crm }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-4">
         <StatCard label="Επικοινωνήθηκαν" value={crm.contactsContacted} sub={`από ${crm.contactsTotal} επαφές`} color={C.sky} />
         <StatCard label="Προσφορές" value={crm.offersTotal} sub="σύνολο" color={C.navy} />
         <StatCard label="Win rate" value={crm.winRate == null ? "—" : `${Math.round(crm.winRate * 100)}%`} sub="αποδεκτές / αποφασισμένες" color={C.mint} />
         <StatCard label="Αξία σε εξέλιξη" value={fmtMoney((crm.valueByStatus?.sent || 0) + (crm.valueByStatus?.draft || 0))} sub="draft + sent" color={C.amber} />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-5">
           <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Pipeline προσφορών</div>
           <ResponsiveContainer width="100%" height={200}>
@@ -2059,7 +2223,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
 
   return (
     <div className="h-full overflow-auto">
-      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
@@ -2085,14 +2249,14 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
           <CrmReportingSection crm={crmOverview} />
         ) : (
           <>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <StatCard label="Open rate" value={pct(totals.opened, totals.sent)} sub={`${totals.sent} αποστολές`} color={C.mint} />
               <StatCard label="Click rate" value={pct(totals.clicked, totals.sent)} sub="σε σχέση με αποστολές" color={C.mint} />
               <StatCard label="Reply rate" value={pct(totals.replied, totals.sent)} sub="σε σχέση με αποστολές" color={C.coral} />
               <StatCard label="Sequences" value={overview?.perSequence?.length ?? 0} sub="ενεργά + ανενεργά" color={C.slate} />
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="p-5">
                 <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Τάση εμπλοκής</div>
                 {timeline.length === 0 ? (
@@ -2162,7 +2326,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
 function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
   return (
     <div className="h-full overflow-auto">
-      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Απεσταλμένα</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>Emails που στάλθηκαν μέσω sequences</p>
@@ -2240,8 +2404,8 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
 
   return (
     <div
-      className="fixed bottom-0 right-8 w-[460px] rounded-t-xl shadow-2xl bg-white border border-b-0 flex flex-col"
-      style={{ borderColor: C.line, height: minimized ? 48 : 580, zIndex: 50 }}
+      className="fixed bottom-0 right-0 sm:right-8 w-full sm:w-[460px] rounded-t-xl shadow-2xl bg-white border border-b-0 flex flex-col"
+      style={{ borderColor: C.line, height: minimized ? 48 : 580, maxHeight: "90vh", zIndex: 50 }}
     >
       <div className="flex items-center justify-between px-4 py-3 rounded-t-xl" style={{ backgroundColor: C.navy }}>
         <span className="text-sm font-medium text-white">Νέο μήνυμα</span>
@@ -2342,7 +2506,7 @@ function NewAdminUserModal({ onClose, onCreate }) {
   );
 }
 
-function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, currentUserId }) {
+function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, currentUserId, teamOverview }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
 
@@ -2370,7 +2534,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
   return (
     <div className="h-full overflow-auto">
       {showNew && <NewAdminUserModal onClose={() => setShowNew(false)} onCreate={onCreateUser} />}
-      <div className="flex items-center justify-between px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Διαχείριση πρόσβασης</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>Έγκριση νέων λογαριασμών και διαχείριση δικαιωμάτων admin</p>
@@ -2379,12 +2543,49 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
           <UserPlus size={15} /> Νέος χρήστης
         </button>
       </div>
-      <div className="px-8 py-6">
+      <div className="px-8 py-6 space-y-6">
         <ErrorNote message={error} onRetry={onReload} />
+
+        {teamOverview && (
+          <Card className="p-5">
+            <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Απόδοση ομάδας</div>
+            <div className="flex flex-wrap gap-4 mb-4">
+              <StatCard label="Επαφές" value={teamOverview.totals.contacts} sub="σύνολο team" color={C.sky} />
+              <StatCard label="Στάλθηκαν" value={teamOverview.totals.sent} sub="emails, όλοι" color={C.navy} />
+              <StatCard label="Προσφορές" value={teamOverview.totals.offers} sub={fmtMoney(teamOverview.totals.offersValue)} color={C.mint} />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left" style={{ color: C.slate }}>
+                    <th className="font-medium pb-2">Χρήστης</th>
+                    <th className="font-medium pb-2">Επαφές</th>
+                    <th className="font-medium pb-2">Στάλθηκαν</th>
+                    <th className="font-medium pb-2">Προσφορές</th>
+                    <th className="font-medium pb-2">Win rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamOverview.perUser.map((u) => (
+                    <tr key={u.userId} className="border-t" style={{ borderColor: C.line }}>
+                      <td className="py-2.5 font-medium" style={{ color: C.ink }}>{u.name || u.email}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.contacts}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.sent}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.offers} <span style={{ color: C.slate }}>({fmtMoney(u.offersValue)})</span></td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.winRate == null ? "—" : `${Math.round(u.winRate * 100)}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
         {loading ? (
           <Spinner label="Φόρτωση χρηστών…" />
         ) : (
           <Card className="p-0 overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
@@ -2455,6 +2656,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
         )}
       </div>
@@ -2469,6 +2671,8 @@ export default function App() {
   const [view, setView] = useState("inbox");
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeContactId, setComposeContactId] = useState("");
+  const [pendingOpenContactId, setPendingOpenContactId] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [gmailNotice, setGmailNotice] = useState("");
 
   const [contacts, setContacts] = useState([]);
@@ -2496,6 +2700,7 @@ export default function App() {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState("");
+  const [teamOverview, setTeamOverview] = useState(null);
 
   const [offers, setOffers] = useState([]);
   const [offersLoading, setOffersLoading] = useState(false);
@@ -2574,7 +2779,12 @@ export default function App() {
     setAdminLoading(true);
     setAdminError("");
     try {
-      setAdminUsers(await api.get("/admin/users"));
+      const [users, overview] = await Promise.all([
+        api.get("/admin/users"),
+        api.get("/admin/team-overview").catch(() => null),
+      ]);
+      setAdminUsers(users);
+      setTeamOverview(overview);
     } catch (err) {
       setAdminError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι χρήστες.");
     } finally {
@@ -2742,6 +2952,10 @@ export default function App() {
     await loadSequences();
   }
 
+  async function handleTestSendStep(sequenceId, stepId, testEmail) {
+    await api.post(`/sequences/${sequenceId}/steps/${stepId}/test-send`, { testEmail });
+  }
+
   async function handleCreateTemplate(data) {
     await api.post("/templates", data);
     await loadTemplates();
@@ -2766,6 +2980,18 @@ export default function App() {
   function openComposeFor(contactId) {
     setComposeContactId(contactId);
     setComposeOpen(true);
+  }
+
+  async function handleMarkReplied(contactId) {
+    await api.post(`/contacts/${contactId}/mark-replied`);
+    await loadContacts();
+    await loadSequences();
+  }
+
+  function handleSelectFromSearch(contactId) {
+    setView("contacts");
+    setPendingOpenContactId(contactId);
+    setSidebarOpen(false);
   }
 
   async function handleApproveUser(id) {
@@ -2822,31 +3048,43 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <div className="w-60 border-r flex flex-col shrink-0" style={{ borderColor: C.line, backgroundColor: "#FFFFFF" }}>
-        <div className="px-5 py-5">
+      <div
+        className={`fixed md:relative inset-y-0 left-0 z-40 w-60 border-r flex flex-col shrink-0 transform transition-transform duration-200 md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        style={{ borderColor: C.line, backgroundColor: "#FFFFFF" }}
+      >
+        <div className="px-5 py-5 flex items-center justify-between">
           <Brand size={32} textSize="text-base" />
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600">
+            <X size={18} />
+          </button>
         </div>
 
         <div className="px-3">
           <button
-            onClick={() => setComposeOpen(true)}
-            className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white mb-4 shadow-sm"
+            onClick={() => { setComposeOpen(true); setSidebarOpen(false); }}
+            className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white mb-3 shadow-sm"
             style={{ backgroundColor: C.sky }}
           >
             <Pencil size={14} /> Σύνταξη
           </button>
         </div>
 
+        <GlobalSearch onSelectContact={handleSelectFromSearch} />
+
         <div className="px-3 space-y-0.5 flex-1">
-          <NavItem icon={Mail} label="Απεσταλμένα" active={view === "inbox"} onClick={() => setView("inbox")} count={counts.inbox} />
-          <NavItem icon={Users} label="Επαφές" active={view === "contacts"} onClick={() => setView("contacts")} count={counts.contacts} />
-          <NavItem icon={Layers} label="Sequences" active={view === "sequences"} onClick={() => setView("sequences")} count={counts.sequences} />
-          <NavItem icon={FileText} label="Templates" active={view === "templates"} onClick={() => setView("templates")} count={counts.templates} />
-          <NavItem icon={Handshake} label="Offers" active={view === "offers"} onClick={() => setView("offers")} count={counts.offers} />
-          <NavItem icon={BarChart3} label="Analytics" active={view === "analytics"} onClick={() => setView("analytics")} />
+          <NavItem icon={Mail} label="Απεσταλμένα" active={view === "inbox"} onClick={() => { setView("inbox"); setSidebarOpen(false); }} count={counts.inbox} />
+          <NavItem icon={Users} label="Επαφές" active={view === "contacts"} onClick={() => { setView("contacts"); setSidebarOpen(false); }} count={counts.contacts} />
+          <NavItem icon={Layers} label="Sequences" active={view === "sequences"} onClick={() => { setView("sequences"); setSidebarOpen(false); }} count={counts.sequences} />
+          <NavItem icon={FileText} label="Templates" active={view === "templates"} onClick={() => { setView("templates"); setSidebarOpen(false); }} count={counts.templates} />
+          <NavItem icon={Handshake} label="Offers" active={view === "offers"} onClick={() => { setView("offers"); setSidebarOpen(false); }} count={counts.offers} />
+          <NavItem icon={BarChart3} label="Analytics" active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
           {user?.isAdmin && (
-            <NavItem icon={ShieldCheck} label="Admin" active={view === "admin"} onClick={() => setView("admin")} />
+            <NavItem icon={ShieldCheck} label="Admin" active={view === "admin"} onClick={() => { setView("admin"); setSidebarOpen(false); }} />
           )}
         </div>
 
@@ -2866,6 +3104,12 @@ export default function App() {
 
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: C.line, backgroundColor: "#FFFFFF" }}>
+          <button onClick={() => setSidebarOpen(true)} className="text-slate-500 hover:text-slate-700">
+            <Menu size={20} />
+          </button>
+          <Brand size={26} textSize="text-sm" />
+        </div>
         {gmailNotice && (
           <div className="px-6 py-2 text-sm flex items-center justify-between" style={{ backgroundColor: C.pale, color: C.navy }}>
             {gmailNotice}
@@ -2895,6 +3139,9 @@ export default function App() {
               onBulkDelete={handleBulkDeleteContacts}
               onExport={handleExportContacts}
               onCompose={openComposeFor}
+              onMarkReplied={handleMarkReplied}
+              openContactId={pendingOpenContactId}
+              onOpenContactHandled={() => setPendingOpenContactId("")}
             />
           )}
           {view === "sequences" && (
@@ -2908,6 +3155,8 @@ export default function App() {
               onAddStep={handleAddStep}
               onDeleteStep={handleDeleteStep}
               onReorderStep={handleReorderStep}
+              onTestSend={handleTestSendStep}
+              userEmail={user?.email}
             />
           )}
           {view === "templates" && (
@@ -2949,6 +3198,7 @@ export default function App() {
               onCreateUser={handleCreateAdminUser}
               onDeleteUser={handleDeleteAdminUser}
               currentUserId={user.id}
+              teamOverview={teamOverview}
             />
           )}
         </div>

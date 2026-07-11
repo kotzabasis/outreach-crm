@@ -85,15 +85,19 @@ function toBase64Url(str) {
     .replace(/=+$/, "");
 }
 
-// Wraps every http(s) link in the body with our /track/click redirect, and
-// appends a 1x1 tracking pixel for opens. trackingId ties both back to one EmailLog row.
+// Wraps every http(s) link in the body with our /track/click redirect, appends
+// a visible unsubscribe footer (required for real cold outreach — a hidden
+// pixel alone isn't enough for deliverability/compliance), and a 1x1 tracking
+// pixel for opens. trackingId ties all three back to one EmailLog row.
 function injectTracking(html, trackingId) {
   const withWrappedLinks = html.replace(
     /https?:\/\/[^\s<]+/g,
     (url) => `${process.env.BASE_URL}/track/click/${trackingId}?url=${encodeURIComponent(url)}`
   );
+  const unsubscribeUrl = `${process.env.BASE_URL}/track/unsubscribe/${trackingId}`;
+  const footer = `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:11px;color:#94a3b8;">Αν δεν θέλεις να λαμβάνεις άλλα emails, <a href="${unsubscribeUrl}" style="color:#94a3b8;text-decoration:underline;">κάνε unsubscribe εδώ</a>.</div>`;
   const pixel = `<img src="${process.env.BASE_URL}/track/open/${trackingId}.png" width="1" height="1" style="display:none" alt="" />`;
-  return `${withWrappedLinks}<br/>${pixel}`;
+  return `${withWrappedLinks}<br/>${footer}${pixel}`;
 }
 
 // attachments: [{filename, mimeType, contentBase64}] — plain (unwrapped)

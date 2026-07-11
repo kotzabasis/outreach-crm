@@ -106,4 +106,56 @@ router.post("/users/:id/demote", async (req, res) => {
   res.json(publicAdminUser(updated));
 });
 
+// Aggregate, per-rep performance — admin-only. Deliberately returns rollups
+// (counts/rates), never the underlying contact/offer records themselves, so
+// this doesn't become a backdoor around the per-user data isolation used
+// everywhere else (contacts.js, offers.js, sequences.js, etc.).
+router.get("/team-overview", async (req, res) => {
+  const [users, contactsByUser, sentByUser, offers] = await Promise.all([
+    prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.contact.groupBy({ by: ["userId"], _count: { _all: true } }),
+    prisma.emailLog.groupBy({ by: ["userId"], _count: { _all: true } }),
+    prisma.offer.findMany({ select: { userId: true, status: true, value: true } }),
+  ]);
+
+  const contactsMap = Object.fromEntries(contactsByUser.map((c) => [c.userId, c._count._all]));
+  const sentMap = Object.fromEntries(sentByUser.map((s) => [s.userId, s._count._all]));
+
+  const offersByUser = {};
+  for (const o of offers) {
+    const bucket = (offersByUser[o.userId] ||= { total: 0, accepted: 0, declined: 0, value: 0 });
+    bucket.total++;
+    if (o.status === "accepted") bucket.accepted++;
+    if (o.status === "declined") bucket.declined++;
+    bucket.value += o.value || 0;
+  }
+
+  const perUser = users.map((u) => {
+    const ob = offersByUser[u.id] || { total: 0, accepted: 0, declined: 0, value: 0 };
+    const decided = ob.accepted + ob.declined;
+    return {
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      contacts: contactsMap[u.id] || 0,
+      sent: sentMap[u.id] || 0,
+      offers: ob.total,
+      offersValue: ob.value,
+      winRate: decided > 0 ? ob.accepted / decided : null,
+    };
+  });
+
+  const totals = perUser.reduce(
+    (acc, u) => ({
+      contacts: acc.contacts + u.contacts,
+      sent: acc.sent + u.sent,
+      offers: acc.offers + u.offers,
+      offersValue: acc.offersValue + u.offersValue,
+    }),
+    { contacts: 0, sent: 0, offers: 0, offersValue: 0 }
+  );
+
+  res.json({ totals, perUser });
+});
+
 module.exports = router;

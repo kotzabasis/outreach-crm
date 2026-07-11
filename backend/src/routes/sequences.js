@@ -1,8 +1,10 @@
 const express = require("express");
+const { v4: uuid } = require("uuid");
 const { z } = require("zod");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const { attachmentsSchema } = require("../lib/attachments");
+const { sendTrackedEmail } = require("../lib/gmailClient");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -177,6 +179,42 @@ router.patch("/:id/steps/:stepId", async (req, res) => {
 
   const updated = await prisma.sequenceStep.update({ where: { id: step.id }, data: parsed.data });
   res.json(updated);
+});
+
+// Sends the step's current subject/body to a test address (default: the
+// user's own connected Gmail) against a fake sample contact, so merge tags
+// render but nothing real gets touched — no EmailLog/enrollment created, so
+// this never shows up in analytics or the recipient's real send history.
+router.post("/:id/steps/:stepId/test-send", async (req, res) => {
+  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!sequence) return res.status(404).json({ error: "not_found" });
+  const step = await prisma.sequenceStep.findFirst({ where: { id: req.params.stepId, sequenceId: sequence.id } });
+  if (!step) return res.status(404).json({ error: "not_found" });
+
+  const gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: req.user.id } });
+  if (!gmailAccount) return res.status(400).json({ error: "gmail_not_connected" });
+
+  const emailParsed = z.string().email().safeParse((req.body.testEmail || gmailAccount.email || "").trim());
+  if (!emailParsed.success) return res.status(400).json({ error: "invalid_test_email" });
+
+  const sampleContact = { name: "Δοκιμαστική Επαφή", company: "Η Εταιρεία Σου", email: emailParsed.data };
+  const trackingId = uuid();
+
+  try {
+    await sendTrackedEmail({
+      gmailAccount,
+      contact: sampleContact,
+      subject: `[TEST] ${step.subject}`,
+      body: step.body,
+      trackingId,
+      attachments: Array.isArray(step.attachments) ? step.attachments : [],
+    });
+  } catch (err) {
+    console.error("Test send failed:", err.message);
+    return res.status(502).json({ error: "send_failed" });
+  }
+
+  res.json({ ok: true, sentTo: emailParsed.data });
 });
 
 // Reorder steps — the body must list exactly the sequence's current step ids,
