@@ -43,9 +43,25 @@ router.get("/", async (req, res) => {
           }
         : {}),
     },
+    include: {
+      // Only the most recent enrollment, just to show "which sequence /
+      // which step" in the contacts table — full history isn't needed here.
+      enrollments: {
+        include: { sequence: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
-  res.json(contacts);
+
+  const withEnrollment = contacts.map(({ enrollments, ...c }) => ({
+    ...c,
+    currentSequence: enrollments[0] ? enrollments[0].sequence.name : null,
+    currentStep: enrollments[0] ? enrollments[0].currentStep : null,
+  }));
+
+  res.json(withEnrollment);
 });
 
 router.post("/", async (req, res) => {

@@ -37,6 +37,43 @@ router.get("/overview", async (req, res) => {
   res.json({ totals, perSequence });
 });
 
+// Recent sends across all sequences, for the "Sent" / inbox view. Scoped to
+// the logged-in user via the contact relation, same as everywhere else here.
+router.get("/activity", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 30, 100);
+
+  const logs = await prisma.emailLog.findMany({
+    where: { enrollment: { contact: { userId: req.user.id } } },
+    include: {
+      step: { select: { subject: true } },
+      enrollment: { select: { status: true, contact: { select: { email: true, name: true } } } },
+      events: { select: { type: true } },
+    },
+    orderBy: { sentAt: "desc" },
+    take: limit,
+  });
+
+  const activity = logs.map((log) => {
+    const opened = log.events.some((e) => e.type === "open");
+    const clicked = log.events.some((e) => e.type === "click");
+    let status = "contacted";
+    if (log.enrollment.status === "bounced") status = "bounced";
+    else if (log.enrollment.status === "replied") status = "replied";
+    else if (opened || clicked) status = "opened";
+
+    return {
+      id: log.id,
+      to: log.enrollment.contact.email,
+      toName: log.enrollment.contact.name,
+      subject: log.step.subject,
+      sentAt: log.sentAt,
+      status,
+    };
+  });
+
+  res.json(activity);
+});
+
 router.get("/timeline", async (req, res) => {
   const days = Math.min(Number(req.query.days) || 14, 90);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
