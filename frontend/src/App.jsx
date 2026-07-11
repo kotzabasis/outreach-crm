@@ -7,7 +7,8 @@ import {
   PhoneCall, RefreshCw, Phone, FileText, Copy, ArrowUp, ArrowDown,
   ShieldCheck, UserCheck, UserX, Sparkles, Euro, StickyNote,
   CalendarClock, Download, Eye, Handshake, Bold, Italic, Underline,
-  List, ListOrdered, Link as LinkIcon, UserPlus, Menu
+  List, ListOrdered, Link as LinkIcon, UserPlus, Menu,
+  AlignLeft, AlignCenter, AlignRight, Info
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -290,6 +291,17 @@ function TipBanner({ children, tone = "info" }) {
 }
 
 // ---------- Rich text editor ----------
+// Best-practice link handling for cold outreach: a bare domain typed without
+// a scheme (e.g. "example.com") would otherwise be inserted as a relative
+// link — clicking it in the sent email would try to navigate relative to
+// whatever page it's opened from, which breaks silently. Default to https.
+function normalizeLinkUrl(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/^mailto:/i.test(trimmed) || /^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 // Minimal Gmail-style toolbar over a contentEditable div — no external
 // dependency, since bold/lists/links/attachments are all the app needs.
 function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, minHeight = 140 }) {
@@ -310,8 +322,18 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
   }
 
   function handleLink() {
-    const url = window.prompt("Σύνδεσμος (URL):", "https://");
-    if (!url) return;
+    const raw = window.prompt("Σύνδεσμος (URL):", "https://");
+    if (!raw || !raw.trim()) return;
+    const url = normalizeLinkUrl(raw);
+    try {
+      // eslint-disable-next-line no-new
+      new URL(url);
+    } catch {
+      window.alert("Ο σύνδεσμος δεν φαίνεται έγκυρος.");
+      return;
+    }
+    const safeUrl = url.replace(/"/g, "&quot;");
+
     // execCommand("createLink") silently does nothing if there's no active
     // text selection — that looked like "the link just isn't there" to
     // anyone who clicked the button without first highlighting text. Fall
@@ -319,15 +341,32 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
     const selection = window.getSelection();
     const hasSelection =
       selection && selection.toString().length > 0 && editorRef.current?.contains(selection.anchorNode);
+
+    editorRef.current?.focus();
     if (hasSelection) {
-      exec("createLink", url);
+      document.execCommand("createLink", false, url);
+      // execCommand doesn't let us style the anchor it just created directly —
+      // find it by href and apply the same inline style as the manual-insert
+      // branch below. Inline (not stylesheet) styling matters here because
+      // Gmail/Outlook etc. strip <style> blocks — an unstyled <a> can render
+      // with no visible color/underline in some clients.
+      const anchors = editorRef.current?.querySelectorAll(`a[href="${safeUrl}"]`) || [];
+      const created = anchors[anchors.length - 1];
+      if (created) {
+        created.style.color = C.sky;
+        created.style.textDecoration = "underline";
+        created.setAttribute("target", "_blank");
+        created.setAttribute("rel", "noopener noreferrer");
+      }
     } else {
-      editorRef.current?.focus();
-      const safeUrl = url.replace(/"/g, "&quot;");
       const safeText = url.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      document.execCommand("insertHTML", false, `<a href="${safeUrl}">${safeText}</a>`);
-      onChange(editorRef.current?.innerHTML || "");
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<a href="${safeUrl}" style="color:${C.sky};text-decoration:underline;" target="_blank" rel="noopener noreferrer">${safeText}</a>`
+      );
     }
+    onChange(editorRef.current?.innerHTML || "");
   }
 
   async function handleFiles(e) {
@@ -372,6 +411,10 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
         <ToolBtn onClick={() => exec("insertUnorderedList")} title="Λίστα με κουκκίδες"><List size={14} /></ToolBtn>
         <ToolBtn onClick={() => exec("insertOrderedList")} title="Αριθμημένη λίστα"><ListOrdered size={14} /></ToolBtn>
         <span className="w-px h-4 mx-1" style={{ backgroundColor: C.line }} />
+        <ToolBtn onClick={() => exec("justifyLeft")} title="Στοίχιση αριστερά"><AlignLeft size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("justifyCenter")} title="Στοίχιση στο κέντρο"><AlignCenter size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("justifyRight")} title="Στοίχιση δεξιά"><AlignRight size={14} /></ToolBtn>
+        <span className="w-px h-4 mx-1" style={{ backgroundColor: C.line }} />
         <ToolBtn onClick={handleLink} title="Σύνδεσμος"><LinkIcon size={14} /></ToolBtn>
         {onAttachmentsChange && (
           <>
@@ -399,6 +442,29 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Shown next to every place someone drafts an email body, so the unsubscribe
+// line and tracking pixel that gmailClient.js's injectTracking() adds at
+// send time aren't a surprise — they never appear in the draft/template
+// itself (they're injected only into the copy that actually gets sent), so
+// without this, "what the recipient sees" and "what you're editing" don't
+// match. Rendered as its own separate, dashed-border block (not part of the
+// live preview above it) precisely because it's NOT part of what you wrote —
+// it's what gets appended on top of it automatically.
+function AutoFooterPreview() {
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-1 text-[10px] font-medium mb-1.5" style={{ color: C.slate }}>
+        <Info size={11} /> Προστίθεται αυτόματα σε κάθε αποστολή (δεν το γράφεις εσύ)
+      </div>
+      <div className="rounded-lg px-3 py-2.5" style={{ border: `1px dashed ${C.line}`, backgroundColor: "#fff" }}>
+        <div style={{ paddingTop: 12, borderTop: "1px solid #e5e7eb", fontFamily: "sans-serif", fontSize: 11, color: "#94a3b8" }}>
+          Αν δεν θέλεις να λαμβάνεις άλλα emails, <span style={{ textDecoration: "underline" }}>κάνε unsubscribe εδώ</span>.
+        </div>
+      </div>
     </div>
   );
 }
@@ -1353,6 +1419,7 @@ function TemplateModal({ initial, onClose, onSave }) {
               <div className="text-xs mb-2" style={{ color: C.slate }}>Προς: {MERGE_SAMPLE.name} &lt;{MERGE_SAMPLE.email}&gt;</div>
               <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{renderPreview(subject) || "—"}</div>
               <div className="text-sm" style={{ color: C.ink }} dangerouslySetInnerHTML={{ __html: renderPreview(body) || "—" }} />
+              <AutoFooterPreview />
               {attachments.length > 0 && (
                 <div className="flex gap-1.5 flex-wrap mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
                   {attachments.map((a, i) => (
@@ -1862,6 +1929,7 @@ function StepFields({
             onChange={(e) => setSubject(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
           <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={90} />
+          <AutoFooterPreview />
         </div>
       )}
 
@@ -2488,6 +2556,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
           </div>
           <div className="flex-1 px-4 py-3 overflow-auto">
             <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={160} />
+            <AutoFooterPreview />
           </div>
           {!gmailConnected && (
             <div className="px-4 py-2 text-xs" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
