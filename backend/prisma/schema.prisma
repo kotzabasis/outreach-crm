@@ -1,0 +1,158 @@
+// Prisma schema for the Outreach CRM.
+// Dev default is SQLite; swap the datasource to Postgres for production
+// (see SETUP.md — it's a one-line change plus a fresh migration).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+
+  contacts             Contact[]
+  sequences            Sequence[]
+  templates            Template[]
+  gmailAccount         GmailAccount?
+  passwordResetTokens  PasswordResetToken[]
+}
+
+// Short-lived, single-use tokens for the "forgot password" flow. Only a
+// hash of the token is stored — the raw token exists only in the emailed
+// link, exactly like a password: if the DB leaks, the hashes alone can't
+// be used to reset anyone's password.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Reusable email templates. Sequence steps can be created from a template
+// (its subject/body are copied in at that moment) or written inline —
+// editing a template later never retroactively changes steps that already
+// used it, so an in-flight sequence can't change under an enrolled contact.
+model Template {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  subject   String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// A user's connected Gmail account, used only for sending. Separate from
+// User so login (email/password) and the Gmail connection can change
+// independently — e.g. reconnecting a different Gmail account later.
+model GmailAccount {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  googleId              String   @unique
+  email                 String
+  // AES-256-GCM encrypted before storage — see src/lib/crypto.js
+  encryptedAccessToken  String
+  encryptedRefreshToken String
+  tokenExpiry           DateTime
+  emailsSentToday       Int      @default(0)
+  sendCounterResetAt    DateTime @default(now())
+  createdAt             DateTime @default(now())
+}
+
+model Contact {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  email          String
+  company        String?
+  tags           String   @default("") // comma-separated; fine at this scale
+  status         String   @default("new") // new | contacted | opened | replied | bounced | unsubscribed
+  unsubscribed   Boolean  @default(false)
+  lastActivityAt DateTime?
+  createdAt      DateTime @default(now())
+
+  enrollments Enrollment[]
+
+  @@index([userId, email])
+}
+
+model Sequence {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  steps       SequenceStep[]
+  enrollments Enrollment[]
+}
+
+model SequenceStep {
+  id               String    @id @default(uuid())
+  sequenceId       String
+  sequence         Sequence  @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  order            Int
+  subject          String
+  body             String   // may contain {{first_name}}, {{company}} placeholders
+  delayDays        Int      @default(0) // days after previous step (0 for the first step)
+  sourceTemplateId String?  // informational only — which template this was copied from, if any
+
+  emailLogs EmailLog[]
+
+  @@index([sequenceId, order])
+}
+
+model Enrollment {
+  id           String    @id @default(uuid())
+  contactId    String
+  contact      Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sequenceId   String
+  sequence     Sequence  @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  currentStep  Int       @default(0) // index into the sequence's ordered steps
+  status       String    @default("active") // active | completed | paused | replied | bounced
+  nextSendAt   DateTime
+  createdAt    DateTime  @default(now())
+
+  emailLogs EmailLog[]
+
+  @@index([status, nextSendAt])
+}
+
+model EmailLog {
+  id             String    @id @default(uuid())
+  enrollmentId   String
+  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  stepId         String
+  step           SequenceStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  gmailMessageId String?
+  trackingId     String    @unique
+  sentAt         DateTime  @default(now())
+
+  events TrackingEvent[]
+}
+
+model TrackingEvent {
+  id          String   @id @default(uuid())
+  emailLogId  String
+  emailLog    EmailLog @relation(fields: [emailLogId], references: [id], onDelete: Cascade)
+  type        String   // open | click
+  url         String?  // only set for click events
+  occurredAt  DateTime @default(now())
+}
