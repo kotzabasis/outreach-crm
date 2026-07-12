@@ -153,6 +153,98 @@ async function sendNextStep(enrollment) {
   await advanceEnrollment(enrollment, sequence);
 }
 
+// Sends at most one recipient per running campaign per tick, gated by
+// "has intervalMinutes elapsed since this campaign's lastSentAt" — this is
+// what makes sends go out spaced one-by-one instead of in one batch. Needs a
+// tighter tick than the 5-minute sequence one below (campaign spacing is
+// meant to be minutes, not hours/days), so it gets its own faster cron.
+async function processDueCampaigns() {
+  const campaigns = await prisma.campaign.findMany({ where: { status: "running" } });
+  for (const campaign of campaigns) {
+    try {
+      await sendNextCampaignRecipient(campaign);
+    } catch (err) {
+      console.error(`Failed to send campaign recipient for campaign ${campaign.id}:`, err.message);
+    }
+  }
+}
+
+async function sendNextCampaignRecipient(campaign) {
+  const intervalMs = campaign.intervalMinutes * 60 * 1000;
+  if (campaign.lastSentAt && Date.now() - new Date(campaign.lastSentAt).getTime() < intervalMs) {
+    return; // not due yet — this is the actual spacing mechanism
+  }
+
+  const nextRecipient = await prisma.campaignRecipient.findFirst({
+    where: { campaignId: campaign.id, status: "pending" },
+    orderBy: { order: "asc" },
+    include: { contact: true },
+  });
+
+  if (!nextRecipient) {
+    await prisma.campaign.update({ where: { id: campaign.id }, data: { status: "completed", completedAt: new Date() } });
+    return;
+  }
+
+  const { contact } = nextRecipient;
+
+  if (contact.unsubscribed) {
+    // Skip immediately, don't touch lastSentAt/spacing for a skip — only a
+    // genuine send should eat into the interval budget between real sends.
+    await prisma.campaignRecipient.update({
+      where: { id: nextRecipient.id },
+      data: { status: "skipped", note: "unsubscribed" },
+    });
+    return;
+  }
+
+  let gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: campaign.userId } });
+  if (!gmailAccount) return; // not connected — recipient stays pending, retried next tick
+
+  gmailAccount = await resetDailyCounterIfNeeded(gmailAccount);
+  if (gmailAccount.emailsSentToday >= DAILY_CAP) return; // leave pending, retry once the cap resets
+
+  const trackingId = uuid();
+  let gmailMessageId;
+  try {
+    gmailMessageId = await sendTrackedEmail({
+      gmailAccount,
+      contact,
+      subject: campaign.subject,
+      body: campaign.body,
+      trackingId,
+      attachments: Array.isArray(campaign.attachments) ? campaign.attachments : [],
+    });
+  } catch (err) {
+    await prisma.campaignRecipient.update({
+      where: { id: nextRecipient.id },
+      data: { status: "failed", note: String(err.message || err).slice(0, 300) },
+    });
+    throw err;
+  }
+
+  await prisma.$transaction([
+    prisma.emailLog.create({
+      data: {
+        campaignId: campaign.id,
+        contactId: contact.id,
+        userId: campaign.userId,
+        subject: campaign.subject,
+        source: "campaign",
+        gmailMessageId,
+        trackingId,
+      },
+    }),
+    prisma.gmailAccount.update({ where: { id: gmailAccount.id }, data: { emailsSentToday: { increment: 1 } } }),
+    prisma.contact.update({
+      where: { id: contact.id },
+      data: { status: contact.status === "new" ? "contacted" : contact.status, lastActivityAt: new Date() },
+    }),
+    prisma.campaignRecipient.update({ where: { id: nextRecipient.id }, data: { status: "sent", sentAt: new Date() } }),
+    prisma.campaign.update({ where: { id: campaign.id }, data: { lastSentAt: new Date() } }),
+  ]);
+}
+
 function startScheduler() {
   // Every 5 minutes. Fine-grained enough for reasonable delivery timing
   // without hammering the DB or Gmail API.
@@ -160,6 +252,14 @@ function startScheduler() {
     processDueEnrollments().catch((err) => console.error("Scheduler tick failed:", err));
   });
   console.log("Sequence scheduler started (every 5 minutes).");
+
+  // Every 1 minute — campaign spacing is configured in minutes, so it needs
+  // a tick at least that fine-grained to actually feel spaced-out rather
+  // than batched.
+  cron.schedule("* * * * *", () => {
+    processDueCampaigns().catch((err) => console.error("Campaign scheduler tick failed:", err));
+  });
+  console.log("Campaign scheduler started (every 1 minute).");
 }
 
-module.exports = { startScheduler, processDueEnrollments };
+module.exports = { startScheduler, processDueEnrollments, processDueCampaigns };

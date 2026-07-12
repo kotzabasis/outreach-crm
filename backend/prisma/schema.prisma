@@ -30,6 +30,7 @@ model User {
   offers               Offer[]
   contactNotes         ContactNote[]
   emailLogs            EmailLog[]
+  campaigns            Campaign[]
   gmailAccount         GmailAccount?
   passwordResetTokens  PasswordResetToken[]
 }
@@ -108,10 +109,11 @@ model Contact {
   nextFollowUpAt DateTime? // manual reminder date, independent of automatic sequence sends
   createdAt      DateTime @default(now())
 
-  enrollments Enrollment[]
-  offers      Offer[]
-  notes       ContactNote[]
-  emailLogs   EmailLog[]
+  enrollments        Enrollment[]
+  offers             Offer[]
+  notes              ContactNote[]
+  emailLogs          EmailLog[]
+  campaignRecipients CampaignRecipient[]
 
   @@index([userId, email])
   @@index([userId, category])
@@ -216,15 +218,19 @@ model EmailLog {
   enrollment     Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   stepId         String?
   step           SequenceStep? @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  // Nullable for the same reason — only campaign blasts (source = "campaign")
+  // set this.
+  campaignId     String?
+  campaign       Campaign?   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   // Denormalized onto every row (not just derived via enrollment->contact) so
-  // manual sends and sequence sends share one query shape everywhere else in
-  // the app (Inbox view, contact timeline, analytics).
+  // manual sends, sequence sends, and campaign sends all share one query
+  // shape everywhere else in the app (Inbox view, contact timeline, analytics).
   contactId      String
   contact        Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
   userId         String
   user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   subject        String      @default("")
-  source         String      @default("sequence") // sequence | manual
+  source         String      @default("sequence") // sequence | manual | campaign
   attachments    Json        @default("[]") // kept for history/audit, same shape as SequenceStep.attachments
   gmailMessageId String?
   trackingId     String      @unique
@@ -234,6 +240,55 @@ model EmailLog {
 
   @@index([userId, sentAt])
   @@index([contactId])
+}
+
+// A one-shot blast of a single subject/body (usually copied in from a
+// Template, same "snapshot at creation time" rule as SequenceStep — editing
+// the template later never changes a campaign that already copied it) to a
+// chosen set of contacts. Distinct from Sequence: a sequence is a multi-step
+// nurture with day-scale delays per contact; a campaign is one message sent
+// to many contacts, spaced out one-by-one so as not to look like a
+// mail-blast to Gmail/the recipients — see CampaignRecipient + the campaign
+// tick in scheduler.js.
+model Campaign {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  subject         String
+  body            String
+  attachments     Json      @default("[]")
+  status          String    @default("draft") // draft | running | paused | completed
+  // Minutes between consecutive sends within this campaign — the scheduler's
+  // campaign tick checks lastSentAt + intervalMinutes before sending the next
+  // pending recipient, rather than pre-computing every recipient's send time
+  // up front, so pause/resume just works with no rescheduling needed.
+  intervalMinutes Int       @default(2)
+  lastSentAt      DateTime?
+  createdAt       DateTime  @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+
+  recipients CampaignRecipient[]
+  emailLogs  EmailLog[]
+
+  @@index([userId, status])
+}
+
+model CampaignRecipient {
+  id         String    @id @default(uuid())
+  campaignId String
+  campaign   Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId  String
+  contact    Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  order      Int // stable send order, set at creation time (selection order)
+  status     String    @default("pending") // pending | sent | skipped | failed
+  sentAt     DateTime?
+  // Why a recipient was skipped/failed instead of sent — e.g. "unsubscribed",
+  // or the Gmail API error message for a failed send.
+  note       String?
+
+  @@index([campaignId, status, order])
 }
 
 model TrackingEvent {

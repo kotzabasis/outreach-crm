@@ -104,6 +104,7 @@ router.get("/:id", async (req, res) => {
       emailLogs: {
         include: {
           enrollment: { select: { sequence: { select: { name: true } } } },
+          campaign: { select: { name: true } },
           events: { orderBy: { occurredAt: "asc" } },
         },
         orderBy: { sentAt: "desc" },
@@ -121,7 +122,7 @@ router.get("/:id", async (req, res) => {
   const timeline = contact.emailLogs.map((log) => ({
     id: log.id,
     source: log.source,
-    sequenceName: log.enrollment?.sequence?.name || null,
+    sequenceName: log.enrollment?.sequence?.name || log.campaign?.name || null,
     subject: log.subject,
     sentAt: log.sentAt,
     opened: log.events.some((e) => e.type === "open" && !e.isBot),

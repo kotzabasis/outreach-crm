@@ -48,7 +48,26 @@ router.get("/overview", async (req, res) => {
     where: { userId: req.user.id, status: "replied", id: { in: emailedContactIds } },
   });
 
-  res.json({ totals: { sent, opened, clicked, replied }, perSequence });
+  // Campaign reporting, same shape as perSequence — lets the frontend filter
+  // Analytics down to "just this campaign" the same way it already does for
+  // sequences. Reuses allLogs (already fetched above) instead of a fresh
+  // query per campaign.
+  const campaigns = await prisma.campaign.findMany({ where: { userId: req.user.id }, select: { id: true, name: true, status: true } });
+  const perCampaign = await Promise.all(
+    campaigns.map(async (camp) => {
+      const logs = allLogs.filter((l) => l.campaignId === camp.id);
+      const sent = logs.length;
+      const opened = logs.filter((l) => l.events.some((e) => e.type === "open" && !e.isBot)).length;
+      const clicked = logs.filter((l) => l.events.some((e) => e.type === "click")).length;
+      const contactIds = [...new Set(logs.map((l) => l.contactId))];
+      const replied = contactIds.length
+        ? await prisma.contact.count({ where: { userId: req.user.id, status: "replied", id: { in: contactIds } } })
+        : 0;
+      return { id: camp.id, name: camp.name, status: camp.status, sent, opened, clicked, replied };
+    })
+  );
+
+  res.json({ totals: { sent, opened, clicked, replied }, perSequence, perCampaign });
 });
 
 // Recent sends — manual and sequence-driven alike — for the "Sent" / inbox
@@ -62,6 +81,7 @@ router.get("/activity", async (req, res) => {
     include: {
       contact: { select: { email: true, name: true } },
       enrollment: { select: { status: true, sequence: { select: { name: true } } } },
+      campaign: { select: { name: true } },
       events: { select: { type: true, isBot: true, occurredAt: true, url: true }, orderBy: { occurredAt: "asc" } },
     },
     orderBy: { sentAt: "desc" },
@@ -84,7 +104,7 @@ router.get("/activity", async (req, res) => {
       sentAt: log.sentAt,
       status,
       source: log.source,
-      sequenceName: log.enrollment?.sequence?.name || null,
+      sequenceName: log.enrollment?.sequence?.name || log.campaign?.name || null,
       // Full per-send trace (not just the collapsed opened/clicked booleans
       // above) — including bot-filtered opens, flagged as such, so it's
       // visible *why* a given open didn't count instead of it just silently

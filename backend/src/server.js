@@ -15,6 +15,7 @@ const analyticsRoutes = require("./routes/analytics");
 const adminRoutes = require("./routes/admin");
 const offerRoutes = require("./routes/offers");
 const sendRoutes = require("./routes/send");
+const campaignRoutes = require("./routes/campaigns");
 const { startScheduler } = require("./lib/scheduler");
 const prisma = require("./db");
 
@@ -88,6 +89,7 @@ app.use("/templates", templateRoutes);
 app.use("/admin", adminRoutes);
 app.use("/offers", offerRoutes);
 app.use("/send", sendRoutes);
+app.use("/campaigns", campaignRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/track", trackingRoutes); // no auth — see routes/tracking.js for why
 

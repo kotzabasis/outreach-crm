@@ -8,7 +8,7 @@ import {
   ShieldCheck, UserCheck, UserX, Sparkles, Euro, StickyNote,
   CalendarClock, Download, Eye, Handshake, Bold, Italic, Underline,
   List, ListOrdered, Link as LinkIcon, UserPlus, Menu,
-  AlignLeft, AlignCenter, AlignRight, Info
+  AlignLeft, AlignCenter, AlignRight, Info, Megaphone, Play, Pause
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -2570,6 +2570,35 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                 </tbody>
               </table>
             </Card>
+
+            <Card className="p-5">
+              <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Απόδοση ανά campaign</div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left" style={{ color: C.slate }}>
+                    <th className="font-medium pb-2">Campaign</th>
+                    <th className="font-medium pb-2">Κατάσταση</th>
+                    <th className="font-medium pb-2">Στάλθηκαν</th>
+                    <th className="font-medium pb-2">Open rate</th>
+                    <th className="font-medium pb-2">Reply rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(overview?.perCampaign || []).map((c) => (
+                    <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
+                      <td className="py-2.5 font-medium" style={{ color: C.ink }}>{c.name}</td>
+                      <td className="py-2.5"><CampaignStatusBadge status={c.status} /></td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{c.sent}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{pct(c.opened, c.sent)}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{pct(c.replied, c.sent)}</td>
+                    </tr>
+                  ))}
+                  {(!overview?.perCampaign || overview.perCampaign.length === 0) && (
+                    <tr><td colSpan={5} className="py-6 text-center text-sm" style={{ color: C.slate }}>Κανένα campaign ακόμα.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </Card>
           </>
         )}
       </div>
@@ -2728,6 +2757,426 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
           </div>
         </form>
       )}
+    </div>
+  );
+}
+
+// ---------- Campaigns ----------
+// A campaign is one message sent to many contacts, one-by-one with spacing
+// between sends (see scheduler.js's campaign tick) — distinct from a
+// Sequence, which is a multi-step nurture with day-scale delays per contact.
+const CAMPAIGN_STATUS_META = {
+  draft:     { label: "Πρόχειρο", color: C.slate },
+  running:   { label: "Σε εξέλιξη", color: C.mint },
+  paused:    { label: "Σε παύση", color: C.amber },
+  completed: { label: "Ολοκληρώθηκε", color: C.sky },
+};
+
+function CampaignStatusBadge({ status }) {
+  const meta = CAMPAIGN_STATUS_META[status] || CAMPAIGN_STATUS_META.draft;
+  return (
+    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" style={{ backgroundColor: `${meta.color}1A`, color: meta.color }}>
+      {meta.label}
+    </span>
+  );
+}
+
+function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState(DEFAULT_DISCLAIMER_HTML);
+  const [attachments, setAttachments] = useState([]);
+  const [intervalMinutes, setIntervalMinutes] = useState(2);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const categories = useMemo(() => {
+    const set = new Set(contacts.map((c) => (c.category || "").trim()).filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [contacts]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return contacts.filter((c) => {
+      if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false;
+      if (c.unsubscribed) return false; // never let an unsubscribed contact even be selectable
+      if (!q) return true;
+      return (c.name || "").toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q);
+    });
+  }, [contacts, query, categoryFilter]);
+
+  function toggleContact(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllFiltered() {
+    setSelectedIds((prev) => new Set([...prev, ...filtered.map((c) => c.id)]));
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  function loadFromTemplate(templateId) {
+    const t = templates.find((tpl) => tpl.id === templateId);
+    if (!t) return;
+    setSubject(t.subject);
+    setBody(t.body);
+    setAttachments(Array.isArray(t.attachments) ? t.attachments : []);
+  }
+
+  function insertToken(token) {
+    setBody((b) => (b || "") + token);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (selectedIds.size === 0) { setError("Επίλεξε τουλάχιστον 1 επαφή."); return; }
+    setError("");
+    setBusy(true);
+    try {
+      await onCreate({
+        name,
+        subject,
+        body,
+        attachments,
+        contactIds: [...selectedIds],
+        intervalMinutes: Number(intervalMinutes) || 2,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία campaign.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-4xl p-5 max-h-[90vh] overflow-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέο campaign</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="space-y-3">
+            <input required placeholder="Όνομα campaign" value={name} onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+
+            {templates.length > 0 && (
+              <select defaultValue="" onChange={(e) => { if (e.target.value) loadFromTemplate(e.target.value); e.target.value = ""; }}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.slate }}>
+                <option value="">Φόρτωση περιεχομένου από template…</option>
+                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            )}
+
+            <input required placeholder="Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})" value={subject} onChange={(e) => setSubject(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+
+            <div className="flex gap-1.5 flex-wrap">
+              <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
+              {["{{name}}", "{{company}}", "{{email}}", "{{comments}}"].map((tok) => (
+                <button key={tok} type="button" onClick={() => insertToken(tok)}
+                  className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
+                  {tok}
+                </button>
+              ))}
+            </div>
+            <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={160} />
+            {!hasUnsubscribeLink(body) && body.length > 0 && (
+              <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής — ιδιαίτερα σημαντικό για μαζικές αποστολές σαν campaign.</TipBanner>
+            )}
+            <AutoTrackingPixelNote />
+
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Απόσταση μεταξύ αποστολών (λεπτά)</label>
+              <input type="number" min={1} max={1440} value={intervalMinutes} onChange={(e) => setIntervalMinutes(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+              <p className="text-[11px] mt-1" style={{ color: C.slate }}>
+                Τα emails φεύγουν ένα-ένα, όχι όλα μαζί — π.χ. με 2 λεπτά, {selectedIds.size} επαφές θα χρειαστούν περίπου {Math.round((selectedIds.size - 1) * (Number(intervalMinutes) || 2))} λεπτά για να ολοκληρωθούν.
+              </p>
+            </div>
+
+            {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+            <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+              {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία campaign (ως πρόχειρο)
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium" style={{ color: C.slate }}>Παραλήπτες</label>
+              <span className="text-xs font-medium" style={{ color: C.sky }}>{selectedIds.size} επιλεγμένες</span>
+            </div>
+            <div className="flex gap-2">
+              <input placeholder="Αναζήτηση…" value={query} onChange={(e) => setQuery(e.target.value)}
+                className="flex-1 rounded-lg px-3 py-1.5 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
+                className="rounded-lg px-2 py-1.5 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+                <option value="all">Όλες οι κατηγορίες</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button type="button" onClick={selectAllFiltered} className="text-xs font-medium underline" style={{ color: C.sky }}>
+                Επιλογή όλων ({filtered.length})
+              </button>
+              <button type="button" onClick={clearSelection} className="text-xs font-medium underline" style={{ color: C.slate }}>
+                Καθαρισμός
+              </button>
+            </div>
+            <div className="rounded-lg border overflow-auto" style={{ borderColor: C.line, maxHeight: 420 }}>
+              {filtered.length === 0 ? (
+                <p className="text-xs text-center py-6" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</p>
+              ) : (
+                filtered.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2.5 px-3 py-2 border-b cursor-pointer hover:bg-slate-50" style={{ borderColor: C.line }}>
+                    <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleContact(c.id)} />
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{c.name}</div>
+                      <div className="text-[11px] truncate" style={{ color: C.slate }}>{c.email}{c.company ? ` · ${c.company}` : ""}</div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+function CampaignDetailDrawer({ campaignId, onClose, onLoad, onStart, onPause, onDelete }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setDetail(await onLoad(campaignId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στοιχεία campaign.");
+    } finally {
+      setLoading(false);
+    }
+  }, [campaignId, onLoad]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function run(fn) {
+    setBusy(true);
+    try {
+      await fn(campaignId);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm("Διαγραφή αυτού του campaign; Δεν θα διαγραφούν τα emails που έχουν ήδη σταλεί.")) return;
+    setBusy(true);
+    try {
+      await onDelete(campaignId);
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <div className="w-full max-w-2xl h-full bg-white overflow-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white" style={{ borderColor: C.line }}>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{detail?.name || "Campaign"}</h3>
+          <div className="flex items-center gap-3">
+            {detail && (detail.status === "draft" || detail.status === "paused") && (
+              <button onClick={() => run(onStart)} disabled={busy}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.mint, opacity: busy ? 0.6 : 1 }}>
+                <Play size={13} /> {detail.status === "paused" ? "Συνέχεια" : "Εκκίνηση"}
+              </button>
+            )}
+            {detail && detail.status === "running" && (
+              <button onClick={() => run(onPause)} disabled={busy}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.amber, opacity: busy ? 0.6 : 1 }}>
+                <Pause size={13} /> Παύση
+              </button>
+            )}
+            <button onClick={handleDelete} disabled={busy} className="text-slate-400 hover:text-coral-600" title="Διαγραφή">
+              <Trash2 size={16} />
+            </button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+          </div>
+        </div>
+
+        {loading ? (
+          <Spinner label="Φόρτωση…" />
+        ) : error ? (
+          <div className="p-6"><ErrorNote message={error} onRetry={load} /></div>
+        ) : detail ? (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center gap-2">
+              <CampaignStatusBadge status={detail.status} />
+              <span className="text-xs" style={{ color: C.slate }}>
+                {detail.intervalMinutes} λεπτά μεταξύ αποστολών · δημιουργήθηκε {fmtDate(detail.createdAt)}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <StatCard label="Σύνολο" value={detail.counts.total} sub="παραλήπτες" color={C.slate} />
+              <StatCard label="Στάλθηκαν" value={detail.counts.sent} sub={`από ${detail.counts.total}`} color={C.navy} />
+              <StatCard label="Εκκρεμούν" value={detail.counts.pending} sub="στην ουρά" color={C.amber} />
+              <StatCard label="Παραλείφθηκαν" value={detail.counts.skipped + detail.counts.failed} sub="unsubscribed / αποτυχία" color={C.coral} />
+            </div>
+
+            <div>
+              <div className="text-sm font-medium mb-2" style={{ color: C.ink }}>Θέμα</div>
+              <p className="text-sm" style={{ color: C.ink }}>{detail.subject}</p>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
+                <Users size={14} /> Παραλήπτες ({detail.recipients.length})
+              </div>
+              <div className="space-y-2">
+                {detail.recipients.map((r) => {
+                  const open = expandedId === r.id;
+                  return (
+                    <div key={r.id} className="rounded-lg overflow-hidden" style={{ backgroundColor: C.pale }}>
+                      <button type="button" onClick={() => setExpandedId(open ? null : r.id)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left">
+                        <div className="min-w-0 flex items-center gap-1.5">
+                          <ChevronRight size={12} style={{ color: C.slate, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} className="shrink-0" />
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{r.name || r.email}</div>
+                            <div className="text-[11px] truncate" style={{ color: C.slate }}>{r.email}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {r.status === "pending" && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.slate}1A`, color: C.slate }}>Εκκρεμεί</span>}
+                          {r.status === "sent" && r.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>Άνοιξε</span>}
+                          {r.status === "sent" && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.mint}1A`, color: C.mint }}>Στάλθηκε</span>}
+                          {(r.status === "skipped" || r.status === "failed") && (
+                            <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.coral}1A`, color: C.coral }}>
+                              {r.status === "skipped" ? "Παραλείφθηκε" : "Αποτυχία"}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      {open && (
+                        <div className="px-3 pb-2.5 pl-7">
+                          {r.note && <p className="text-[11px] mb-1.5" style={{ color: C.coral }}>{r.note}</p>}
+                          {r.sentAt ? <EventTrace sentAt={r.sentAt} events={r.events} /> : (
+                            <p className="text-[11px]" style={{ color: C.slate }}>Δεν έχει σταλεί ακόμα.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CampaignsView({ campaigns, loading, error, onReload, contacts, templates, onCreate, onStart, onPause, onDelete, onLoadDetail }) {
+  const [showNew, setShowNew] = useState(false);
+  const [detailId, setDetailId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  async function run(id, fn) {
+    setBusyId(id);
+    try {
+      await fn(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="h-full overflow-auto">
+      {showNew && <NewCampaignModal onClose={() => setShowNew(false)} onCreate={onCreate} contacts={contacts} templates={templates} />}
+      {detailId && (
+        <CampaignDetailDrawer campaignId={detailId} onClose={() => setDetailId(null)} onLoad={onLoadDetail} onStart={onStart} onPause={onPause} onDelete={onDelete} />
+      )}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Campaigns</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Ένα μήνυμα σε πολλές επαφές, ένα-ένα με απόσταση — όχι μαζική αποστολή.</p>
+        </div>
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
+          <Megaphone size={15} /> Νέο campaign
+        </button>
+      </div>
+      <div className="px-8 py-6">
+        <ErrorNote message={error} onRetry={onReload} />
+        {loading ? (
+          <Spinner label="Φόρτωση…" />
+        ) : campaigns.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
+            <Megaphone size={28} strokeWidth={1.5} />
+            Δεν έχεις δημιουργήσει campaign ακόμα.
+          </div>
+        ) : (
+          <Card className="p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
+                    <th className="font-medium px-4 py-2.5">Όνομα</th>
+                    <th className="font-medium px-4 py-2.5">Κατάσταση</th>
+                    <th className="font-medium px-4 py-2.5">Πρόοδος</th>
+                    <th className="font-medium px-4 py-2.5">Δημιουργήθηκε</th>
+                    <th className="font-medium px-4 py-2.5"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {campaigns.map((c) => (
+                    <tr key={c.id} className="border-t cursor-pointer hover:bg-slate-50" style={{ borderColor: C.line }} onClick={() => setDetailId(c.id)}>
+                      <td className="px-4 py-3 font-medium" style={{ color: C.ink }}>{c.name}</td>
+                      <td className="px-4 py-3"><CampaignStatusBadge status={c.status} /></td>
+                      <td className="px-4 py-3" style={{ color: C.ink }}>{c.counts.sent} / {c.counts.total}</td>
+                      <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(c.createdAt)}</td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          {(c.status === "draft" || c.status === "paused") && (
+                            <button onClick={() => run(c.id, onStart)} disabled={busyId === c.id} title="Εκκίνηση" style={{ color: C.mint }}>
+                              <Play size={15} />
+                            </button>
+                          )}
+                          {c.status === "running" && (
+                            <button onClick={() => run(c.id, onPause)} disabled={busyId === c.id} title="Παύση" style={{ color: C.amber }}>
+                              <Pause size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
@@ -2983,6 +3432,10 @@ export default function App() {
   const [offersLoading, setOffersLoading] = useState(false);
   const [offersError, setOffersError] = useState("");
 
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
+  const [campaignsError, setCampaignsError] = useState("");
+
   const loadContacts = useCallback(async () => {
     setContactsLoading(true);
     setContactsError("");
@@ -3081,6 +3534,18 @@ export default function App() {
     }
   }, []);
 
+  const loadCampaigns = useCallback(async () => {
+    setCampaignsLoading(true);
+    setCampaignsError("");
+    try {
+      setCampaigns(await api.get("/campaigns"));
+    } catch (err) {
+      setCampaignsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα campaigns.");
+    } finally {
+      setCampaignsLoading(false);
+    }
+  }, []);
+
   const refreshAll = useCallback(() => {
     loadContacts();
     loadSequences();
@@ -3088,7 +3553,8 @@ export default function App() {
     loadActivity();
     loadTemplates();
     loadOffers();
-  }, [loadContacts, loadSequences, loadAnalytics, loadActivity, loadTemplates, loadOffers]);
+    loadCampaigns();
+  }, [loadContacts, loadSequences, loadAnalytics, loadActivity, loadTemplates, loadOffers, loadCampaigns]);
 
   // Session check on mount, plus handling the redirect back from Google OAuth
   // (?gmail_connected=1|0) without leaving it sitting in the address bar.
@@ -3131,16 +3597,22 @@ export default function App() {
     if (authState !== "authed") return;
     if (view === "analytics") loadAnalytics();
     if (view === "inbox") loadActivity();
-  }, [view, authState, loadAnalytics, loadActivity]);
+    // Running campaigns send in the background via the scheduler, one
+    // recipient at a time — reload whenever this tab is actually open so
+    // progress (sent/pending counts) looks live rather than stuck at
+    // whatever it was on last page load.
+    if (view === "campaigns") loadCampaigns();
+  }, [view, authState, loadAnalytics, loadActivity, loadCampaigns]);
 
   useEffect(() => {
     if (authState !== "authed") return;
     const id = setInterval(() => {
       loadAnalytics();
       loadActivity();
+      loadCampaigns();
     }, 30000);
     return () => clearInterval(id);
-  }, [authState, loadAnalytics, loadActivity]);
+  }, [authState, loadAnalytics, loadActivity, loadCampaigns]);
 
   async function handleLogout() {
     try {
@@ -3159,6 +3631,7 @@ export default function App() {
     setTemplates([]);
     setAdminUsers([]);
     setOffers([]);
+    setCampaigns([]);
   }
 
   async function handleCreateContact(data) {
@@ -3279,6 +3752,30 @@ export default function App() {
     await Promise.all([loadActivity(), loadContacts(), loadAnalytics()]);
   }
 
+  async function handleCreateCampaign(data) {
+    await api.post("/campaigns", data);
+    await loadCampaigns();
+  }
+
+  async function handleStartCampaign(campaignId) {
+    await api.post(`/campaigns/${campaignId}/start`);
+    await loadCampaigns();
+  }
+
+  async function handlePauseCampaign(campaignId) {
+    await api.post(`/campaigns/${campaignId}/pause`);
+    await loadCampaigns();
+  }
+
+  async function handleDeleteCampaign(campaignId) {
+    await api.del(`/campaigns/${campaignId}`);
+    await loadCampaigns();
+  }
+
+  async function handleLoadCampaignDetail(campaignId) {
+    return api.get(`/campaigns/${campaignId}`);
+  }
+
   function openComposeFor(contactId) {
     setComposeContactId(contactId);
     setComposeOpen(true);
@@ -3357,6 +3854,7 @@ export default function App() {
     sequences: sequences.filter((s) => s.active).length,
     templates: templates.length,
     offers: offers.length,
+    campaigns: campaigns.filter((c) => c.status === "running").length,
   };
 
   return (
@@ -3395,6 +3893,7 @@ export default function App() {
           <NavItem icon={Layers} label="Sequences" active={view === "sequences"} onClick={() => { setView("sequences"); setSidebarOpen(false); }} count={counts.sequences} />
           <NavItem icon={FileText} label="Templates" active={view === "templates"} onClick={() => { setView("templates"); setSidebarOpen(false); }} count={counts.templates} />
           <NavItem icon={Handshake} label="Offers" active={view === "offers"} onClick={() => { setView("offers"); setSidebarOpen(false); }} count={counts.offers} />
+          <NavItem icon={Megaphone} label="Campaigns" active={view === "campaigns"} onClick={() => { setView("campaigns"); setSidebarOpen(false); }} count={counts.campaigns} />
           <NavItem icon={BarChart3} label="Analytics" active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
           {user?.isAdmin && (
             <NavItem icon={ShieldCheck} label="Admin" active={view === "admin"} onClick={() => { setView("admin"); setSidebarOpen(false); }} />
@@ -3495,6 +3994,21 @@ export default function App() {
               onCreate={handleCreateOffer}
               onChangeStatus={handleChangeOfferStatus}
               onDelete={handleDeleteOffer}
+            />
+          )}
+          {view === "campaigns" && (
+            <CampaignsView
+              campaigns={campaigns}
+              loading={campaignsLoading}
+              error={campaignsError}
+              onReload={loadCampaigns}
+              contacts={contacts}
+              templates={templates}
+              onCreate={handleCreateCampaign}
+              onStart={handleStartCampaign}
+              onPause={handlePauseCampaign}
+              onDelete={handleDeleteCampaign}
+              onLoadDetail={handleLoadCampaignDetail}
             />
           )}
           {view === "analytics" && (
