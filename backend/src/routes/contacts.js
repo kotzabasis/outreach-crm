@@ -49,6 +49,10 @@ const contactSchema = z.object({
   tags: z.string().max(300).optional().default(""),
   website: z.string().max(300).optional().default("").transform(sanitizeUrlField),
   reportLink: z.string().max(500).optional().default("").transform(sanitizeUrlField),
+  gmb: z.string().max(500).optional().default("").transform(sanitizeUrlField),
+  facebook: z.string().max(500).optional().default("").transform(sanitizeUrlField),
+  instagram: z.string().max(500).optional().default("").transform(sanitizeUrlField),
+  googleReviews: z.string().max(500).optional().default("").transform(sanitizeUrlField),
   // Freeform personalization notes, usable as {{comments}} in email bodies.
   // Rich-text HTML now (bold/italic/lists) — the cap is higher than a
   // plain-text field would need to leave room for markup overhead.
@@ -82,6 +86,10 @@ router.get("/", async (req, res) => {
               { tags: { contains: String(q) } },
               { category: { contains: String(q) } },
               { website: { contains: String(q) } },
+              { gmb: { contains: String(q) } },
+              { facebook: { contains: String(q) } },
+              { instagram: { contains: String(q) } },
+              { googleReviews: { contains: String(q) } },
               { comments: { contains: String(q) } },
               { internalNotes: { contains: String(q) } },
             ],
@@ -115,7 +123,8 @@ router.get("/export", async (req, res) => {
   const contacts = await prisma.contact.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: "desc" } });
   const header = [
     "name", "firstName", "lastName", "email", "phone", "company", "category", "tags",
-    "website", "reportLink", "comments", "internalNotes", "status",
+    "website", "gmb", "facebook", "instagram", "googleReviews", "reportLink",
+    "comments", "internalNotes", "status",
   ];
   // CSV/formula injection guard: Excel/Sheets treat a cell starting with
   // =, +, -, or @ as a formula to evaluate, not literal text — a comments
@@ -217,6 +226,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       category: row.category || row.Category || "",
       tags: row.tags || row.Tags || "",
       website: row.website || row.Website || "",
+      gmb: row.gmb || row.GMB || row["Google My Business"] || "",
+      facebook: row.facebook || row.Facebook || "",
+      instagram: row.instagram || row.Instagram || "",
+      googleReviews: row.googleReviews || row.google_reviews || row["Google Reviews"] || "",
       reportLink: row.reportLink || row.report_link || row["Report link"] || "",
       comments: row.comments || row.Comments || row["σχόλια"] || row["Σχόλια"] || "",
       internalNotes: row.internalNotes || row.internal_notes || row["Internal Σχόλια"] || "",
@@ -286,16 +299,18 @@ router.patch("/:id", async (req, res) => {
 
   const allowed = [
     "name", "firstName", "lastName", "phone", "company", "category", "tags",
-    "website", "reportLink", "comments", "internalNotes", "status", "unsubscribed",
+    "website", "gmb", "facebook", "instagram", "googleReviews", "reportLink",
+    "comments", "internalNotes", "status", "unsubscribed",
   ];
   const data = {};
   for (const key of allowed) if (key in req.body) data[key] = req.body[key];
-  // PATCH doesn't go through contactSchema, so website/reportLink need the
+  // PATCH doesn't go through contactSchema, so every URL field needs the
   // same scheme sanitization applied here explicitly — otherwise editing a
   // contact from the drawer would bypass the guard that create/CSV-upload
   // already get.
-  if ("website" in data) data.website = sanitizeUrlField(data.website);
-  if ("reportLink" in data) data.reportLink = sanitizeUrlField(data.reportLink);
+  for (const urlField of ["website", "gmb", "facebook", "instagram", "googleReviews", "reportLink"]) {
+    if (urlField in data) data[urlField] = sanitizeUrlField(data[urlField]);
+  }
   // Manual follow-up reminder — independent of automatic sequence sends, so
   // it needs its own Date conversion rather than being passed through raw.
   if ("nextFollowUpAt" in req.body) {

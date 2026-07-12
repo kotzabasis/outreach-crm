@@ -111,6 +111,15 @@ model Contact {
   // resolved the same way as any other merge token, no click-tracking of its
   // own (unlike real send-time {{unsubscribe_link}} resolution).
   reportLink     String?  @default("")
+  // Online-presence links for local-business outreach — same treatment as
+  // website/reportLink (scheme-sanitized on write, usable as merge tokens).
+  // "gmb" (not the full "Google My Business") is the field's own short label
+  // in the UI, not an abbreviation of what's stored — it just holds the
+  // profile URL like the other three.
+  gmb            String?  @default("") // Google My Business profile link — {{gmb}}
+  facebook       String?  @default("") // {{facebook}}
+  instagram      String?  @default("") // {{instagram}}
+  googleReviews  String?  @default("") // {{google_reviews}}
   // Freeform personalization notes about this specific contact (what they do,
   // something they mentioned, a pain point) — separate from ContactNote
   // (timestamped CRM activity log). Usable as a merge field via {{comments}}

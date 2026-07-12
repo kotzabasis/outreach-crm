@@ -113,6 +113,10 @@ function renderTemplate(template, contact, { asHtml = true } = {}) {
     .replaceAll("{{company}}", text(contact.company || "εκεί"))
     .replaceAll("{{email}}", text(contact.email || ""))
     .replaceAll("{{website}}", sanitizeMergeUrl(contact.website))
+    .replaceAll("{{gmb}}", sanitizeMergeUrl(contact.gmb))
+    .replaceAll("{{facebook}}", sanitizeMergeUrl(contact.facebook))
+    .replaceAll("{{instagram}}", sanitizeMergeUrl(contact.instagram))
+    .replaceAll("{{google_reviews}}", sanitizeMergeUrl(contact.googleReviews))
     // A link to a personalized report/proposal for this contact — usable as
     // e.g. <a href="{{report_link}}">δείτε την αναφορά σας</a>.
     .replaceAll("{{report_link}}", sanitizeMergeUrl(contact.reportLink))

@@ -8,7 +8,8 @@ import {
   ShieldCheck, UserCheck, UserX, Sparkles, Euro, StickyNote,
   CalendarClock, Download, Eye, Handshake, Bold, Italic, Underline,
   List, ListOrdered, Link as LinkIcon, UserPlus, Menu,
-  AlignLeft, AlignCenter, AlignRight, Info, Megaphone, Play, Pause, Globe
+  AlignLeft, AlignCenter, AlignRight, Info, Megaphone, Play, Pause, Globe,
+  Facebook, Instagram, MapPin, Star
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -44,6 +45,10 @@ const MERGE_SAMPLE = {
   company: "Acme A.E.",
   email: "maria@acme.gr",
   website: "acme.gr",
+  gmb: "#",
+  facebook: "#",
+  instagram: "#",
+  googleReviews: "#",
   reportLink: "#",
   comments: "μου άρεσε πολύ το τελευταίο σας project",
 };
@@ -87,6 +92,10 @@ function renderPreview(text) {
     .split("{{company}}").join(MERGE_SAMPLE.company)
     .split("{{email}}").join(MERGE_SAMPLE.email)
     .split("{{website}}").join(MERGE_SAMPLE.website)
+    .split("{{gmb}}").join(MERGE_SAMPLE.gmb)
+    .split("{{facebook}}").join(MERGE_SAMPLE.facebook)
+    .split("{{instagram}}").join(MERGE_SAMPLE.instagram)
+    .split("{{google_reviews}}").join(MERGE_SAMPLE.googleReviews)
     .split("{{report_link}}").join(MERGE_SAMPLE.reportLink)
     .split("{{comments}}").join(MERGE_SAMPLE.comments)
     // "#" keeps the preview link clickable-looking without pointing anywhere
@@ -756,7 +765,8 @@ function GmailBanner({ user }) {
 function NewContactModal({ onClose, onCreate }) {
   const [form, setForm] = useState({
     name: "", firstName: "", lastName: "", email: "", phone: "", company: "",
-    category: "", tags: "", website: "", reportLink: "", comments: "", internalNotes: "",
+    category: "", tags: "", website: "", gmb: "", facebook: "", instagram: "",
+    googleReviews: "", reportLink: "", comments: "", internalNotes: "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -807,6 +817,18 @@ function NewContactModal({ onClose, onCreate }) {
           </div>
           <input placeholder="Website (προαιρετικό — {{website}} σε emails)" value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <div className="grid grid-cols-2 gap-2">
+            <input placeholder="GMB" value={form.gmb} onChange={(e) => setForm((f) => ({ ...f, gmb: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <input placeholder="Facebook" value={form.facebook} onChange={(e) => setForm((f) => ({ ...f, facebook: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input placeholder="Instagram" value={form.instagram} onChange={(e) => setForm((f) => ({ ...f, instagram: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <input placeholder="Google Reviews" value={form.googleReviews} onChange={(e) => setForm((f) => ({ ...f, googleReviews: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
           <input placeholder="Report link (προαιρετικό — {{report_link}} σε emails)" value={form.reportLink} onChange={(e) => setForm((f) => ({ ...f, reportLink: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div>
@@ -855,7 +877,8 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [editingContact, setEditingContact] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: "", firstName: "", lastName: "", phone: "", company: "",
-    category: "", tags: "", website: "", reportLink: "",
+    category: "", tags: "", website: "", gmb: "", facebook: "", instagram: "",
+    googleReviews: "", reportLink: "",
   });
   const [savingContact, setSavingContact] = useState(false);
 
@@ -897,6 +920,10 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
         category: data.category || "",
         tags: data.tags || "",
         website: data.website || "",
+        gmb: data.gmb || "",
+        facebook: data.facebook || "",
+        instagram: data.instagram || "",
+        googleReviews: data.googleReviews || "",
         reportLink: data.reportLink || "",
       });
     } catch (err) {
@@ -979,6 +1006,10 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       category: detail.category || "",
       tags: detail.tags || "",
       website: detail.website || "",
+      gmb: detail.gmb || "",
+      facebook: detail.facebook || "",
+      instagram: detail.instagram || "",
+      googleReviews: detail.googleReviews || "",
       reportLink: detail.reportLink || "",
     });
     setEditingContact(false);
@@ -1046,6 +1077,22 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                     <input value={contactForm.website} onChange={(e) => setContactForm((f) => ({ ...f, website: e.target.value }))}
                       placeholder="Website"
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                    <input value={contactForm.gmb} onChange={(e) => setContactForm((f) => ({ ...f, gmb: e.target.value }))}
+                      placeholder="GMB"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={contactForm.facebook} onChange={(e) => setContactForm((f) => ({ ...f, facebook: e.target.value }))}
+                      placeholder="Facebook"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                    <input value={contactForm.instagram} onChange={(e) => setContactForm((f) => ({ ...f, instagram: e.target.value }))}
+                      placeholder="Instagram"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={contactForm.googleReviews} onChange={(e) => setContactForm((f) => ({ ...f, googleReviews: e.target.value }))}
+                      placeholder="Google Reviews"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                     <input value={contactForm.reportLink} onChange={(e) => setContactForm((f) => ({ ...f, reportLink: e.target.value }))}
                       placeholder="Report link"
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
@@ -1067,12 +1114,40 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                     <div className="text-lg font-semibold" style={{ color: C.ink }}>{detail.name}</div>
                     <div className="text-sm" style={{ color: C.slate }}>{detail.email}</div>
                     <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: C.slate }}>
-                      {detail.phone && <span className="flex items-center gap-1"><Phone size={12} /> {detail.phone}</span>}
+                      {detail.phone && (
+                        <a href={`tel:${detail.phone}`} className="flex items-center gap-1 hover:underline" style={{ color: C.slate }} title="Κλήση">
+                          <Phone size={12} /> {detail.phone}
+                        </a>
+                      )}
                       {detail.company && <span className="flex items-center gap-1"><Building2 size={12} /> {detail.company}</span>}
                       {detail.website && (
                         <a href={normalizeLinkUrl(detail.website)} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-1 underline" style={{ color: C.sky }}>
                           <Globe size={12} /> {detail.website}
+                        </a>
+                      )}
+                      {detail.gmb && (
+                        <a href={normalizeLinkUrl(detail.gmb)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 underline" style={{ color: C.sky }}>
+                          <MapPin size={12} /> GMB
+                        </a>
+                      )}
+                      {detail.facebook && (
+                        <a href={normalizeLinkUrl(detail.facebook)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 underline" style={{ color: C.sky }}>
+                          <Facebook size={12} /> Facebook
+                        </a>
+                      )}
+                      {detail.instagram && (
+                        <a href={normalizeLinkUrl(detail.instagram)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 underline" style={{ color: C.sky }}>
+                          <Instagram size={12} /> Instagram
+                        </a>
+                      )}
+                      {detail.googleReviews && (
+                        <a href={normalizeLinkUrl(detail.googleReviews)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 underline" style={{ color: C.sky }}>
+                          <Star size={12} /> Reviews
                         </a>
                       )}
                       {detail.reportLink && (
@@ -1336,7 +1411,8 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
       // user's own private data, not something being sent anywhere).
       const haystack = [
         c.name, c.firstName, c.lastName, c.email, c.company, c.phone,
-        c.website, c.category, c.tags, c.comments, c.internalNotes,
+        c.website, c.gmb, c.facebook, c.instagram, c.googleReviews,
+        c.category, c.tags, c.comments, c.internalNotes,
       ].filter(Boolean).join(" ").toLowerCase();
       const matchesQuery = !q || haystack.includes(q);
       const matchesStatus = statusFilter === "all" || c.status === statusFilter;
@@ -1631,7 +1707,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
                 <th className="font-medium pb-3">Τηλέφωνο</th>
                 <th className="font-medium pb-3">Εταιρεία</th>
                 <th className="font-medium pb-3">Κατηγορία</th>
-                <th className="font-medium pb-3">Κατάσταση</th>
+                <th className="font-medium pb-3">Website</th>
                 <th className="font-medium pb-3">Sequence</th>
                 <th className="font-medium pb-3">Ετικέτες</th>
                 <th className="font-medium pb-3">Υπενθύμιση</th>
@@ -1661,10 +1737,23 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
                     <div className="text-xs" style={{ color: C.slate }}>{c.email}</div>
                   </td>
                   <td className="py-3" style={{ color: C.ink }}>
-                    <div className="flex items-center gap-1.5">
-                      <Phone size={13} style={{ color: C.slate }} />
-                      {c.phone || "—"}
-                    </div>
+                    {c.phone ? (
+                      // tel: links hand off to whatever's registered as the OS's
+                      // default handler for that scheme — a desktop VoIP softphone
+                      // (Zoiper, 3CX, Linphone, etc.), Skype, or the phone app on
+                      // mobile. SDLoop has no calling integration of its own, so
+                      // this is the low-effort way to get one-click dialing.
+                      <a href={`tel:${c.phone}`} onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 hover:underline" style={{ color: C.ink }} title="Κλήση">
+                        <Phone size={13} style={{ color: C.slate }} />
+                        {c.phone}
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <Phone size={13} style={{ color: C.slate }} />
+                        —
+                      </div>
+                    )}
                   </td>
                   <td className="py-3" style={{ color: C.ink }}>
                     <div className="flex items-center gap-1.5">
@@ -1673,7 +1762,18 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
                     </div>
                   </td>
                   <td className="py-3"><CategoryChip>{c.category}</CategoryChip></td>
-                  <td className="py-3"><Pill status={c.status} /></td>
+                  <td className="py-3">
+                    {c.website ? (
+                      <a href={normalizeLinkUrl(c.website)} target="_blank" rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 hover:underline max-w-[160px] truncate" style={{ color: C.sky }} title={c.website}>
+                        <Globe size={13} className="shrink-0" style={{ color: C.slate }} />
+                        <span className="truncate">{c.website}</span>
+                      </a>
+                    ) : (
+                      <span style={{ color: C.slate }}>—</span>
+                    )}
+                  </td>
                   <td className="py-3" style={{ color: C.ink }}>
                     {c.currentSequence ? `${c.currentSequence} · βήμα ${c.currentStep}` : "—"}
                   </td>
@@ -1772,7 +1872,7 @@ function TemplateModal({ initial, onClose, onSave }) {
 
             <div className="flex gap-1.5 flex-wrap">
               <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
-              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{report_link}}", "{{comments}}"].map((tok) => (
+              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{gmb}}", "{{facebook}}", "{{instagram}}", "{{google_reviews}}", "{{report_link}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
                   {tok}
@@ -3151,7 +3251,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
 
             <div className="flex gap-1.5 flex-wrap">
               <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
-              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{report_link}}", "{{comments}}"].map((tok) => (
+              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{gmb}}", "{{facebook}}", "{{instagram}}", "{{google_reviews}}", "{{report_link}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
                   {tok}
