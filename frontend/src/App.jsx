@@ -56,8 +56,14 @@ const SPAM_WORDS = [
 // anymore. {{unsubscribe_link}} is resolved to the real per-send URL
 // server-side at send time (see injectTracking in gmailClient.js); here in
 // the editor/preview it's just a token like {{name}}.
+//
+// Leads with an empty paragraph on purpose: with only the disclaimer <div>
+// in the editor, contentEditable has nowhere else to put the caret, so
+// clicking "above" it just drops you at the start of the disclaimer's own
+// text — there's no way to write your own content first. The empty <p>
+// gives the cursor a real line to land on above the disclaimer.
 const DEFAULT_DISCLAIMER_HTML =
-  '<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:11px;color:#94a3b8;">Αν δεν θέλετε να λάβετε καμία άλλη επικοινωνία από εμάς, <a href="{{unsubscribe_link}}" style="color:#94a3b8;text-decoration:underline;">πατήστε εδώ</a>.</div>';
+  '<p><br></p><div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:11px;color:#94a3b8;">Αν δεν θέλετε να λάβετε καμία άλλη επικοινωνία από εμάς, <a href="{{unsubscribe_link}}" style="color:#94a3b8;text-decoration:underline;">πατήστε εδώ</a>.</div>';
 
 // A body is "compliant" if it still contains a real unsubscribe link — check
 // the raw HTML (not the tag-stripped plain text used for spam/word counts),
@@ -775,7 +781,7 @@ function NewContactModal({ onClose, onCreate }) {
   );
 }
 
-function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments }) {
+function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, onUpdateContact }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -788,6 +794,12 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [comments, setComments] = useState("");
   const [savingComments, setSavingComments] = useState(false);
   const [commentsSaved, setCommentsSaved] = useState(false);
+  // Editing name/phone/company/category/tags updates only Contact's own
+  // columns (see PATCH /contacts/:id) — it never touches emailLogs, notes,
+  // or offers, so the send history/timeline below is never affected by this.
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactForm, setContactForm] = useState({ name: "", phone: "", company: "", category: "", tags: "" });
+  const [savingContact, setSavingContact] = useState(false);
 
   async function handleMarkReplied() {
     setMarkingReplied(true);
@@ -817,6 +829,13 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       setDetail(data);
       setFollowUp(data.nextFollowUpAt ? data.nextFollowUpAt.slice(0, 10) : "");
       setComments(data.comments || "");
+      setContactForm({
+        name: data.name || "",
+        phone: data.phone || "",
+        company: data.company || "",
+        category: data.category || "",
+        tags: data.tags || "",
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στοιχεία επαφής.");
     } finally {
@@ -864,6 +883,28 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
     }
   }
 
+  async function handleSaveContact() {
+    setSavingContact(true);
+    try {
+      await onUpdateContact(contactId, contactForm);
+      await load();
+      setEditingContact(false);
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
+  function handleCancelEditContact() {
+    setContactForm({
+      name: detail.name || "",
+      phone: detail.phone || "",
+      company: detail.company || "",
+      category: detail.category || "",
+      tags: detail.tags || "",
+    });
+    setEditingContact(false);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <div className="w-full max-w-lg h-full bg-white overflow-auto">
@@ -892,16 +933,60 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
         ) : detail ? (
           <div className="p-6 space-y-6">
             <div>
-              <div className="text-lg font-semibold" style={{ color: C.ink }}>{detail.name}</div>
-              <div className="text-sm" style={{ color: C.slate }}>{detail.email}</div>
-              <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: C.slate }}>
-                {detail.phone && <span className="flex items-center gap-1"><Phone size={12} /> {detail.phone}</span>}
-                {detail.company && <span className="flex items-center gap-1"><Building2 size={12} /> {detail.company}</span>}
-              </div>
-              <div className="flex gap-1.5 flex-wrap mt-2">
-                {(detail.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
-                {detail.category && <CategoryChip>{detail.category}</CategoryChip>}
-              </div>
+              {editingContact ? (
+                <div className="space-y-2">
+                  <input value={contactForm.name} onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="Όνομα"
+                    className="w-full rounded-lg px-3 py-1.5 text-sm font-semibold border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                  <div className="text-sm" style={{ color: C.slate }}>{detail.email}</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={contactForm.phone} onChange={(e) => setContactForm((f) => ({ ...f, phone: e.target.value }))}
+                      placeholder="Τηλέφωνο"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                    <input value={contactForm.company} onChange={(e) => setContactForm((f) => ({ ...f, company: e.target.value }))}
+                      placeholder="Εταιρεία"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={contactForm.category} onChange={(e) => setContactForm((f) => ({ ...f, category: e.target.value }))}
+                      placeholder="Κατηγορία"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                    <input value={contactForm.tags} onChange={(e) => setContactForm((f) => ({ ...f, tags: e.target.value }))}
+                      placeholder="Ετικέτες (χωρισμένες με κόμμα)"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button type="button" onClick={handleSaveContact} disabled={savingContact}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: C.sky, opacity: savingContact ? 0.6 : 1 }}>
+                      {savingContact && <Loader2 size={12} className="animate-spin" />} Αποθήκευση
+                    </button>
+                    <button type="button" onClick={handleCancelEditContact} disabled={savingContact}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
+                      Ακύρωση
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-lg font-semibold" style={{ color: C.ink }}>{detail.name}</div>
+                    <div className="text-sm" style={{ color: C.slate }}>{detail.email}</div>
+                    <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: C.slate }}>
+                      {detail.phone && <span className="flex items-center gap-1"><Phone size={12} /> {detail.phone}</span>}
+                      {detail.company && <span className="flex items-center gap-1"><Building2 size={12} /> {detail.company}</span>}
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap mt-2">
+                      {(detail.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
+                      {detail.category && <CategoryChip>{detail.category}</CategoryChip>}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setEditingContact(true)}
+                    className="flex items-center gap-1 shrink-0 rounded-lg px-2 py-1 text-xs font-medium" style={{ color: C.sky }}
+                    title="Επεξεργασία στοιχείων επαφής">
+                    <Pencil size={12} /> Επεξεργασία
+                  </button>
+                </div>
+              )}
               <div className="mt-3">
                 {detail.unsubscribed ? (
                   <div className="flex items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14` }}>
@@ -1065,7 +1150,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   );
 }
 
-function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, openContactId, onOpenContactHandled }) {
+function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, onUpdateContact, openContactId, onOpenContactHandled }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -1222,6 +1307,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           onMarkReplied={onMarkReplied}
           onToggleUnsubscribed={onToggleUnsubscribed}
           onUpdateComments={onUpdateComments}
+          onUpdateContact={onUpdateContact}
         />
       )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-5 border-b" style={{ borderColor: C.line }}>
@@ -3798,6 +3884,15 @@ export default function App() {
     await api.patch(`/contacts/${contactId}`, { comments });
   }
 
+  // Editing name/phone/company/category/tags from the contact drawer. Unlike
+  // comments, these fields ARE shown in the contacts table, so refresh the
+  // list too — PATCH only ever touches the Contact row itself, so send
+  // history/notes/offers are untouched by this.
+  async function handleUpdateContact(contactId, data) {
+    await api.patch(`/contacts/${contactId}`, data);
+    await loadContacts();
+  }
+
   function handleSelectFromSearch(contactId) {
     setView("contacts");
     setPendingOpenContactId(contactId);
@@ -3954,6 +4049,7 @@ export default function App() {
               onMarkReplied={handleMarkReplied}
               onToggleUnsubscribed={handleToggleUnsubscribed}
               onUpdateComments={handleUpdateComments}
+              onUpdateContact={handleUpdateContact}
               openContactId={pendingOpenContactId}
               onOpenContactHandled={() => setPendingOpenContactId("")}
             />
