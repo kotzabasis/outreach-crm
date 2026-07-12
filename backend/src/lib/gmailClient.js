@@ -62,20 +62,60 @@ async function getAuthedClientForGmailAccount(gmailAccount) {
   return client;
 }
 
-function renderTemplate(template, contact) {
+// Merge substitution is plain string replacement into the middle of an
+// already-built HTML email, so *where* a value lands matters:
+// name/company/email/first_name/last_name normally sit in text content —
+// HTML-entity-escaped so a contact whose name contains "<" or "&" can't
+// break out of its surrounding tag and inject markup into a real outgoing
+// email. website/report_link normally sit inside an href="..." attribute —
+// escaping alone wouldn't stop an explicit javascript:/data: scheme from
+// executing on click, so they're routed through the same scheme allowlist
+// used when the contact is saved (routes/contacts.js sanitizeUrlField) as a
+// second, independent check, plus quote-escaping so a literal `"` in the
+// value can't break out of the attribute itself. comments is deliberately
+// left as raw HTML — it's meant to render as rich-text formatting, same as
+// any other template body, and is sanitized client-side before it's ever
+// saved (see sanitizeRichHtml in App.jsx).
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeMergeUrl(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  const schemeMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+  const isSafeScheme = !schemeMatch || ["http", "https", "mailto"].includes(schemeMatch[1].toLowerCase());
+  if (!isSafeScheme) return "";
+  return trimmed.replace(/"/g, "%22");
+}
+
+// `asHtml` controls whether the text-content tokens get HTML-escaped —
+// true for the body (it's HTML), false for the subject (it's a plain-text
+// mail header: escaping "&" to "&amp;" there would show up literally as
+// "&amp;" in the recipient's inbox instead of being decoded by anything).
+// The URL tokens go through the same scheme allowlist either way — a
+// javascript:/data: value isn't safe in a subject either, even if it can't
+// execute there, and this keeps the two contexts from silently diverging.
+function renderTemplate(template, contact, { asHtml = true } = {}) {
+  const text = asHtml ? escapeHtml : (v) => String(v || "");
   return template
     // Prefer the dedicated firstName column when set — falls back to
     // splitting `name` on whitespace for contacts created before that field
     // existed (or imported without it).
-    .replaceAll("{{first_name}}", contact.firstName || contact.name?.split(" ")[0] || "εκεί")
-    .replaceAll("{{last_name}}", contact.lastName || "")
-    .replaceAll("{{name}}", contact.name || "")
-    .replaceAll("{{company}}", contact.company || "εκεί")
-    .replaceAll("{{email}}", contact.email || "")
-    .replaceAll("{{website}}", contact.website || "")
+    .replaceAll("{{first_name}}", text(contact.firstName || contact.name?.split(" ")[0] || "εκεί"))
+    .replaceAll("{{last_name}}", text(contact.lastName || ""))
+    .replaceAll("{{name}}", text(contact.name || ""))
+    .replaceAll("{{company}}", text(contact.company || "εκεί"))
+    .replaceAll("{{email}}", text(contact.email || ""))
+    .replaceAll("{{website}}", sanitizeMergeUrl(contact.website))
     // A link to a personalized report/proposal for this contact — usable as
     // e.g. <a href="{{report_link}}">δείτε την αναφορά σας</a>.
-    .replaceAll("{{report_link}}", contact.reportLink || "")
+    .replaceAll("{{report_link}}", sanitizeMergeUrl(contact.reportLink))
     // Free-form per-contact notes (Contact.comments) usable as merge content —
     // e.g. "hey, saw you {{comments}}" for something specific to that lead.
     // Internal-only notes (Contact.internalNotes) are deliberately NOT a
@@ -184,7 +224,7 @@ async function sendTrackedEmail({ gmailAccount, contact, subject, body, tracking
   const client = await getAuthedClientForGmailAccount(gmailAccount);
   const gmail = google.gmail({ version: "v1", auth: client });
 
-  const renderedSubject = renderTemplate(subject, contact);
+  const renderedSubject = renderTemplate(subject, contact, { asHtml: false });
   const renderedBodyHtml = renderTemplate(body, contact);
   const htmlWithTracking = injectTracking(renderedBodyHtml, trackingId);
 

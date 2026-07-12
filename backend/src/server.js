@@ -1,6 +1,8 @@
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
+const { Pool } = require("pg");
+const pgSessionStore = require("connect-pg-simple")(session);
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -19,7 +21,7 @@ const campaignRoutes = require("./routes/campaigns");
 const { startScheduler } = require("./lib/scheduler");
 const prisma = require("./db");
 
-for (const required of ["SESSION_SECRET", "ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]) {
+for (const required of ["SESSION_SECRET", "ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "DATABASE_URL"]) {
   if (!process.env[required]) {
     console.error(`Missing required env var: ${required}. Copy .env.example to .env and fill it in.`);
     process.exit(1);
@@ -43,8 +45,28 @@ app.use(
 app.use(express.json({ limit: "15mb" }));
 app.use(cookieParser());
 
+// Sessions are stored in Postgres (the same Neon DB Prisma already talks
+// to), not the default in-memory store — express-session's MemoryStore
+// prints an explicit "not designed for a production environment" warning on
+// every boot (it leaks memory and can't be shared across processes), and
+// concretely for this app it meant every deploy silently logged everyone
+// out, since a fresh process starts with an empty in-memory session table.
+// connect-pg-simple manages its own `session` table directly via SQL
+// (independent of the Prisma schema/migrations) and creates it on first
+// boot if missing.
+const pgPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }, // Neon requires SSL; no local CA bundle to verify against here
+});
+pgPool.on("error", (err) => {
+  // A dropped idle connection in the pool shouldn't crash the whole process —
+  // pg's default behavior otherwise is to raise this as an unhandled error.
+  console.error("Session store pool error:", err.message);
+});
+
 app.use(
   session({
+    store: new pgSessionStore({ pool: pgPool, tableName: "session", createTableIfMissing: true }),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,

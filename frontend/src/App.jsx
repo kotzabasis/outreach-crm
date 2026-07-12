@@ -15,6 +15,7 @@ import {
   BarChart, Bar, Funnel, FunnelChart, LabelList
 } from "recharts";
 import { api, API_URL, ApiError } from "./lib/api";
+import DOMPurify from "dompurify";
 
 // ---------- Design tokens ----------
 // Color: navy #163B73 (primary), sky #2E6EE8 (accent/action), pale #EEF3FC (tint bg),
@@ -389,6 +390,19 @@ function normalizeLinkUrl(raw) {
   return `https://${trimmed}`;
 }
 
+// Every RichTextEditor value gets routed through here before it's ever
+// assigned to innerHTML. This isn't just content we typed ourselves — it can
+// also be data loaded straight from the server (a contact's `comments`, a
+// template/step/campaign body), which itself can originate from a CSV
+// upload of a list we didn't author. Without this, a stray
+// <img src=x onerror=...> in an imported column would execute the instant
+// the record is opened. DOMPurify's default profile strips
+// script/onerror/javascript: hrefs etc. while keeping the formatting tags
+// (b/i/u/lists/links/inline style) the toolbar actually produces.
+function sanitizeRichHtml(html) {
+  return DOMPurify.sanitize(html || "");
+}
+
 // Minimal Gmail-style toolbar over a contentEditable div — no external
 // dependency, since bold/lists/links/attachments are all the app needs.
 function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, minHeight = 140 }) {
@@ -397,15 +411,16 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
   const [attachError, setAttachError] = useState("");
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== (value || "")) {
-      editorRef.current.innerHTML = value || "";
+    const clean = sanitizeRichHtml(value);
+    if (editorRef.current && editorRef.current.innerHTML !== clean) {
+      editorRef.current.innerHTML = clean;
     }
   }, [value]);
 
   function exec(command, arg) {
     editorRef.current?.focus();
     document.execCommand(command, false, arg);
-    onChange(editorRef.current?.innerHTML || "");
+    onChange(sanitizeRichHtml(editorRef.current?.innerHTML || ""));
   }
 
   function handleLink() {
@@ -453,7 +468,7 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
         `<a href="${safeUrl}" style="color:${C.sky};text-decoration:underline;" target="_blank" rel="noopener noreferrer">${safeText}</a>`
       );
     }
-    onChange(editorRef.current?.innerHTML || "");
+    onChange(sanitizeRichHtml(editorRef.current?.innerHTML || ""));
   }
 
   async function handleFiles(e) {
@@ -513,7 +528,7 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
       <div
         ref={editorRef}
         contentEditable
-        onInput={() => onChange(editorRef.current?.innerHTML || "")}
+        onInput={() => onChange(sanitizeRichHtml(editorRef.current?.innerHTML || ""))}
         className="px-3 py-2 text-sm outline-none overflow-auto"
         style={{ color: C.ink, minHeight, maxHeight: minHeight * 2.4 }}
         suppressContentEditableWarning
@@ -1061,7 +1076,11 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                         </a>
                       )}
                       {detail.reportLink && (
-                        <a href={detail.reportLink} target="_blank" rel="noopener noreferrer"
+                        // Routed through normalizeLinkUrl like website, not rendered raw —
+                        // it only ever passes through http(s)/mailto or gets an https://
+                        // prefix, so a javascript:/data: value (e.g. from an imported CSV)
+                        // can't execute when clicked.
+                        <a href={normalizeLinkUrl(detail.reportLink)} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-1 underline" style={{ color: C.sky }}>
                           <LinkIcon size={12} /> Report link
                         </a>
@@ -3860,11 +3879,30 @@ export default function App() {
   useEffect(() => {
     if (authState !== "authed") return;
     const id = setInterval(() => {
+      // Skip the round-trip entirely while the tab isn't visible (switched
+      // away, minimized, different tab focused) — there's no one looking at
+      // the result, so it was just burning requests/battery every 30s for
+      // nothing. Whatever's stale gets refreshed as soon as the tab is
+      // focused again via the visibilitychange listener below.
+      if (document.hidden) return;
       loadAnalytics();
       loadActivity();
       loadCampaigns();
     }, 30000);
     return () => clearInterval(id);
+  }, [authState, loadAnalytics, loadActivity, loadCampaigns]);
+
+  useEffect(() => {
+    if (authState !== "authed") return;
+    function handleVisibilityChange() {
+      if (!document.hidden) {
+        loadAnalytics();
+        loadActivity();
+        loadCampaigns();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [authState, loadAnalytics, loadActivity, loadCampaigns]);
 
   async function handleLogout() {

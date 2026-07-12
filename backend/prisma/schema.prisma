@@ -330,4 +330,10 @@ model TrackingEvent {
   // open rates.
   isBot       Boolean  @default(false)
   occurredAt  DateTime @default(now())
+
+  // Queried by emailLogId directly (tracking.js) and joined via
+  // emailLog.userId in analytics.js's /timeline — neither had an index to
+  // use before this, meaning both went through a full scan as this table
+  // grows (one row per open/click, so it grows fast).
+  @@index([emailLogId])
 }

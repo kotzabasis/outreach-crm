@@ -20,6 +20,24 @@ const upload = multer({
   },
 });
 
+// website/reportLink get rendered as raw <a href> both in the app (contact
+// drawer) and, via {{website}}/{{report_link}} merge tokens, inside real
+// outgoing emails (see gmailClient.renderTemplate). A bare domain with no
+// scheme is fine (the frontend prepends https:// at display time) — but an
+// explicit *other* scheme (javascript:, data:, vbscript:, file:, ...) would
+// execute when clicked. Strip it to empty rather than failing the whole
+// contact/import row over one bad field — this runs on every write path
+// (create, CSV upload, PATCH), so bad data can never reach storage.
+function sanitizeUrlField(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  const schemeMatch = trimmed.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+  if (!schemeMatch) return trimmed; // no scheme at all — bare domain/path, fine
+  const scheme = schemeMatch[1].toLowerCase();
+  if (scheme === "http" || scheme === "https" || scheme === "mailto") return trimmed;
+  return "";
+}
+
 const contactSchema = z.object({
   name: z.string().min(1).max(200),
   firstName: z.string().max(100).optional().default(""),
@@ -29,8 +47,8 @@ const contactSchema = z.object({
   company: z.string().max(200).optional().default(""),
   category: z.string().max(100).optional().default(""),
   tags: z.string().max(300).optional().default(""),
-  website: z.string().max(300).optional().default(""),
-  reportLink: z.string().max(500).optional().default(""),
+  website: z.string().max(300).optional().default("").transform(sanitizeUrlField),
+  reportLink: z.string().max(500).optional().default("").transform(sanitizeUrlField),
   // Freeform personalization notes, usable as {{comments}} in email bodies.
   // Rich-text HTML now (bold/italic/lists) — the cap is higher than a
   // plain-text field would need to leave room for markup overhead.
@@ -99,7 +117,17 @@ router.get("/export", async (req, res) => {
     "name", "firstName", "lastName", "email", "phone", "company", "category", "tags",
     "website", "reportLink", "comments", "internalNotes", "status",
   ];
-  const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  // CSV/formula injection guard: Excel/Sheets treat a cell starting with
+  // =, +, -, or @ as a formula to evaluate, not literal text — a comments
+  // or company field containing something like =HYPERLINK(...) would
+  // execute when the exported file is opened. Prefixing with a leading
+  // apostrophe (the standard OWASP mitigation) forces it to be read as text.
+  const needsFormulaGuard = (v) => /^[=+\-@]/.test(v);
+  const escape = (v) => {
+    let s = String(v ?? "");
+    if (needsFormulaGuard(s)) s = `'${s}`;
+    return `"${s.replace(/"/g, '""')}"`;
+  };
   const rows = contacts.map((c) => header.map((h) => escape(c[h])).join(","));
   const csv = [header.join(","), ...rows].join("\n");
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -262,6 +290,12 @@ router.patch("/:id", async (req, res) => {
   ];
   const data = {};
   for (const key of allowed) if (key in req.body) data[key] = req.body[key];
+  // PATCH doesn't go through contactSchema, so website/reportLink need the
+  // same scheme sanitization applied here explicitly — otherwise editing a
+  // contact from the drawer would bypass the guard that create/CSV-upload
+  // already get.
+  if ("website" in data) data.website = sanitizeUrlField(data.website);
+  if ("reportLink" in data) data.reportLink = sanitizeUrlField(data.reportLink);
   // Manual follow-up reminder — independent of automatic sequence sends, so
   // it needs its own Date conversion rather than being passed through raw.
   if ("nextFollowUpAt" in req.body) {

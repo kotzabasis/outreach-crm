@@ -83,14 +83,23 @@ router.get("/click/:trackingId", async (req, res) => {
   }
 
   const emailLog = await prisma.emailLog.findUnique({ where: { trackingId } }).catch(() => null);
-  if (emailLog) {
-    await prisma.trackingEvent
-      .create({ data: { emailLogId: emailLog.id, type: "click", url: target.toString() } })
-      .catch(() => {});
-    await prisma.contact
-      .update({ where: { id: emailLog.contactId }, data: { lastActivityAt: new Date() } })
-      .catch(() => {});
-  }
+  // Unlike /open/:trackingId.png and /unsubscribe/:trackingId (which always
+  // respond the same way regardless of validity, so as not to reveal
+  // anything about a tracking id to whoever's requesting it), this route
+  // must NOT redirect for an unknown trackingId — doing so would let anyone
+  // turn this domain into a generic open-redirector (…/track/click/anything
+  // ?url=https://phishing-site.example) for use in someone else's phishing
+  // links, since the url param would be honored no matter what trackingId
+  // is passed. A redirect here only ever makes sense for a click on a link
+  // this app itself actually sent.
+  if (!emailLog) return res.status(404).send("Unknown tracking id.");
+
+  await prisma.trackingEvent
+    .create({ data: { emailLogId: emailLog.id, type: "click", url: target.toString() } })
+    .catch(() => {});
+  await prisma.contact
+    .update({ where: { id: emailLog.contactId }, data: { lastActivityAt: new Date() } })
+    .catch(() => {});
 
   res.redirect(302, target.toString());
 });
