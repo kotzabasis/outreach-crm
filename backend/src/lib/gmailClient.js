@@ -64,12 +64,22 @@ async function getAuthedClientForGmailAccount(gmailAccount) {
 
 function renderTemplate(template, contact) {
   return template
-    .replaceAll("{{first_name}}", contact.name?.split(" ")[0] || "εκεί")
+    // Prefer the dedicated firstName column when set — falls back to
+    // splitting `name` on whitespace for contacts created before that field
+    // existed (or imported without it).
+    .replaceAll("{{first_name}}", contact.firstName || contact.name?.split(" ")[0] || "εκεί")
+    .replaceAll("{{last_name}}", contact.lastName || "")
     .replaceAll("{{name}}", contact.name || "")
     .replaceAll("{{company}}", contact.company || "εκεί")
     .replaceAll("{{email}}", contact.email || "")
+    .replaceAll("{{website}}", contact.website || "")
+    // A link to a personalized report/proposal for this contact — usable as
+    // e.g. <a href="{{report_link}}">δείτε την αναφορά σας</a>.
+    .replaceAll("{{report_link}}", contact.reportLink || "")
     // Free-form per-contact notes (Contact.comments) usable as merge content —
     // e.g. "hey, saw you {{comments}}" for something specific to that lead.
+    // Internal-only notes (Contact.internalNotes) are deliberately NOT a
+    // merge field — they must never be able to leak into an outgoing email.
     .replaceAll("{{comments}}", contact.comments || "");
 }
 

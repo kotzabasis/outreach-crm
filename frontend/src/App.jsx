@@ -8,7 +8,7 @@ import {
   ShieldCheck, UserCheck, UserX, Sparkles, Euro, StickyNote,
   CalendarClock, Download, Eye, Handshake, Bold, Italic, Underline,
   List, ListOrdered, Link as LinkIcon, UserPlus, Menu,
-  AlignLeft, AlignCenter, AlignRight, Info, Megaphone, Play, Pause
+  AlignLeft, AlignCenter, AlignRight, Info, Megaphone, Play, Pause, Globe
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -38,8 +38,12 @@ const SUGGESTED_DELAYS = [0, 3, 7, 14, 21, 30];
 
 const MERGE_SAMPLE = {
   name: "Μαρία Παπαδοπούλου",
+  firstName: "Μαρία",
+  lastName: "Παπαδοπούλου",
   company: "Acme A.E.",
   email: "maria@acme.gr",
+  website: "acme.gr",
+  reportLink: "#",
   comments: "μου άρεσε πολύ το τελευταίο σας project",
 };
 const SPAM_WORDS = [
@@ -77,8 +81,12 @@ function renderPreview(text) {
   if (!text) return "";
   return text
     .split("{{name}}").join(MERGE_SAMPLE.name)
+    .split("{{first_name}}").join(MERGE_SAMPLE.firstName)
+    .split("{{last_name}}").join(MERGE_SAMPLE.lastName)
     .split("{{company}}").join(MERGE_SAMPLE.company)
     .split("{{email}}").join(MERGE_SAMPLE.email)
+    .split("{{website}}").join(MERGE_SAMPLE.website)
+    .split("{{report_link}}").join(MERGE_SAMPLE.reportLink)
     .split("{{comments}}").join(MERGE_SAMPLE.comments)
     // "#" keeps the preview link clickable-looking without pointing anywhere
     // real — the actual URL only exists once a send creates a trackingId.
@@ -731,7 +739,10 @@ function GmailBanner({ user }) {
 
 // ---------- Contacts ----------
 function NewContactModal({ onClose, onCreate }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", category: "", tags: "", comments: "" });
+  const [form, setForm] = useState({
+    name: "", firstName: "", lastName: "", email: "", phone: "", company: "",
+    category: "", tags: "", website: "", reportLink: "", comments: "", internalNotes: "",
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -750,26 +761,47 @@ function NewContactModal({ onClose, onCreate }) {
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
-      <Card className="w-full max-w-sm p-5">
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5 max-h-[88vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέα επαφή</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <input required placeholder="Όνομα" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          <input required placeholder="Όνομα (εμφανίζεται ως {{name}} σε emails)" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <div className="grid grid-cols-2 gap-2">
+            <input placeholder="Όνομα (first name)" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <input placeholder="Επώνυμο (last name)" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
           <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Τηλέφωνο" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+          <div className="grid grid-cols-2 gap-2">
+            <input placeholder="Τηλέφωνο" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <input placeholder="Εταιρεία" value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input placeholder="Κατηγορία (π.χ. Lead, Πελάτης)" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <input placeholder="Ετικέτες (χωρισμένες με κόμμα)" value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
+          <input placeholder="Website (προαιρετικό — {{website}} σε emails)" value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Εταιρεία" value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+          <input placeholder="Report link (προαιρετικό — {{report_link}} σε emails)" value={form.reportLink} onChange={(e) => setForm((f) => ({ ...f, reportLink: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Κατηγορία (π.χ. Lead, Πελάτης, Συνεργάτης)" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Ετικέτες (χωρισμένες με κόμμα)" value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <textarea placeholder="Σχόλια (προαιρετικό — διαθέσιμο ως {{comments}} σε emails)" value={form.comments} onChange={(e) => setForm((f) => ({ ...f, comments: e.target.value }))}
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
+              Σχόλια <span style={{ fontWeight: 400 }}>— διαθέσιμο ως {"{{comments}}"} σε emails</span>
+            </label>
+            <RichTextEditor value={form.comments} onChange={(html) => setForm((f) => ({ ...f, comments: html }))} minHeight={70} />
+          </div>
+          <textarea placeholder="Internal σχόλια (προαιρετικό — ΔΕΝ χρησιμοποιείται σε emails, μόνο εσωτερική χρήση)"
+            value={form.internalNotes} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.value }))}
             rows={2} className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
@@ -781,7 +813,7 @@ function NewContactModal({ onClose, onCreate }) {
   );
 }
 
-function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, onUpdateContact }) {
+function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, onUpdateContact, onUpdateInternalNotes }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -794,11 +826,22 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [comments, setComments] = useState("");
   const [savingComments, setSavingComments] = useState(false);
   const [commentsSaved, setCommentsSaved] = useState(false);
-  // Editing name/phone/company/category/tags updates only Contact's own
-  // columns (see PATCH /contacts/:id) — it never touches emailLogs, notes,
-  // or offers, so the send history/timeline below is never affected by this.
+  // Private, internal-only notes — never sent in an email, separate from
+  // `comments` (which IS used as {{comments}} merge content). Same
+  // dedicated-save pattern as comments, just its own field/handler so saving
+  // one never clobbers the other.
+  const [internalNotes, setInternalNotes] = useState("");
+  const [savingInternalNotes, setSavingInternalNotes] = useState(false);
+  const [internalNotesSaved, setInternalNotesSaved] = useState(false);
+  // Editing name/firstName/lastName/phone/company/category/tags/website/
+  // reportLink updates only Contact's own columns (see PATCH /contacts/:id)
+  // — it never touches emailLogs, notes, or offers, so the send
+  // history/timeline below is never affected by this.
   const [editingContact, setEditingContact] = useState(false);
-  const [contactForm, setContactForm] = useState({ name: "", phone: "", company: "", category: "", tags: "" });
+  const [contactForm, setContactForm] = useState({
+    name: "", firstName: "", lastName: "", phone: "", company: "",
+    category: "", tags: "", website: "", reportLink: "",
+  });
   const [savingContact, setSavingContact] = useState(false);
 
   async function handleMarkReplied() {
@@ -829,12 +872,17 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       setDetail(data);
       setFollowUp(data.nextFollowUpAt ? data.nextFollowUpAt.slice(0, 10) : "");
       setComments(data.comments || "");
+      setInternalNotes(data.internalNotes || "");
       setContactForm({
         name: data.name || "",
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
         phone: data.phone || "",
         company: data.company || "",
         category: data.category || "",
         tags: data.tags || "",
+        website: data.website || "",
+        reportLink: data.reportLink || "",
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στοιχεία επαφής.");
@@ -883,6 +931,18 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
     }
   }
 
+  async function handleSaveInternalNotes() {
+    setSavingInternalNotes(true);
+    setInternalNotesSaved(false);
+    try {
+      await onUpdateInternalNotes(contactId, internalNotes);
+      setInternalNotesSaved(true);
+      setTimeout(() => setInternalNotesSaved(false), 1800);
+    } finally {
+      setSavingInternalNotes(false);
+    }
+  }
+
   async function handleSaveContact() {
     setSavingContact(true);
     try {
@@ -897,10 +957,14 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   function handleCancelEditContact() {
     setContactForm({
       name: detail.name || "",
+      firstName: detail.firstName || "",
+      lastName: detail.lastName || "",
       phone: detail.phone || "",
       company: detail.company || "",
       category: detail.category || "",
       tags: detail.tags || "",
+      website: detail.website || "",
+      reportLink: detail.reportLink || "",
     });
     setEditingContact(false);
   }
@@ -936,9 +1000,17 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
               {editingContact ? (
                 <div className="space-y-2">
                   <input value={contactForm.name} onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="Όνομα"
+                    placeholder="Όνομα (εμφανίζεται ως {{name}} σε emails)"
                     className="w-full rounded-lg px-3 py-1.5 text-sm font-semibold border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   <div className="text-sm" style={{ color: C.slate }}>{detail.email}</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={contactForm.firstName} onChange={(e) => setContactForm((f) => ({ ...f, firstName: e.target.value }))}
+                      placeholder="Όνομα (first name)"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                    <input value={contactForm.lastName} onChange={(e) => setContactForm((f) => ({ ...f, lastName: e.target.value }))}
+                      placeholder="Επώνυμο (last name)"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input value={contactForm.phone} onChange={(e) => setContactForm((f) => ({ ...f, phone: e.target.value }))}
                       placeholder="Τηλέφωνο"
@@ -953,6 +1025,14 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                     <input value={contactForm.tags} onChange={(e) => setContactForm((f) => ({ ...f, tags: e.target.value }))}
                       placeholder="Ετικέτες (χωρισμένες με κόμμα)"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={contactForm.website} onChange={(e) => setContactForm((f) => ({ ...f, website: e.target.value }))}
+                      placeholder="Website"
+                      className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                    <input value={contactForm.reportLink} onChange={(e) => setContactForm((f) => ({ ...f, reportLink: e.target.value }))}
+                      placeholder="Report link"
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   </div>
                   <div className="flex items-center gap-2 mt-1">
@@ -974,6 +1054,18 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                     <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: C.slate }}>
                       {detail.phone && <span className="flex items-center gap-1"><Phone size={12} /> {detail.phone}</span>}
                       {detail.company && <span className="flex items-center gap-1"><Building2 size={12} /> {detail.company}</span>}
+                      {detail.website && (
+                        <a href={normalizeLinkUrl(detail.website)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 underline" style={{ color: C.sky }}>
+                          <Globe size={12} /> {detail.website}
+                        </a>
+                      )}
+                      {detail.reportLink && (
+                        <a href={detail.reportLink} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 underline" style={{ color: C.sky }}>
+                          <LinkIcon size={12} /> Report link
+                        </a>
+                      )}
                     </div>
                     <div className="flex gap-1.5 flex-wrap mt-2">
                       {(detail.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
@@ -1011,13 +1103,10 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
               <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
                 <StickyNote size={13} /> Σχόλια <span style={{ color: C.slate, fontWeight: 400 }}>— διαθέσιμο ως {"{{comments}}"} σε emails</span>
               </label>
-              <textarea
+              <RichTextEditor
                 value={comments}
-                onChange={(e) => { setComments(e.target.value); setCommentsSaved(false); }}
-                placeholder="π.χ. ενδιαφέρθηκε για το πακέτο X, ανέφερε ότι..."
-                rows={2}
-                className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none"
-                style={{ borderColor: C.line, color: C.ink }}
+                onChange={(html) => { setComments(html); setCommentsSaved(false); }}
+                minHeight={70}
               />
               <div className="flex items-center gap-2 mt-1.5">
                 <button
@@ -1030,6 +1119,32 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                   {savingComments ? "Αποθήκευση…" : "Αποθήκευση σχολίων"}
                 </button>
                 {commentsSaved && <span className="text-xs" style={{ color: C.mint }}>Αποθηκεύτηκε ✓</span>}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
+                <StickyNote size={13} /> Internal σχόλια <span style={{ color: C.slate, fontWeight: 400 }}>— εσωτερική χρήση μόνο, ΔΕΝ στέλνεται ποτέ σε email</span>
+              </label>
+              <textarea
+                value={internalNotes}
+                onChange={(e) => { setInternalNotes(e.target.value); setInternalNotesSaved(false); }}
+                placeholder="π.χ. εσωτερική σημείωση για το πώς προσεγγίσαμε αυτή την επαφή..."
+                rows={2}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none"
+                style={{ borderColor: C.line, color: C.ink }}
+              />
+              <div className="flex items-center gap-2 mt-1.5">
+                <button
+                  type="button"
+                  onClick={handleSaveInternalNotes}
+                  disabled={savingInternalNotes || internalNotes === (detail.internalNotes || "")}
+                  className="text-xs font-medium rounded-lg px-2.5 py-1 text-white"
+                  style={{ backgroundColor: C.sky, opacity: savingInternalNotes || internalNotes === (detail.internalNotes || "") ? 0.5 : 1 }}
+                >
+                  {savingInternalNotes ? "Αποθήκευση…" : "Αποθήκευση internal σχολίων"}
+                </button>
+                {internalNotesSaved && <span className="text-xs" style={{ color: C.mint }}>Αποθηκεύτηκε ✓</span>}
               </div>
             </div>
 
@@ -1150,12 +1265,14 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   );
 }
 
-function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, onUpdateContact, openContactId, onOpenContactHandled }) {
+function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, onUpdateContact, onUpdateInternalNotes, openContactId, onOpenContactHandled }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
   const [onlyDue, setOnlyDue] = useState(false);
+  const [hideUnsubscribed, setHideUnsubscribed] = useState(false);
+  const [hasWebsiteOnly, setHasWebsiteOnly] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [enrollSeqId, setEnrollSeqId] = useState("");
   const [bulkCategory, setBulkCategory] = useState("");
@@ -1192,17 +1309,28 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
   }, [contacts]);
 
   const filtered = useMemo(() => {
+    const q = query.toLowerCase();
     return contacts.filter((c) => {
-      const matchesQuery = (c.name + c.email + (c.company || "") + (c.phone || "")).toLowerCase().includes(query.toLowerCase());
+      // Search across every text field a contact has, not just
+      // name/email/company/phone — first/last name, website, category,
+      // tags, and both comment fields (internal notes included: it's the
+      // user's own private data, not something being sent anywhere).
+      const haystack = [
+        c.name, c.firstName, c.lastName, c.email, c.company, c.phone,
+        c.website, c.category, c.tags, c.comments, c.internalNotes,
+      ].filter(Boolean).join(" ").toLowerCase();
+      const matchesQuery = !q || haystack.includes(q);
       const matchesStatus = statusFilter === "all" || c.status === statusFilter;
       const matchesCategory = categoryFilter === "all" || (c.category || "").trim() === categoryFilter;
       const matchesTag =
         tagFilter === "all" ||
         (c.tags || "").split(",").map((t) => t.trim()).includes(tagFilter);
       const matchesDue = !onlyDue || isFollowUpDue(c.nextFollowUpAt);
-      return matchesQuery && matchesStatus && matchesCategory && matchesTag && matchesDue;
+      const matchesUnsub = !hideUnsubscribed || !c.unsubscribed;
+      const matchesWebsite = !hasWebsiteOnly || !!(c.website || "").trim();
+      return matchesQuery && matchesStatus && matchesCategory && matchesTag && matchesDue && matchesUnsub && matchesWebsite;
     });
-  }, [contacts, query, statusFilter, categoryFilter, tagFilter, onlyDue]);
+  }, [contacts, query, statusFilter, categoryFilter, tagFilter, onlyDue, hideUnsubscribed, hasWebsiteOnly]);
 
   const dueCount = useMemo(() => contacts.filter((c) => isFollowUpDue(c.nextFollowUpAt)).length, [contacts]);
 
@@ -1308,13 +1436,17 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           onToggleUnsubscribed={onToggleUnsubscribed}
           onUpdateComments={onUpdateComments}
           onUpdateContact={onUpdateContact}
+          onUpdateInternalNotes={onUpdateInternalNotes}
         />
       )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Επαφές</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-            {contacts.length} επαφές συνολικά{dueCount > 0 ? ` · ${dueCount} με εκκρεμή υπενθύμιση` : ""}
+            {filtered.length === contacts.length
+              ? `${contacts.length} επαφές συνολικά`
+              : `${filtered.length} από ${contacts.length} επαφές`}
+            {dueCount > 0 ? ` · ${dueCount} με εκκρεμή υπενθύμιση` : ""}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -1330,7 +1462,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            title="Στήλες CSV: name, email, phone, company, category, tags, comments"
+            title="Στήλες CSV: name, firstName, lastName, email, phone, company, category, tags, website, reportLink, comments, internalNotes"
             className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border"
             style={{ borderColor: C.line, color: C.ink, opacity: uploading ? 0.6 : 1 }}
           >
@@ -1357,7 +1489,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Αναζήτηση ονόματος, email, τηλεφώνου, εταιρείας…"
+            placeholder="Αναζήτηση σε όνομα, email, τηλέφωνο, εταιρεία, website, tags, σχόλια…"
             className="bg-transparent outline-none text-sm flex-1"
             style={{ color: C.ink }}
           />
@@ -1398,6 +1530,26 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           <input type="checkbox" checked={onlyDue} onChange={(e) => setOnlyDue(e.target.checked)} />
           Μόνο εκκρεμείς υπενθυμίσεις
         </label>
+
+        <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.slate }}>
+          <input type="checkbox" checked={hideUnsubscribed} onChange={(e) => setHideUnsubscribed(e.target.checked)} />
+          Απόκρυψη unsubscribed
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.slate }}>
+          <input type="checkbox" checked={hasWebsiteOnly} onChange={(e) => setHasWebsiteOnly(e.target.checked)} />
+          Μόνο με website
+        </label>
+
+        {(statusFilter !== "all" || categoryFilter !== "all" || tagFilter !== "all" || onlyDue || hideUnsubscribed || hasWebsiteOnly || query) && (
+          <button
+            type="button"
+            onClick={() => { setQuery(""); setStatusFilter("all"); setCategoryFilter("all"); setTagFilter("all"); setOnlyDue(false); setHideUnsubscribed(false); setHasWebsiteOnly(false); }}
+            className="text-xs font-medium underline" style={{ color: C.slate }}
+          >
+            Καθαρισμός φίλτρων
+          </button>
+        )}
 
         {selected.size > 0 && (
           <div className="flex items-center gap-2 flex-wrap ml-auto">
@@ -1601,7 +1753,7 @@ function TemplateModal({ initial, onClose, onSave }) {
 
             <div className="flex gap-1.5 flex-wrap">
               <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
-              {["{{name}}", "{{company}}", "{{email}}", "{{comments}}"].map((tok) => (
+              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{report_link}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
                   {tok}
@@ -2876,6 +3028,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [tagFilter, setTagFilter] = useState("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -2884,15 +3037,24 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [contacts]);
 
+  // Segmentation by tag, same as the Contacts view — lets a campaign target
+  // e.g. everyone tagged "warm-lead" without also filtering by category.
+  const tags = useMemo(() => {
+    const set = new Set();
+    contacts.forEach((c) => (c.tags || "").split(",").map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [contacts]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return contacts.filter((c) => {
       if (categoryFilter !== "all" && (c.category || "") !== categoryFilter) return false;
+      if (tagFilter !== "all" && !(c.tags || "").split(",").map((t) => t.trim()).includes(tagFilter)) return false;
       if (c.unsubscribed) return false; // never let an unsubscribed contact even be selectable
       if (!q) return true;
       return (c.name || "").toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q);
     });
-  }, [contacts, query, categoryFilter]);
+  }, [contacts, query, categoryFilter, tagFilter]);
 
   function toggleContact(id) {
     setSelectedIds((prev) => {
@@ -2970,7 +3132,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
 
             <div className="flex gap-1.5 flex-wrap">
               <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
-              {["{{name}}", "{{company}}", "{{email}}", "{{comments}}"].map((tok) => (
+              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{report_link}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
                   {tok}
@@ -3010,6 +3172,11 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
                 className="rounded-lg px-2 py-1.5 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
                 <option value="all">Όλες οι κατηγορίες</option>
                 {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}
+                className="rounded-lg px-2 py-1.5 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+                <option value="all">Όλες οι ετικέτες</option>
+                {tags.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div className="flex gap-3">
@@ -3731,9 +3898,15 @@ export default function App() {
     return result;
   }
 
-  async function handleLoadContactDetail(id) {
-    return api.get(`/contacts/${id}`);
-  }
+  // Stable reference on purpose (useCallback with no deps): this is passed
+  // down as ContactDetailDrawer's onLoad prop, which its own `load`
+  // useCallback depends on. Before this was memoized, a brand-new function
+  // was created here on every App render (e.g. the 30s background poll
+  // updating analytics/activity/campaigns elsewhere) — that changed `load`'s
+  // identity too, re-firing its effect and silently overwriting whatever the
+  // user was mid-typing in the contact edit form. Now it only reloads when
+  // contactId actually changes (a different contact opened).
+  const handleLoadContactDetail = useCallback((id) => api.get(`/contacts/${id}`), []);
 
   async function handleAddContactNote(contactId, body) {
     await api.post(`/contacts/${contactId}/notes`, { body });
@@ -3882,6 +4055,13 @@ export default function App() {
   // the table, only used as {{comments}} merge content when composing.
   async function handleUpdateComments(contactId, comments) {
     await api.patch(`/contacts/${contactId}`, { comments });
+  }
+
+  // Private, internal-only notes — same no-list-refresh rationale as
+  // comments (not shown in the contacts table), kept as its own handler so
+  // it's clear this field is never used as a merge tag / sent in an email.
+  async function handleUpdateInternalNotes(contactId, internalNotes) {
+    await api.patch(`/contacts/${contactId}`, { internalNotes });
   }
 
   // Editing name/phone/company/category/tags from the contact drawer. Unlike
@@ -4050,6 +4230,7 @@ export default function App() {
               onToggleUnsubscribed={handleToggleUnsubscribed}
               onUpdateComments={handleUpdateComments}
               onUpdateContact={handleUpdateContact}
+              onUpdateInternalNotes={handleUpdateInternalNotes}
               openContactId={pendingOpenContactId}
               onOpenContactHandled={() => setPendingOpenContactId("")}
             />

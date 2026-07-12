@@ -22,17 +22,25 @@ const upload = multer({
 
 const contactSchema = z.object({
   name: z.string().min(1).max(200),
+  firstName: z.string().max(100).optional().default(""),
+  lastName: z.string().max(100).optional().default(""),
   email: z.string().email(),
   phone: z.string().max(50).optional().default(""),
   company: z.string().max(200).optional().default(""),
   category: z.string().max(100).optional().default(""),
   tags: z.string().max(300).optional().default(""),
+  website: z.string().max(300).optional().default(""),
+  reportLink: z.string().max(500).optional().default(""),
   // Freeform personalization notes, usable as {{comments}} in email bodies.
-  comments: z.string().max(2000).optional().default(""),
+  // Rich-text HTML now (bold/italic/lists) — the cap is higher than a
+  // plain-text field would need to leave room for markup overhead.
+  comments: z.string().max(4000).optional().default(""),
+  // Private, internal-only — never sent in an email, never a merge field.
+  internalNotes: z.string().max(4000).optional().default(""),
 });
 
 router.get("/", async (req, res) => {
-  const { status, q, category, tag } = req.query;
+  const { status, q, category, tag, unsubscribed, hasFollowUp } = req.query;
   const contacts = await prisma.contact.findMany({
     where: {
       userId: req.user.id,
@@ -41,16 +49,23 @@ router.get("/", async (req, res) => {
       // tags is a comma-separated string column — "contains" is good enough
       // filtering at this scale without a separate join table.
       ...(tag && tag !== "all" ? { tags: { contains: String(tag) } } : {}),
+      ...(unsubscribed === "true" ? { unsubscribed: true } : {}),
+      ...(unsubscribed === "false" ? { unsubscribed: false } : {}),
+      ...(hasFollowUp === "true" ? { nextFollowUpAt: { not: null } } : {}),
       ...(q
         ? {
             OR: [
               { name: { contains: String(q) } },
+              { firstName: { contains: String(q) } },
+              { lastName: { contains: String(q) } },
               { email: { contains: String(q) } },
               { company: { contains: String(q) } },
               { phone: { contains: String(q) } },
               { tags: { contains: String(q) } },
               { category: { contains: String(q) } },
+              { website: { contains: String(q) } },
               { comments: { contains: String(q) } },
+              { internalNotes: { contains: String(q) } },
             ],
           }
         : {}),
@@ -80,7 +95,10 @@ router.get("/", async (req, res) => {
 // swallow them as an :id lookup.
 router.get("/export", async (req, res) => {
   const contacts = await prisma.contact.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: "desc" } });
-  const header = ["name", "email", "phone", "company", "category", "tags", "comments", "status"];
+  const header = [
+    "name", "firstName", "lastName", "email", "phone", "company", "category", "tags",
+    "website", "reportLink", "comments", "internalNotes", "status",
+  ];
   const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const rows = contacts.map((c) => header.map((h) => escape(c[h])).join(","));
   const csv = [header.join(","), ...rows].join("\n");
@@ -163,12 +181,17 @@ router.post("/upload", upload.single("file"), async (req, res) => {
   for (const [i, row] of rows.entries()) {
     const candidate = {
       name: row.name || row.Name || row.email || row.Email || "",
+      firstName: row.firstName || row.first_name || row["Όνομα"] || "",
+      lastName: row.lastName || row.last_name || row["Επώνυμο"] || "",
       email: (row.email || row.Email || "").trim().toLowerCase(),
       phone: row.phone || row.Phone || row.telephone || row.Telephone || "",
       company: row.company || row.Company || "",
       category: row.category || row.Category || "",
       tags: row.tags || row.Tags || "",
+      website: row.website || row.Website || "",
+      reportLink: row.reportLink || row.report_link || row["Report link"] || "",
       comments: row.comments || row.Comments || row["σχόλια"] || row["Σχόλια"] || "",
+      internalNotes: row.internalNotes || row.internal_notes || row["Internal Σχόλια"] || "",
     };
     const parsed = contactSchema.safeParse(candidate);
     if (!parsed.success) {
@@ -233,7 +256,10 @@ router.patch("/:id", async (req, res) => {
   const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
   if (!contact) return res.status(404).json({ error: "not_found" });
 
-  const allowed = ["name", "phone", "company", "category", "tags", "comments", "status", "unsubscribed"];
+  const allowed = [
+    "name", "firstName", "lastName", "phone", "company", "category", "tags",
+    "website", "reportLink", "comments", "internalNotes", "status", "unsubscribed",
+  ];
   const data = {};
   for (const key of allowed) if (key in req.body) data[key] = req.body[key];
   // Manual follow-up reminder — independent of automatic sequence sends, so

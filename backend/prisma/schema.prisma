@@ -92,16 +92,38 @@ model Contact {
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name           String
+  // Structured given/family name — separate from `name` on purpose: `name`
+  // stays the free-text display name used for {{name}} personalization
+  // (may be a full name, a nickname, whatever reads best in an email), while
+  // firstName/lastName back the {{first_name}}/{{last_name}} merge tokens
+  // and can be used for filtering/sorting without depending on splitting
+  // `name` on whitespace (which breaks for multi-word first/last names).
+  firstName      String?  @default("")
+  lastName       String?  @default("")
   email          String
   phone          String?  @default("")
   company        String?
   category       String?  @default("") // free-text bucket, e.g. Lead / Πελάτης / Συνεργάτης — used for filtering
   tags           String   @default("") // comma-separated; fine at this scale
+  website        String?  @default("") // usable as {{website}} in email bodies
+  // A link to a personalized report/proposal for this contact (e.g. a
+  // one-pager hosted elsewhere) — usable as {{report_link}} in email bodies,
+  // resolved the same way as any other merge token, no click-tracking of its
+  // own (unlike real send-time {{unsubscribe_link}} resolution).
+  reportLink     String?  @default("")
   // Freeform personalization notes about this specific contact (what they do,
   // something they mentioned, a pain point) — separate from ContactNote
   // (timestamped CRM activity log). Usable as a merge field via {{comments}}
   // in any template/compose/step body, same mechanism as {{name}}/{{company}}.
+  // Stores rich-text HTML (bold/italic/lists) now, not plain text — same
+  // RichTextEditor used for template/compose bodies — since it's injected
+  // directly into the outgoing email HTML as-is.
   comments       String?  @default("")
+  // Private, internal-only notes — never sent in an email, never used as a
+  // merge field. Distinct from `comments` (which IS used as {{comments}} in
+  // emails) precisely so a stray personal note about a contact can never
+  // accidentally end up in an outgoing message.
+  internalNotes  String?  @default("")
   status         String   @default("new") // new | contacted | opened | replied | bounced | unsubscribed
   unsubscribed   Boolean  @default(false)
   unsubscribedAt DateTime? // when unsubscribed flipped true — via the email footer link, or manually in-app
