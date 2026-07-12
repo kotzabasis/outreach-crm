@@ -96,6 +96,11 @@ model Contact {
   company        String?
   category       String?  @default("") // free-text bucket, e.g. Lead / Πελάτης / Συνεργάτης — used for filtering
   tags           String   @default("") // comma-separated; fine at this scale
+  // Freeform personalization notes about this specific contact (what they do,
+  // something they mentioned, a pain point) — separate from ContactNote
+  // (timestamped CRM activity log). Usable as a merge field via {{comments}}
+  // in any template/compose/step body, same mechanism as {{name}}/{{company}}.
+  comments       String?  @default("")
   status         String   @default("new") // new | contacted | opened | replied | bounced | unsubscribed
   unsubscribed   Boolean  @default(false)
   unsubscribedAt DateTime? // when unsubscribed flipped true — via the email footer link, or manually in-app

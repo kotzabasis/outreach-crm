@@ -36,7 +36,12 @@ const C = {
 // converge on before diminishing returns / spam fatigue set in.
 const SUGGESTED_DELAYS = [0, 3, 7, 14, 21, 30];
 
-const MERGE_SAMPLE = { name: "Μαρία Παπαδοπούλου", company: "Acme A.E.", email: "maria@acme.gr" };
+const MERGE_SAMPLE = {
+  name: "Μαρία Παπαδοπούλου",
+  company: "Acme A.E.",
+  email: "maria@acme.gr",
+  comments: "μου άρεσε πολύ το τελευταίο σας project",
+};
 const SPAM_WORDS = [
   "δωρεάν", "εγγύηση", "click here", "κάνε κλικ εδώ", "act now", "τώρα αμέσως",
   "100%", "no obligation", "χωρίς καμία δέσμευση", "buy now", "αγόρασε τώρα",
@@ -44,12 +49,34 @@ const SPAM_WORDS = [
   "χωρίς ρίσκο", "limited time", "περιορισμένος χρόνος",
 ];
 
+// Seeded into every brand-new template/compose/step body (empty drafts only —
+// never forced onto existing content) so the unsubscribe line is there by
+// default but fully editable, movable, or deletable like any other text —
+// per Stelios's request that it not be a hidden, backend-only addition
+// anymore. {{unsubscribe_link}} is resolved to the real per-send URL
+// server-side at send time (see injectTracking in gmailClient.js); here in
+// the editor/preview it's just a token like {{name}}.
+const DEFAULT_DISCLAIMER_HTML =
+  '<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:11px;color:#94a3b8;">Αν δεν θέλετε να λάβετε καμία άλλη επικοινωνία από εμάς, <a href="{{unsubscribe_link}}" style="color:#94a3b8;text-decoration:underline;">πατήστε εδώ</a>.</div>';
+
+// A body is "compliant" if it still contains a real unsubscribe link — check
+// the raw HTML (not the tag-stripped plain text used for spam/word counts),
+// since the token lives inside an href attribute that tag-stripping would
+// throw away along with the rest of the <a> tag.
+function hasUnsubscribeLink(html) {
+  return (html || "").includes("{{unsubscribe_link}}");
+}
+
 function renderPreview(text) {
   if (!text) return "";
   return text
     .split("{{name}}").join(MERGE_SAMPLE.name)
     .split("{{company}}").join(MERGE_SAMPLE.company)
-    .split("{{email}}").join(MERGE_SAMPLE.email);
+    .split("{{email}}").join(MERGE_SAMPLE.email)
+    .split("{{comments}}").join(MERGE_SAMPLE.comments)
+    // "#" keeps the preview link clickable-looking without pointing anywhere
+    // real — the actual URL only exists once a send creates a trackingId.
+    .split("{{unsubscribe_link}}").join("#");
 }
 
 function findSpamWords(text) {
@@ -492,25 +519,16 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
   );
 }
 
-// Shown next to every place someone drafts an email body, so the unsubscribe
-// line and tracking pixel that gmailClient.js's injectTracking() adds at
-// send time aren't a surprise — they never appear in the draft/template
-// itself (they're injected only into the copy that actually gets sent), so
-// without this, "what the recipient sees" and "what you're editing" don't
-// match. Rendered as its own separate, dashed-border block (not part of the
-// live preview above it) precisely because it's NOT part of what you wrote —
-// it's what gets appended on top of it automatically.
-function AutoFooterPreview() {
+// The unsubscribe line used to be a hidden, backend-only addition — it now
+// lives directly in the editable body (see DEFAULT_DISCLAIMER_HTML, seeded
+// into new drafts) so it shows up naturally in the live preview above this.
+// The only thing still added invisibly at send time is the 1x1 open-tracking
+// pixel, which has no visual form to preview — this is just a one-line note
+// about that, for transparency.
+function AutoTrackingPixelNote() {
   return (
-    <div className="mt-3">
-      <div className="flex items-center gap-1 text-[10px] font-medium mb-1.5" style={{ color: C.slate }}>
-        <Info size={11} /> Προστίθεται αυτόματα σε κάθε αποστολή (δεν το γράφεις εσύ)
-      </div>
-      <div className="rounded-lg px-3 py-2.5" style={{ border: `1px dashed ${C.line}`, backgroundColor: "#fff" }}>
-        <div style={{ paddingTop: 12, borderTop: "1px solid #e5e7eb", fontFamily: "sans-serif", fontSize: 11, color: "#94a3b8" }}>
-          Αν δεν θέλεις να λαμβάνεις άλλα emails, <span style={{ textDecoration: "underline" }}>κάνε unsubscribe εδώ</span>.
-        </div>
-      </div>
+    <div className="flex items-center gap-1.5 text-[11px] mt-2" style={{ color: C.slate }}>
+      <Info size={11} className="shrink-0" /> Προστίθεται επίσης ένα αόρατο pixel παρακολούθησης ανοίγματος σε κάθε αποστολή.
     </div>
   );
 }
@@ -707,7 +725,7 @@ function GmailBanner({ user }) {
 
 // ---------- Contacts ----------
 function NewContactModal({ onClose, onCreate }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", category: "", tags: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", company: "", category: "", tags: "", comments: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -745,6 +763,8 @@ function NewContactModal({ onClose, onCreate }) {
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <input placeholder="Ετικέτες (χωρισμένες με κόμμα)" value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <textarea placeholder="Σχόλια (προαιρετικό — διαθέσιμο ως {{comments}} σε emails)" value={form.comments} onChange={(e) => setForm((f) => ({ ...f, comments: e.target.value }))}
+            rows={2} className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
             {busy && <Loader2 size={14} className="animate-spin" />} Προσθήκη
@@ -755,7 +775,7 @@ function NewContactModal({ onClose, onCreate }) {
   );
 }
 
-function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied, onToggleUnsubscribed }) {
+function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNote, onSetFollowUp, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -765,6 +785,9 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [markingReplied, setMarkingReplied] = useState(false);
   const [togglingUnsub, setTogglingUnsub] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState(null);
+  const [comments, setComments] = useState("");
+  const [savingComments, setSavingComments] = useState(false);
+  const [commentsSaved, setCommentsSaved] = useState(false);
 
   async function handleMarkReplied() {
     setMarkingReplied(true);
@@ -793,6 +816,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       const data = await onLoad(contactId);
       setDetail(data);
       setFollowUp(data.nextFollowUpAt ? data.nextFollowUpAt.slice(0, 10) : "");
+      setComments(data.comments || "");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στοιχεία επαφής.");
     } finally {
@@ -825,6 +849,18 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       await onSetFollowUp(contactId, value || null);
     } catch {
       // ignore — value stays as typed, next reload will reconcile
+    }
+  }
+
+  async function handleSaveComments() {
+    setSavingComments(true);
+    setCommentsSaved(false);
+    try {
+      await onUpdateComments(contactId, comments);
+      setCommentsSaved(true);
+      setTimeout(() => setCommentsSaved(false), 1800);
+    } finally {
+      setSavingComments(false);
     }
   }
 
@@ -883,6 +919,32 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                     Επισήμανση ως unsubscribed
                   </button>
                 )}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
+                <StickyNote size={13} /> Σχόλια <span style={{ color: C.slate, fontWeight: 400 }}>— διαθέσιμο ως {"{{comments}}"} σε emails</span>
+              </label>
+              <textarea
+                value={comments}
+                onChange={(e) => { setComments(e.target.value); setCommentsSaved(false); }}
+                placeholder="π.χ. ενδιαφέρθηκε για το πακέτο X, ανέφερε ότι..."
+                rows={2}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none"
+                style={{ borderColor: C.line, color: C.ink }}
+              />
+              <div className="flex items-center gap-2 mt-1.5">
+                <button
+                  type="button"
+                  onClick={handleSaveComments}
+                  disabled={savingComments || comments === (detail.comments || "")}
+                  className="text-xs font-medium rounded-lg px-2.5 py-1 text-white"
+                  style={{ backgroundColor: C.sky, opacity: savingComments || comments === (detail.comments || "") ? 0.5 : 1 }}
+                >
+                  {savingComments ? "Αποθήκευση…" : "Αποθήκευση σχολίων"}
+                </button>
+                {commentsSaved && <span className="text-xs" style={{ color: C.mint }}>Αποθηκεύτηκε ✓</span>}
               </div>
             </div>
 
@@ -1003,7 +1065,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   );
 }
 
-function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, openContactId, onOpenContactHandled }) {
+function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, openContactId, onOpenContactHandled }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -1159,6 +1221,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           onCompose={() => { onCompose(detailContactId); setDetailContactId(null); }}
           onMarkReplied={onMarkReplied}
           onToggleUnsubscribed={onToggleUnsubscribed}
+          onUpdateComments={onUpdateComments}
         />
       )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-5 border-b" style={{ borderColor: C.line }}>
@@ -1181,7 +1244,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            title="Στήλες CSV: name, email, phone, company, category, tags"
+            title="Στήλες CSV: name, email, phone, company, category, tags, comments"
             className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border"
             style={{ borderColor: C.line, color: C.ink, opacity: uploading ? 0.6 : 1 }}
           >
@@ -1396,7 +1459,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
 function TemplateModal({ initial, onClose, onSave }) {
   const [name, setName] = useState(initial?.name || "");
   const [subject, setSubject] = useState(initial?.subject || "");
-  const [body, setBody] = useState(initial?.body || "");
+  const [body, setBody] = useState(initial?.body || DEFAULT_DISCLAIMER_HTML);
   const [attachments, setAttachments] = useState(initial?.attachments || []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1410,7 +1473,6 @@ function TemplateModal({ initial, onClose, onSave }) {
   const plainBody = body.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ");
   const subjectSpam = findSpamWords(subject);
   const bodySpam = findSpamWords(plainBody);
-  const hasUnsubscribeMention = /unsubscribe|διαγραφή|απεγγραφή/i.test(plainBody);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -1453,7 +1515,7 @@ function TemplateModal({ initial, onClose, onSave }) {
 
             <div className="flex gap-1.5 flex-wrap">
               <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
-              {["{{name}}", "{{company}}", "{{email}}"].map((tok) => (
+              {["{{name}}", "{{company}}", "{{email}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
                   {tok}
@@ -1467,8 +1529,8 @@ function TemplateModal({ initial, onClose, onSave }) {
             {bodySpam.length > 0 && (
               <p className="text-[11px]" style={{ color: C.amber }}>⚠ Πιθανές λέξεις spam-trigger: {bodySpam.join(", ")}</p>
             )}
-            {!hasUnsubscribeMention && body.length > 0 && (
-              <TipBanner>Best practice: πρόσθεσε μια γραμμή απεγγραφής/unsubscribe στο τέλος — βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails.</TipBanner>
+            {!hasUnsubscribeLink(body) && body.length > 0 && (
+              <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής — βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails. Πρόσθεσε ένα link με href {"{{unsubscribe_link}}"}.</TipBanner>
             )}
 
             {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
@@ -1483,7 +1545,7 @@ function TemplateModal({ initial, onClose, onSave }) {
               <div className="text-xs mb-2" style={{ color: C.slate }}>Προς: {MERGE_SAMPLE.name} &lt;{MERGE_SAMPLE.email}&gt;</div>
               <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{renderPreview(subject) || "—"}</div>
               <div className="text-sm" style={{ color: C.ink }} dangerouslySetInnerHTML={{ __html: renderPreview(body) || "—" }} />
-              <AutoFooterPreview />
+              <AutoTrackingPixelNote />
               {attachments.length > 0 && (
                 <div className="flex gap-1.5 flex-wrap mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
                   {attachments.map((a, i) => (
@@ -1993,7 +2055,10 @@ function StepFields({
             onChange={(e) => setSubject(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
           <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={90} />
-          <AutoFooterPreview />
+          {!hasUnsubscribeLink(body) && body.length > 0 && (
+            <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής.</TipBanner>
+          )}
+          <AutoTrackingPixelNote />
         </div>
       )}
 
@@ -2023,7 +2088,7 @@ function emptyStep(index) {
     mode: "inline",
     templateId: "",
     subject: "",
-    body: "",
+    body: DEFAULT_DISCLAIMER_HTML,
     delayDays: SUGGESTED_DELAYS[index] ?? 7,
     conditions: { requireEvent: null, requireTags: [] },
     attachments: [],
@@ -2582,7 +2647,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
   const [minimized, setMinimized] = useState(false);
   const [contactId, setContactId] = useState(initialContactId || "");
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(DEFAULT_DISCLAIMER_HTML);
   const [attachments, setAttachments] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -2639,7 +2704,10 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
           </div>
           <div className="flex-1 px-4 py-3 overflow-auto">
             <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={160} />
-            <AutoFooterPreview />
+            {!hasUnsubscribeLink(body) && body.length > 0 && (
+              <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής.</TipBanner>
+            )}
+            <AutoTrackingPixelNote />
           </div>
           {!gmailConnected && (
             <div className="px-4 py-2 text-xs" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
@@ -3226,6 +3294,13 @@ export default function App() {
     await Promise.all([loadContacts(), loadAnalytics()]);
   }
 
+  // Freeform personalization notes, editable straight from the contact
+  // drawer — no contacts list refresh needed since comments aren't shown in
+  // the table, only used as {{comments}} merge content when composing.
+  async function handleUpdateComments(contactId, comments) {
+    await api.patch(`/contacts/${contactId}`, { comments });
+  }
+
   function handleSelectFromSearch(contactId) {
     setView("contacts");
     setPendingOpenContactId(contactId);
@@ -3379,6 +3454,7 @@ export default function App() {
               onCompose={openComposeFor}
               onMarkReplied={handleMarkReplied}
               onToggleUnsubscribed={handleToggleUnsubscribed}
+              onUpdateComments={handleUpdateComments}
               openContactId={pendingOpenContactId}
               onOpenContactHandled={() => setPendingOpenContactId("")}
             />

@@ -67,7 +67,10 @@ function renderTemplate(template, contact) {
     .replaceAll("{{first_name}}", contact.name?.split(" ")[0] || "εκεί")
     .replaceAll("{{name}}", contact.name || "")
     .replaceAll("{{company}}", contact.company || "εκεί")
-    .replaceAll("{{email}}", contact.email || "");
+    .replaceAll("{{email}}", contact.email || "")
+    // Free-form per-contact notes (Contact.comments) usable as merge content —
+    // e.g. "hey, saw you {{comments}}" for something specific to that lead.
+    .replaceAll("{{comments}}", contact.comments || "");
 }
 
 // Non-ASCII (Greek, etc.) subject lines need RFC 2047 encoding — Gmail's raw
@@ -85,17 +88,27 @@ function toBase64Url(str) {
     .replace(/=+$/, "");
 }
 
-// Wraps every http(s) link in the body with our /track/click redirect, appends
-// a visible unsubscribe footer (required for real cold outreach — a hidden
-// pixel alone isn't enough for deliverability/compliance), and a 1x1 tracking
-// pixel for opens. trackingId ties all three back to one EmailLog row.
+// Wraps every http(s) link in the body with our /track/click redirect,
+// resolves the {{unsubscribe_link}} token to the real unsubscribe URL, and
+// appends a 1x1 tracking pixel for opens. trackingId ties all three back to
+// one EmailLog row.
 //
-// Only rewrites real href="..." attributes (from the rich-text editor's link
-// button) — NOT a blind scan for "http(s)://" anywhere in the string. An
-// earlier version did the latter and it corrupted every <a href> tag: the
-// naive regex matched past the closing quote and into the visible link text
-// (stopping only at the next "<" or whitespace), mangling the markup and
-// producing broken links plus garbled rendering downstream.
+// The unsubscribe line itself is no longer force-appended here — it's now
+// part of the editable body (the frontend seeds new drafts with it, see
+// DEFAULT_DISCLAIMER_HTML in App.jsx), so the user can reword/move/remove it
+// like any other text. {{unsubscribe_link}} is the placeholder href it's
+// seeded with; whatever the user leaves in the body when they send is what
+// goes out — this just fills in the one token that has to be resolved
+// server-side (the actual trackingId isn't known until send time). If
+// they've deleted it entirely, no unsubscribe link goes out — same tradeoff
+// as any other content they choose to remove.
+//
+// Link-wrapping only rewrites real href="..." attributes (from the rich-text
+// editor's link button) — NOT a blind scan for "http(s)://" anywhere in the
+// string. An earlier version did the latter and it corrupted every <a href>
+// tag: the naive regex matched past the closing quote and into the visible
+// link text (stopping only at the next "<" or whitespace), mangling the
+// markup and producing broken links plus garbled rendering downstream.
 function injectTracking(html, trackingId) {
   const withWrappedLinks = html.replace(
     /href=(["'])(https?:\/\/[^"']+)\1/g,
@@ -103,9 +116,9 @@ function injectTracking(html, trackingId) {
       `href=${quote}${process.env.BASE_URL}/track/click/${trackingId}?url=${encodeURIComponent(url)}${quote}`
   );
   const unsubscribeUrl = `${process.env.BASE_URL}/track/unsubscribe/${trackingId}`;
-  const footer = `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:11px;color:#94a3b8;">Αν δεν θέλεις να λαμβάνεις άλλα emails, <a href="${unsubscribeUrl}" style="color:#94a3b8;text-decoration:underline;">κάνε unsubscribe εδώ</a>.</div>`;
+  const withUnsubscribeLink = withWrappedLinks.replaceAll("{{unsubscribe_link}}", unsubscribeUrl);
   const pixel = `<img src="${process.env.BASE_URL}/track/open/${trackingId}.png" width="1" height="1" style="display:none" alt="" />`;
-  return `${withWrappedLinks}<br/>${footer}${pixel}`;
+  return `${withUnsubscribeLink}${pixel}`;
 }
 
 // attachments: [{filename, mimeType, contentBase64}] — plain (unwrapped)

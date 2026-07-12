@@ -27,6 +27,8 @@ const contactSchema = z.object({
   company: z.string().max(200).optional().default(""),
   category: z.string().max(100).optional().default(""),
   tags: z.string().max(300).optional().default(""),
+  // Freeform personalization notes, usable as {{comments}} in email bodies.
+  comments: z.string().max(2000).optional().default(""),
 });
 
 router.get("/", async (req, res) => {
@@ -48,6 +50,7 @@ router.get("/", async (req, res) => {
               { phone: { contains: String(q) } },
               { tags: { contains: String(q) } },
               { category: { contains: String(q) } },
+              { comments: { contains: String(q) } },
             ],
           }
         : {}),
@@ -77,7 +80,7 @@ router.get("/", async (req, res) => {
 // swallow them as an :id lookup.
 router.get("/export", async (req, res) => {
   const contacts = await prisma.contact.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: "desc" } });
-  const header = ["name", "email", "phone", "company", "category", "tags", "status"];
+  const header = ["name", "email", "phone", "company", "category", "tags", "comments", "status"];
   const escape = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const rows = contacts.map((c) => header.map((h) => escape(c[h])).join(","));
   const csv = [header.join(","), ...rows].join("\n");
@@ -164,6 +167,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       company: row.company || row.Company || "",
       category: row.category || row.Category || "",
       tags: row.tags || row.Tags || "",
+      comments: row.comments || row.Comments || row["σχόλια"] || row["Σχόλια"] || "",
     };
     const parsed = contactSchema.safeParse(candidate);
     if (!parsed.success) {
@@ -228,7 +232,7 @@ router.patch("/:id", async (req, res) => {
   const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
   if (!contact) return res.status(404).json({ error: "not_found" });
 
-  const allowed = ["name", "phone", "company", "category", "tags", "status", "unsubscribed"];
+  const allowed = ["name", "phone", "company", "category", "tags", "comments", "status", "unsubscribed"];
   const data = {};
   for (const key of allowed) if (key in req.body) data[key] = req.body[key];
   // Manual follow-up reminder — independent of automatic sequence sends, so
