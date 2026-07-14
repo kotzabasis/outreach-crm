@@ -795,11 +795,11 @@ export function ResetPasswordPage() {
       await api.post("/auth/reset-password", { token, password });
       setDone(true);
     } catch (err) {
-      if (err instanceof ApiError && err.data?.error === "invalid_or_expired_token") {
-        setError("Ο σύνδεσμος έχει λήξει ή έχει ήδη χρησιμοποιηθεί. Ζήτησε νέο σύνδεσμο επαναφοράς.");
-      } else {
-        setError(err instanceof ApiError ? err.message : "Κάτι πήγε στραβά. Δοκίμασε ξανά.");
-      }
+      // Every failure mode here (bad/expired/reused token, or even a
+      // malformed one) boils down to the same actionable advice for a real
+      // user — never show them a raw backend error code like
+      // "invalid_request" or "invalid_or_expired_token".
+      setError("Ο σύνδεσμος επαναφοράς δεν είναι έγκυρος ή έχει λήξει. Ζήτησε νέο σύνδεσμο από την οθόνη σύνδεσης.");
     } finally {
       setPassword("");
       setConfirmPassword("");
