@@ -120,6 +120,23 @@ router.post("/companies", async (req, res) => {
   res.status(201).json({ company: publicCompany({ ...company, _count: { users: 1, contacts: 0 } }), owner: publicAdminUser({ ...owner, company }) });
 });
 
+const renameCompanySchema = z.object({ name: z.string().min(1).max(200) });
+
+router.patch("/companies/:id", async (req, res) => {
+  const parsed = renameCompanySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const company = await prisma.company.findUnique({ where: { id: req.params.id } });
+  if (!company) return res.status(404).json({ error: "not_found" });
+
+  const updated = await prisma.company.update({
+    where: { id: company.id },
+    data: { name: parsed.data.name.trim() },
+    include: { _count: { select: { users: true, contacts: true } } },
+  });
+  res.json(publicCompany(updated));
+});
+
 router.post("/companies/:id/suspend", async (req, res) => {
   const company = await prisma.company.findUnique({ where: { id: req.params.id } });
   if (!company) return res.status(404).json({ error: "not_found" });
@@ -257,12 +274,32 @@ router.post("/users/:id/assign-company", async (req, res) => {
     if (!company) return res.status(400).json({ error: "invalid_company" });
   }
 
+  const nextRole = req.body.role === "owner" || req.body.role === "member" ? req.body.role : undefined;
+
+  // Guard against leaving user's CURRENT company with zero owners — either
+  // by moving/detaching its last owner elsewhere, or by demoting them to
+  // "member" in place without anyone else holding "owner". A no-op call
+  // (same company, no role change) never trips this. Only one owner per
+  // company is supported today (see team.js), so there's no "promote someone
+  // else first" step to fall back on here — the caller has to pick a
+  // different target company/role instead.
+  const leavingCurrentCompany = !!user.companyId && companyId !== user.companyId;
+  const losingOwnerRoleInPlace = !leavingCurrentCompany && nextRole === "member";
+  if (user.role === "owner" && user.companyId && (leavingCurrentCompany || losingOwnerRoleInPlace)) {
+    const otherOwners = await prisma.user.count({
+      where: { companyId: user.companyId, role: "owner", id: { not: user.id } },
+    });
+    if (otherOwners === 0) {
+      return res.status(400).json({ error: "would_leave_company_ownerless" });
+    }
+  }
+
   const data = { companyId };
   // Optional: also set their role in the new company (owner | member) —
   // e.g. moving someone into a company as its owner. Defaults to leaving
   // whatever role they already had untouched if not provided.
-  if (req.body.role === "owner" || req.body.role === "member") {
-    data.role = req.body.role;
+  if (nextRole) {
+    data.role = nextRole;
   }
 
   const updated = await prisma.user.update({

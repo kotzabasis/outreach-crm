@@ -4,18 +4,32 @@ name: Keep Render backend awake
 # minutes without an incoming HTTP request — which also kills the in-process
 # campaign/sequence schedulers (backend/src/lib/scheduler.js) until the next
 # request wakes it back up, so scheduled sends can silently stall for hours.
-# Pinging /health every 10 minutes (under the 15-minute spin-down window)
-# keeps the instance awake, for free, using GitHub Actions' own scheduler —
-# no paid Render Cron Job needed.
+# Pinging /health keeps the instance awake, for free, using GitHub Actions'
+# own scheduler — no paid Render Cron Job needed.
 #
-# Cost check: ~10-minute cadence is ~4,400 pings/month, comfortably within
+# Cadence: every 5 minutes, not 10. GitHub's own docs say scheduled workflows
+# "may be delayed during periods of high loads" with no upper bound promised —
+# real cold-start 404s hit during testing were traced back to exactly this: a
+# missed/late tick let the 10-minute gap slip past Render's 15-minute
+# spin-down window. Halving the interval buys a much bigger buffer against
+# scheduler drift for the same reason a smoke detector needs margin, not just
+# the bare minimum.
+#
+# Cost check: ~5-minute cadence is ~8,600 pings/month, comfortably within
 # Render's 750 free instance-hours/month (an always-on single service uses
 # ~720-744 hours/month, i.e. nearly all of that budget — fine as long as this
-# is the only free Render service on the account).
+# is the only free Render service on the account). Separately, if this repo
+# is PRIVATE (not public), each run also burns GitHub Actions minutes against
+# your account's monthly free quota (2,000 min/month on GitHub Free) — a
+# ~5-10s curl step still typically bills as 1 rounded-up minute per run, so
+# ~8,600 runs/month could alone exceed that quota and start costing money.
+# If the repo is private and that's a concern, either switch back to */10,
+# or move the ping to a cheaper mechanism (e.g. an external free uptime
+# monitor like UptimeRobot/cron-job.org hitting /health instead).
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch: {} # allows a manual "Run workflow" click from the Actions tab
 
 jobs:

@@ -3676,12 +3676,52 @@ function NewCompanyModal({ onClose, onCreate }) {
   );
 }
 
+function RenameCompanyModal({ company, onClose, onRename }) {
+  const [name, setName] = useState(company.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await onRename(company.id, name);
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η μετονομασία.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Μετονομασία εταιρείας</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input required autoFocus placeholder="Όνομα εταιρείας" value={name} onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+          <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
 // Platform-admin-only: create/suspend/reactivate pilot companies. Each row's
 // users/contacts counts come straight from the backend's _count include.
-function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspend, onActivate }) {
+function CompaniesPanel({ companies, loading, error, onReload, onCreate, onRename, onSuspend, onActivate }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [statsCompany, setStatsCompany] = useState(null);
+  const [renameCompany, setRenameCompany] = useState(null);
 
   async function run(id, fn) {
     setBusyId(id);
@@ -3696,6 +3736,9 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspe
     <Card className="p-5">
       {showNew && <NewCompanyModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
       {statsCompany && <CompanyStatsModal company={statsCompany} onClose={() => setStatsCompany(null)} />}
+      {renameCompany && (
+        <RenameCompanyModal company={renameCompany} onClose={() => setRenameCompany(null)} onRename={onRename} />
+      )}
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm font-medium" style={{ color: C.ink }}>Εταιρείες</div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky }}>
@@ -3728,7 +3771,18 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspe
                   onClick={() => setStatsCompany(c)}
                   title="Στατιστικά εταιρείας"
                 >
-                  <td className="py-2.5 font-medium" style={{ color: C.ink }}>{c.name}</td>
+                  <td className="py-2.5 font-medium" style={{ color: C.ink }}>
+                    <span className="inline-flex items-center gap-1.5">
+                      {c.name}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRenameCompany(c); }}
+                        className="text-slate-300 hover:text-slate-500"
+                        title="Μετονομασία"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </span>
+                  </td>
                   <td className="py-2.5">
                     {c.status === "suspended" ? (
                       <span className="text-xs font-medium" style={{ color: C.coral }}>Ανεσταλμένη</span>
@@ -4003,7 +4057,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
   );
 }
 
-function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAssignCompany, currentUserId, teamOverview, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onSuspendCompany, onActivateCompany }) {
+function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAssignCompany, currentUserId, teamOverview, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onRenameCompany, onSuspendCompany, onActivateCompany }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
 
@@ -4020,6 +4074,15 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
     setBusyId(u.id);
     try {
       await onAssignCompany(u.id, companyId || null);
+    } catch (err) {
+      if (err instanceof ApiError && err.data?.error === "would_leave_company_ownerless") {
+        window.alert(
+          "Δεν μπορείς να μετακινήσεις/αφαιρέσεις τον μοναδικό ιδιοκτήτη αυτής της εταιρείας. " +
+          "Ανάθεσε πρώτα σε κάποιον άλλον τον ρόλο ιδιοκτήτη."
+        );
+      } else {
+        window.alert(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αλλαγή εταιρείας.");
+      }
     } finally {
       setBusyId(null);
     }
@@ -4058,6 +4121,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
           error={companiesError}
           onReload={onReloadCompanies}
           onCreate={onCreateCompany}
+          onRename={onRenameCompany}
           onSuspend={onSuspendCompany}
           onActivate={onActivateCompany}
         />
@@ -4307,6 +4371,10 @@ export function SuperAdminApp() {
     await api.post("/admin/companies", data);
     await loadCompanies();
   }
+  async function handleRenameCompany(id, name) {
+    await api.patch(`/admin/companies/${id}`, { name });
+    await loadCompanies();
+  }
   async function handleSuspendCompany(id) {
     await api.post(`/admin/companies/${id}/suspend`);
     await loadCompanies();
@@ -4390,6 +4458,7 @@ export function SuperAdminApp() {
           companiesError={companiesError}
           onReloadCompanies={loadCompanies}
           onCreateCompany={handleCreateCompany}
+          onRenameCompany={handleRenameCompany}
           onSuspendCompany={handleSuspendCompany}
           onActivateCompany={handleActivateCompany}
         />
