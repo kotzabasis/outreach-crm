@@ -22,7 +22,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body, isForm = false } = {}) {
+async function request(path, { method = "GET", body, isForm = false, _retried = false } = {}) {
   let res;
   try {
     res = await fetch(`${API_URL}${path}`, {
@@ -32,8 +32,14 @@ async function request(path, { method = "GET", body, isForm = false } = {}) {
       body: isForm ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
-    // Network failure (backend asleep/unreachable) — same shape as a normal
-    // API error so callers only need one code path.
+    // Network-level failure (backend asleep/unreachable). Render's free tier
+    // spins the backend down after 15 min idle and takes ~30-40s to wake up
+    // on the next request — give it one silent retry before surfacing an
+    // error, since the very next attempt a moment later usually succeeds.
+    if (!_retried) {
+      await new Promise((r) => setTimeout(r, 4000));
+      return request(path, { method, body, isForm, _retried: true });
+    }
     throw new ApiError(0, { error: "Δεν ήταν δυνατή η επικοινωνία με τον server. Δοκίμασε ξανά σε λίγο." });
   }
 
@@ -47,7 +53,22 @@ async function request(path, { method = "GET", body, isForm = false } = {}) {
     }
   }
 
-  if (!res.ok) throw new ApiError(res.status, data);
+  if (!res.ok) {
+    // Same cold-start situation as above, but manifesting as an HTTP-level
+    // error instead of a thrown network exception — while Render is waking
+    // the instance back up, some requests (especially non-GET) come back as
+    // a bare 404/502/503 with no real JSON error body (just an interstitial
+    // page), rather than our own API's error shape. Retry once rather than
+    // showing a confusing raw "HTTP 404" for what's really just the backend
+    // still booting. A real API error always comes back as parsed JSON, so
+    // this never masks an actual application error.
+    const looksLikeColdStart = [404, 502, 503].includes(res.status) && (data === null || typeof data === "string");
+    if (looksLikeColdStart && !_retried) {
+      await new Promise((r) => setTimeout(r, 4000));
+      return request(path, { method, body, isForm, _retried: true });
+    }
+    throw new ApiError(res.status, data);
+  }
   return data;
 }
 

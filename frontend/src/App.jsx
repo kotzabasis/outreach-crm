@@ -3681,6 +3681,7 @@ function NewCompanyModal({ onClose, onCreate }) {
 function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspend, onActivate }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [statsCompany, setStatsCompany] = useState(null);
 
   async function run(id, fn) {
     setBusyId(id);
@@ -3694,6 +3695,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspe
   return (
     <Card className="p-5">
       {showNew && <NewCompanyModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
+      {statsCompany && <CompanyStatsModal company={statsCompany} onClose={() => setStatsCompany(null)} />}
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm font-medium" style={{ color: C.ink }}>Εταιρείες</div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky }}>
@@ -3719,7 +3721,13 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspe
             </thead>
             <tbody>
               {companies.map((c) => (
-                <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
+                <tr
+                  key={c.id}
+                  className="border-t cursor-pointer hover:bg-slate-50"
+                  style={{ borderColor: C.line }}
+                  onClick={() => setStatsCompany(c)}
+                  title="Στατιστικά εταιρείας"
+                >
                   <td className="py-2.5 font-medium" style={{ color: C.ink }}>{c.name}</td>
                   <td className="py-2.5">
                     {c.status === "suspended" ? (
@@ -3730,7 +3738,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspe
                   </td>
                   <td className="py-2.5" style={{ color: C.ink }}>{c.userCount ?? "—"}</td>
                   <td className="py-2.5" style={{ color: C.ink }}>{c.contactCount ?? "—"}</td>
-                  <td className="py-2.5 text-right">
+                  <td className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     {c.status === "suspended" ? (
                       <button disabled={busyId === c.id} onClick={() => run(c.id, onActivate)}
                         className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.mint }}>
@@ -3750,6 +3758,116 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspe
         </div>
       )}
     </Card>
+  );
+}
+
+// Read-only per-company usage snapshot, opened by clicking a row in
+// CompaniesPanel — self-contained (fetches its own data via companyId) since
+// nothing else on the page needs this data, unlike the list above which is
+// already loaded/managed by the parent.
+function CompanyStatsModal({ company, onClose }) {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    api
+      .get(`/admin/companies/${company.id}/stats`)
+      .then((s) => {
+        if (alive) setStats(s);
+      })
+      .catch((err) => {
+        if (alive) setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στατιστικά.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [company.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl max-w-2xl w-full max-h-[85vh] overflow-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-sm font-semibold" style={{ color: C.ink }}>{company.name}</div>
+            <div className="text-xs mt-0.5" style={{ color: company.status === "suspended" ? C.coral : C.mint }}>
+              {company.status === "suspended" ? "Ανεσταλμένη" : "Ενεργή"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ color: C.slate }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {loading && <Spinner label="Φόρτωση στατιστικών…" />}
+        <ErrorNote message={error} />
+
+        {stats && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-3">
+              <StatCard label="Χρήστες" value={stats.users.length} color={C.navy} />
+              <StatCard label="Επαφές" value={stats.contacts.total} color={C.sky} />
+              <StatCard label="Sequences" value={`${stats.sequences.active}/${stats.sequences.total}`} sub="ενεργά / σύνολο" color={C.mint} />
+              <StatCard label="Templates" value={stats.templates.total} color={C.slate} />
+              <StatCard label="Campaigns" value={stats.campaigns.total} color={C.amber} />
+              <StatCard label="Emails" value={stats.emails.sent} sub={`${stats.emails.opened} opens · ${stats.emails.clicked} clicks`} color={C.navy} />
+              <StatCard label="Προσφορές" value={stats.offers.total} sub={fmtMoney(stats.offers.value)} color={C.mint} />
+            </div>
+
+            <div>
+              <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>Gmail</div>
+              <p className="text-sm" style={{ color: C.ink }}>
+                {stats.gmail ? stats.gmail.email : "Δεν έχει συνδεθεί ακόμα."}
+              </p>
+            </div>
+
+            {Object.keys(stats.contacts.byStatus).length > 0 && (
+              <div>
+                <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>Επαφές ανά κατάσταση</div>
+                <div className="flex flex-wrap gap-2 text-xs" style={{ color: C.ink }}>
+                  {Object.entries(stats.contacts.byStatus).map(([k, v]) => (
+                    <span key={k} className="px-2 py-1 rounded-md" style={{ backgroundColor: C.pale }}>{k}: {v}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>Μέλη ομάδας</div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left" style={{ color: C.slate }}>
+                    <th className="font-medium pb-1.5">Email</th>
+                    <th className="font-medium pb-1.5">Ρόλος</th>
+                    <th className="font-medium pb-1.5">Κατάσταση</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.users.map((u) => (
+                    <tr key={u.id} className="border-t" style={{ borderColor: C.line }}>
+                      <td className="py-1.5" style={{ color: C.ink }}>{u.email}</td>
+                      <td className="py-1.5" style={{ color: C.slate }}>{u.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"}</td>
+                      <td className="py-1.5" style={{ color: u.approved ? C.mint : C.amber }}>
+                        {u.approved ? "Εγκεκριμένος" : "Εκκρεμεί"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -134,6 +134,78 @@ router.post("/companies/:id/activate", async (req, res) => {
   res.json(publicCompany(updated));
 });
 
+// Per-company usage snapshot — shown when a platform admin clicks a company
+// row in the Companies panel, to answer "how active is this pilot" without
+// needing DB access. Read-only; every query below is filtered to this one
+// companyId, so there's no cross-company leakage even though this route
+// itself is platform-admin-only (same as everything else in this file).
+router.get("/companies/:id/stats", async (req, res) => {
+  const company = await prisma.company.findUnique({ where: { id: req.params.id } });
+  if (!company) return res.status(404).json({ error: "not_found" });
+
+  const companyId = company.id;
+  const [
+    users,
+    gmailAccount,
+    contactsTotal,
+    contactsByStatus,
+    sequencesTotal,
+    sequencesActive,
+    templatesTotal,
+    campaignsByStatus,
+    offers,
+    emailsSent,
+    opens,
+    clicks,
+  ] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId },
+      select: { id: true, email: true, name: true, role: true, approved: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.gmailAccount.findUnique({ where: { companyId } }),
+    prisma.contact.count({ where: { companyId } }),
+    prisma.contact.groupBy({ by: ["status"], where: { companyId }, _count: { _all: true } }),
+    prisma.sequence.count({ where: { companyId } }),
+    prisma.sequence.count({ where: { companyId, active: true } }),
+    prisma.template.count({ where: { companyId } }),
+    prisma.campaign.groupBy({ by: ["status"], where: { companyId }, _count: { _all: true } }),
+    prisma.offer.findMany({ where: { companyId }, select: { status: true, value: true } }),
+    prisma.emailLog.count({ where: { companyId } }),
+    prisma.trackingEvent.count({ where: { emailLog: { companyId }, type: "open", isBot: false } }),
+    prisma.trackingEvent.count({ where: { emailLog: { companyId }, type: "click" } }),
+  ]);
+
+  const offersSummary = offers.reduce(
+    (acc, o) => {
+      acc.total++;
+      if (o.status === "accepted") acc.accepted++;
+      if (o.status === "declined") acc.declined++;
+      acc.value += o.value || 0;
+      return acc;
+    },
+    { total: 0, accepted: 0, declined: 0, value: 0 }
+  );
+
+  res.json({
+    company: { id: company.id, name: company.name, status: company.status, createdAt: company.createdAt },
+    users,
+    gmail: gmailAccount ? { email: gmailAccount.email, connectedAt: gmailAccount.createdAt } : null,
+    contacts: {
+      total: contactsTotal,
+      byStatus: Object.fromEntries(contactsByStatus.map((c) => [c.status, c._count._all])),
+    },
+    sequences: { total: sequencesTotal, active: sequencesActive },
+    templates: { total: templatesTotal },
+    campaigns: {
+      total: campaignsByStatus.reduce((sum, c) => sum + c._count._all, 0),
+      byStatus: Object.fromEntries(campaignsByStatus.map((c) => [c.status, c._count._all])),
+    },
+    offers: offersSummary,
+    emails: { sent: emailsSent, opened: opens, clicked: clicks },
+  });
+});
+
 router.delete("/users/:id", async (req, res) => {
   if (req.params.id === req.user.id) {
     return res.status(400).json({ error: "cannot_delete_self" });
