@@ -881,27 +881,51 @@ export function ResetPasswordPage() {
 }
 
 function GmailBanner({ user }) {
-  if (!user || user.gmail) return null;
+  if (!user) return null;
   // The connected mailbox is shared company-wide now — only the workspace
   // owner can (re)connect it (see requireOwner on /auth/google in the
   // backend). A plain member would otherwise hit a raw 403 clicking this.
   const isOwner = user.role === "owner";
+
+  if (!user.gmail) {
+    return (
+      <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
+        <span>
+          {isOwner
+            ? "Δεν έχετε συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό."
+            : "Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον ιδιοκτήτη να το συνδέσει."}
+        </span>
+        {isOwner && (
+          <a
+            href={`${API_URL}/auth/google`}
+            className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0"
+            style={{ backgroundColor: C.amber }}
+          >
+            Σύνδεση Gmail
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  // Same daily cap the backend enforces on every send path (see
+  // lib/emailCap.js) — only worth interrupting people with once it's
+  // actually close, not on every normal day of sending.
+  const { sentToday, dailyCap } = user.gmail;
+  const usageRatio = dailyCap > 0 ? sentToday / dailyCap : 0;
+  if (usageRatio < 0.8) return null;
+
+  const capped = sentToday >= dailyCap;
   return (
-    <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
+    <div
+      className="flex items-center justify-between px-6 py-2.5 text-sm"
+      style={{ backgroundColor: capped ? `${C.coral}14` : `${C.amber}14`, color: capped ? C.coral : "#7A5206" }}
+    >
       <span>
-        {isOwner
-          ? "Δεν έχετε συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό."
-          : "Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον ιδιοκτήτη να το συνδέσει."}
+        {capped
+          ? `Το ημερήσιο όριο emails (${sentToday}/${dailyCap}) έχει συμπληρωθεί — η αποστολή θα συνεχίσει αύριο.`
+          : `Πλησιάζετε το ημερήσιο όριο emails: ${sentToday}/${dailyCap} έχουν σταλεί σήμερα.`}
       </span>
-      {isOwner && (
-        <a
-          href={`${API_URL}/auth/google`}
-          className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0"
-          style={{ backgroundColor: C.amber }}
-        >
-          Σύνδεση Gmail
-        </a>
-      )}
     </div>
   );
 }
@@ -3198,6 +3222,8 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
         setError("Δεν έχεις συνδέσει Gmail — σύνδεσε το από το μπάνερ στην κορυφή για να στείλεις.");
       } else if (err instanceof ApiError && err.data?.error === "contact_unsubscribed") {
         setError("Η επαφή έχει κάνει unsubscribe — δεν επιτρέπεται αποστολή.");
+      } else if (err instanceof ApiError && err.data?.error === "daily_send_cap_reached") {
+        setError(`Συμπληρώθηκε το ημερήσιο όριο emails (${err.data.limit}) για την εταιρεία σας — δοκίμασε ξανά αύριο.`);
       } else {
         setError(err instanceof ApiError ? err.message : "Η αποστολή απέτυχε.");
       }

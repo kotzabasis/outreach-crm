@@ -1,23 +1,22 @@
 const { v4: uuid } = require("uuid");
 const prisma = require("../db");
 const { sendTrackedEmail } = require("./gmailClient");
-
-const DAILY_CAP = Number(process.env.MAX_EMAILS_PER_DAY_PER_ACCOUNT || 300);
-
-async function resetDailyCounterIfNeeded(gmailAccount) {
-  const hoursSinceReset = (Date.now() - new Date(gmailAccount.sendCounterResetAt).getTime()) / 36e5;
-  if (hoursSinceReset >= 24) {
-    return prisma.gmailAccount.update({
-      where: { id: gmailAccount.id },
-      data: { emailsSentToday: 0, sendCounterResetAt: new Date() },
-    });
-  }
-  return gmailAccount;
-}
+const { DAILY_CAP, resetDailyCounterIfNeeded } = require("./emailCap");
 
 async function processDueEnrollments() {
   const due = await prisma.enrollment.findMany({
-    where: { status: "active", nextSendAt: { lte: new Date() } },
+    where: {
+      status: "active",
+      nextSendAt: { lte: new Date() },
+      // Suspending a company (platform admin action) is meant to stop
+      // everything for that company, not just interactive logins — without
+      // this, a suspended company's already-running sequences kept quietly
+      // sending emails through its Gmail connection in the background,
+      // which defeats the point of suspending it. companyId: null is the
+      // pre-migration legacy-data edge case (see ensureCompanyAssignment in
+      // server.js) — never actually suspended, so it's let through as-is.
+      sequence: { OR: [{ companyId: null }, { company: { status: "active" } }] },
+    },
     include: {
       contact: true,
       sequence: { include: { steps: { orderBy: { order: "asc" } } } },
@@ -161,7 +160,12 @@ async function sendNextStep(enrollment) {
 // tighter tick than the 5-minute sequence one below (campaign spacing is
 // meant to be minutes, not hours/days), so it gets its own faster cron.
 async function processDueCampaigns() {
-  const campaigns = await prisma.campaign.findMany({ where: { status: "running" } });
+  // Same reasoning as processDueEnrollments above — a suspended company's
+  // running campaigns must stop actually sending, not just be unreachable
+  // to its (locked-out) users.
+  const campaigns = await prisma.campaign.findMany({
+    where: { status: "running", OR: [{ companyId: null }, { company: { status: "active" } }] },
+  });
   for (const campaign of campaigns) {
     try {
       await sendNextCampaignRecipient(campaign);

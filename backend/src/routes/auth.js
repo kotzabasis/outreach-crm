@@ -6,6 +6,7 @@ const { v4: uuid } = require("uuid");
 const { getAuthUrl, exchangeCodeForTokens } = require("../lib/gmailClient");
 const { sendPasswordResetEmail } = require("../lib/mailer");
 const { encrypt } = require("../lib/crypto");
+const { DAILY_CAP } = require("../lib/emailCap");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const requireOwner = require("../lib/requireOwner");
@@ -22,6 +23,20 @@ const credentialsSchema = z.object({
 });
 
 function publicUser(user, gmailAccount) {
+  let gmail = null;
+  if (gmailAccount) {
+    // Read-only "as of right now" view of the same counter scheduler.js/
+    // send.js actually enforce — computed here rather than written, so
+    // simply loading this page never mutates the send counter. The
+    // authoritative reset+increment only ever happens at actual send time.
+    const hoursSinceReset = (Date.now() - new Date(gmailAccount.sendCounterResetAt).getTime()) / 36e5;
+    gmail = {
+      email: gmailAccount.email,
+      connectedAt: gmailAccount.createdAt,
+      sentToday: hoursSinceReset >= 24 ? 0 : gmailAccount.emailsSentToday,
+      dailyCap: DAILY_CAP,
+    };
+  }
   return {
     id: user.id,
     email: user.email,
@@ -33,7 +48,7 @@ function publicUser(user, gmailAccount) {
     // The connected Gmail account is now shared company-wide, not per-person
     // — every teammate sees the same "gmail" block once anyone on the team
     // has connected it.
-    gmail: gmailAccount ? { email: gmailAccount.email, connectedAt: gmailAccount.createdAt } : null,
+    gmail,
   };
 }
 
