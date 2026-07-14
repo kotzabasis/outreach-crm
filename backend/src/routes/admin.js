@@ -171,6 +171,36 @@ router.post("/users/:id/approve", async (req, res) => {
   res.json(publicAdminUser(updated));
 });
 
+// Standalone assign/reassign — the general-purpose way to put an existing
+// user (approved or still pending) into a company, independent of creation
+// or approval time. Pass companyId: null to detach them from their current
+// company (they'll see no shared data until assigned a new one).
+router.post("/users/:id/assign-company", async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) return res.status(404).json({ error: "not_found" });
+
+  const companyId = typeof req.body.companyId === "string" && req.body.companyId ? req.body.companyId : null;
+  if (companyId) {
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) return res.status(400).json({ error: "invalid_company" });
+  }
+
+  const data = { companyId };
+  // Optional: also set their role in the new company (owner | member) —
+  // e.g. moving someone into a company as its owner. Defaults to leaving
+  // whatever role they already had untouched if not provided.
+  if (req.body.role === "owner" || req.body.role === "member") {
+    data.role = req.body.role;
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data,
+    include: { company: true },
+  });
+  res.json(publicAdminUser(updated));
+});
+
 router.post("/users/:id/revoke", async (req, res) => {
   if (req.params.id === req.user.id) {
     return res.status(400).json({ error: "cannot_revoke_self" });

@@ -758,7 +758,7 @@ function GmailBanner({ user }) {
       <span>
         {isOwner
           ? "Δεν έχετε συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό."
-          : "Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον owner να το συνδέσει."}
+          : "Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον ιδιοκτήτη να το συνδέσει."}
       </span>
       {isOwner && (
         <a
@@ -3566,11 +3566,12 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
 }
 
 // ---------- Admin ----------
-function NewAdminUserModal({ onClose, onCreate }) {
+function NewAdminUserModal({ onClose, onCreate, companies }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [companyId, setCompanyId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -3579,7 +3580,7 @@ function NewAdminUserModal({ onClose, onCreate }) {
     setError("");
     setBusy(true);
     try {
-      await onCreate({ email, password, name: name || undefined, isAdmin });
+      await onCreate({ email, password, name: name || undefined, isAdmin, companyId: companyId || undefined });
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία χρήστη.");
@@ -3602,6 +3603,16 @@ function NewAdminUserModal({ onClose, onCreate }) {
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={password} onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Εταιρεία</label>
+            <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+              <option value="">— χωρίς εταιρεία (θα οριστεί αργότερα) —</option>
+              {(companies || []).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
           <label className="flex items-center gap-2 text-sm" style={{ color: C.ink }}>
             <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
             Δικαιώματα admin
@@ -3648,7 +3659,7 @@ function NewCompanyModal({ onClose, onCreate }) {
         <form onSubmit={handleSubmit} className="space-y-3">
           <input required placeholder="Όνομα εταιρείας" value={companyName} onChange={(e) => setCompanyName(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <p className="text-xs font-medium pt-1" style={{ color: C.slate }}>Πρώτος χρήστης (owner)</p>
+          <p className="text-xs font-medium pt-1" style={{ color: C.slate }}>Πρώτος χρήστης (ιδιοκτήτης)</p>
           <input required type="email" placeholder="Email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <input placeholder="Όνομα (προαιρετικό)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
@@ -3684,7 +3695,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspe
     <Card className="p-5">
       {showNew && <NewCompanyModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
       <div className="flex items-center justify-between mb-4">
-        <div className="text-sm font-medium" style={{ color: C.ink }}>Εταιρείες (workspaces)</div>
+        <div className="text-sm font-medium" style={{ color: C.ink }}>Εταιρείες</div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky }}>
           <Building2 size={13} /> Νέα εταιρεία
         </button>
@@ -3846,7 +3857,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
                       </td>
                       <td className="px-4 py-3">
                         {m.role === "owner" ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.navy }}><ShieldCheck size={13} /> Owner</span>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.navy }}><ShieldCheck size={13} /> Ιδιοκτήτης</span>
                         ) : (
                           <span className="text-xs" style={{ color: C.slate }}>Μέλος</span>
                         )}
@@ -3874,7 +3885,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
   );
 }
 
-function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, currentUserId, teamOverview, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onSuspendCompany, onActivateCompany }) {
+function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAssignCompany, currentUserId, teamOverview, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onSuspendCompany, onActivateCompany }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
 
@@ -3882,6 +3893,15 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
     setBusyId(id);
     try {
       await fn(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleAssignCompany(u, companyId) {
+    setBusyId(u.id);
+    try {
+      await onAssignCompany(u.id, companyId || null);
     } finally {
       setBusyId(null);
     }
@@ -3901,7 +3921,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
 
   return (
     <div className="h-full overflow-auto">
-      {showNew && <NewAdminUserModal onClose={() => setShowNew(false)} onCreate={onCreateUser} />}
+      {showNew && <NewAdminUserModal onClose={() => setShowNew(false)} onCreate={onCreateUser} companies={companies} />}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Διαχείριση πρόσβασης</h1>
@@ -3970,6 +3990,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                   <th className="font-medium px-4 py-2.5">Χρήστης</th>
                   <th className="font-medium px-4 py-2.5">Κατάσταση</th>
                   <th className="font-medium px-4 py-2.5">Ρόλος</th>
+                  <th className="font-medium px-4 py-2.5">Εταιρεία</th>
                   <th className="font-medium px-4 py-2.5">Εγγραφή</th>
                   <th className="font-medium px-4 py-2.5 text-right">Ενέργειες</th>
                 </tr>
@@ -3994,6 +4015,21 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                       ) : (
                         <span className="text-xs" style={{ color: C.slate }}>Χρήστης</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        disabled={busyId === u.id}
+                        value={u.companyId || ""}
+                        onChange={(e) => handleAssignCompany(u, e.target.value)}
+                        className="rounded-md px-2 py-1 text-xs border bg-white"
+                        style={{ borderColor: C.line, color: C.ink }}
+                        title="Ανάθεση σε εταιρεία"
+                      >
+                        <option value="">— χωρίς εταιρεία —</option>
+                        {(companies || []).map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(u.createdAt)}</td>
                     <td className="px-4 py-3">
@@ -4566,6 +4602,12 @@ export default function App() {
     await loadAdminUsers();
   }
 
+  async function handleAssignUserCompany(id, companyId) {
+    await api.post(`/admin/users/${id}/assign-company`, { companyId });
+    await loadAdminUsers();
+    await loadCompanies(); // user counts per company shift when someone moves
+  }
+
   async function handleCreateCompany(data) {
     await api.post("/admin/companies", data);
     await loadCompanies();
@@ -4788,6 +4830,7 @@ export default function App() {
               onDemote={handleDemoteUser}
               onCreateUser={handleCreateAdminUser}
               onDeleteUser={handleDeleteAdminUser}
+              onAssignCompany={handleAssignUserCompany}
               currentUserId={user.id}
               teamOverview={teamOverview}
               companies={companies}
