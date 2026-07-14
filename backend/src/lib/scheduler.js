@@ -1,4 +1,3 @@
-const cron = require("node-cron");
 const { v4: uuid } = require("uuid");
 const prisma = require("../db");
 const { sendTrackedEmail } = require("./gmailClient");
@@ -36,6 +35,8 @@ async function processDueEnrollments() {
       // this will show up in logs — worth alerting on in production.
     }
   }
+
+  return due.length > 0; // tells the caller whether this tick found anything to do — drives backoff
 }
 
 // Combinable gating conditions on a step (on top of, not instead of,
@@ -245,21 +246,64 @@ async function sendNextCampaignRecipient(campaign) {
   ]);
 }
 
-function startScheduler() {
-  // Every 5 minutes. Fine-grained enough for reasonable delivery timing
-  // without hammering the DB or Gmail API.
-  cron.schedule("*/5 * * * *", () => {
-    processDueEnrollments().catch((err) => console.error("Scheduler tick failed:", err));
-  });
-  console.log("Sequence scheduler started (every 5 minutes).");
+// Both loops below are self-rescheduling via setTimeout rather than fixed
+// node-cron intervals, so they can back off when there's nothing to do.
+// Previously the campaign tick queried the DB every single minute forever,
+// active or not — on a mostly-idle single-user CRM that's the thing that
+// kept Neon's compute from ever hitting its 5-minute autosuspend, burning
+// CU-hours for no reason. Now: while any enrollment/campaign is actually
+// active, the tick stays at its normal fast interval (send timing/spacing is
+// unaffected); once nothing is active, the interval doubles up to a capped
+// ceiling, and resets to the fast interval the moment something becomes
+// active again. The "is anything active" check is a cheap indexed count(),
+// independent of the (potentially heavier) due-work query.
 
-  // Every 1 minute — campaign spacing is configured in minutes, so it needs
-  // a tick at least that fine-grained to actually feel spaced-out rather
-  // than batched.
-  cron.schedule("* * * * *", () => {
-    processDueCampaigns().catch((err) => console.error("Campaign scheduler tick failed:", err));
-  });
-  console.log("Campaign scheduler started (every 1 minute).");
+const ENROLLMENT_BASE_MS = 5 * 60 * 1000; // 5 min — matches the original fixed cron cadence
+const ENROLLMENT_MAX_MS = 30 * 60 * 1000; // cap backoff at 30 min
+let enrollmentIntervalMs = ENROLLMENT_BASE_MS;
+
+async function enrollmentTick() {
+  try {
+    await processDueEnrollments();
+  } catch (err) {
+    console.error("Scheduler tick failed:", err.message);
+  }
+  try {
+    const activeCount = await prisma.enrollment.count({ where: { status: "active" } });
+    enrollmentIntervalMs = activeCount > 0 ? ENROLLMENT_BASE_MS : Math.min(enrollmentIntervalMs * 2, ENROLLMENT_MAX_MS);
+  } catch (err) {
+    console.error("Scheduler backoff check failed, resetting to base interval:", err.message);
+    enrollmentIntervalMs = ENROLLMENT_BASE_MS; // fail safe — never get stuck backed off because of a transient DB error
+  }
+  setTimeout(enrollmentTick, enrollmentIntervalMs);
+}
+
+const CAMPAIGN_BASE_MS = 60 * 1000; // 1 min — campaign spacing is configured in minutes, needs at least this fine a tick
+const CAMPAIGN_MAX_MS = 15 * 60 * 1000; // cap backoff at 15 min
+let campaignIntervalMs = CAMPAIGN_BASE_MS;
+
+async function campaignTick() {
+  try {
+    await processDueCampaigns();
+  } catch (err) {
+    console.error("Campaign scheduler tick failed:", err.message);
+  }
+  try {
+    const runningCount = await prisma.campaign.count({ where: { status: "running" } });
+    campaignIntervalMs = runningCount > 0 ? CAMPAIGN_BASE_MS : Math.min(campaignIntervalMs * 2, CAMPAIGN_MAX_MS);
+  } catch (err) {
+    console.error("Campaign backoff check failed, resetting to base interval:", err.message);
+    campaignIntervalMs = CAMPAIGN_BASE_MS;
+  }
+  setTimeout(campaignTick, campaignIntervalMs);
+}
+
+function startScheduler() {
+  enrollmentTick();
+  console.log(`Sequence scheduler started (every ${ENROLLMENT_BASE_MS / 60000} min, backs off to ${ENROLLMENT_MAX_MS / 60000} min when idle).`);
+
+  campaignTick();
+  console.log(`Campaign scheduler started (every ${CAMPAIGN_BASE_MS / 60000} min, backs off to ${CAMPAIGN_MAX_MS / 60000} min when idle).`);
 }
 
 module.exports = { startScheduler, processDueEnrollments, processDueCampaigns };

@@ -1,0 +1,27 @@
+name: Keep Render backend awake
+
+# Render's free web-service tier spins the whole process down after 15
+# minutes without an incoming HTTP request — which also kills the in-process
+# campaign/sequence schedulers (backend/src/lib/scheduler.js) until the next
+# request wakes it back up, so scheduled sends can silently stall for hours.
+# Pinging /health every 10 minutes (under the 15-minute spin-down window)
+# keeps the instance awake, for free, using GitHub Actions' own scheduler —
+# no paid Render Cron Job needed.
+#
+# Cost check: ~10-minute cadence is ~4,400 pings/month, comfortably within
+# Render's 750 free instance-hours/month (an always-on single service uses
+# ~720-744 hours/month, i.e. nearly all of that budget — fine as long as this
+# is the only free Render service on the account).
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {} # allows a manual "Run workflow" click from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend /health
+        run: |
+          curl -fsS --max-time 20 "https://outreach-crm-a22j.onrender.com/health" || echo "Ping failed (backend may be cold-starting) — not failing the job."

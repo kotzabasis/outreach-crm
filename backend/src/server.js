@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const compression = require("compression");
 const session = require("express-session");
 const { Pool } = require("pg");
 const pgSessionStore = require("connect-pg-simple")(session);
@@ -34,6 +35,10 @@ const isProd = process.env.NODE_ENV === "production";
 app.set("trust proxy", 1); // needed behind Render/Railway/any reverse proxy for secure cookies to work
 
 app.use(helmet());
+// Gzip every JSON response (contacts list, analytics, activity feed, etc.) —
+// cheap CPU trade for meaningfully smaller payloads, which matters now that
+// Render's free-tier egress cap was cut from 100GB to 5GB/month.
+app.use(compression());
 app.use(
   cors({
     origin: process.env.FRONTEND_URL,

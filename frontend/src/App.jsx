@@ -3981,14 +3981,14 @@ export default function App() {
     const id = setInterval(() => {
       // Skip the round-trip entirely while the tab isn't visible (switched
       // away, minimized, different tab focused) — there's no one looking at
-      // the result, so it was just burning requests/battery every 30s for
+      // the result, so it was just burning requests/battery every tick for
       // nothing. Whatever's stale gets refreshed as soon as the tab is
       // focused again via the visibilitychange listener below.
       if (document.hidden) return;
       loadAnalytics();
       loadActivity();
       loadCampaigns();
-    }, 30000);
+    }, 90000); // was 30s — 90s cuts request volume/egress 3x with no real loss of freshness
     return () => clearInterval(id);
   }, [authState, loadAnalytics, loadActivity, loadCampaigns]);
 
