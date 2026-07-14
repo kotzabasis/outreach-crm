@@ -7,6 +7,8 @@ const { getAuthUrl, exchangeCodeForTokens } = require("../lib/gmailClient");
 const { sendPasswordResetEmail } = require("../lib/mailer");
 const { encrypt } = require("../lib/crypto");
 const prisma = require("../db");
+const requireAuth = require("../lib/requireAuth");
+const requireOwner = require("../lib/requireOwner");
 
 const router = express.Router();
 
@@ -26,6 +28,11 @@ function publicUser(user, gmailAccount) {
     name: user.name,
     isAdmin: user.isAdmin,
     approved: user.approved,
+    role: user.role, // owner | member — within their own company
+    company: user.company ? { id: user.company.id, name: user.company.name, status: user.company.status } : null,
+    // The connected Gmail account is now shared company-wide, not per-person
+    // — every teammate sees the same "gmail" block once anyone on the team
+    // has connected it.
     gmail: gmailAccount ? { email: gmailAccount.email, connectedAt: gmailAccount.createdAt } : null,
   };
 }
@@ -48,23 +55,48 @@ router.post("/register", async (req, res) => {
   const isFirstUser = (await prisma.user.count()) === 0;
 
   const passwordHash = await bcrypt.hash(password, 12);
+
+  // The very first user also bootstraps their own Company (they become its
+  // owner) — see also ensureCompanyAssignment in server.js, which does the
+  // equivalent backfill for data that predates Companies existing at all.
+  // Anyone registering after this is intentionally left with no company —
+  // for a pilot with hand-picked companies, the real onboarding path is a
+  // platform admin creating the company (routes/companies.js) or an
+  // existing owner inviting them directly, not the open approval queue.
+  let companyId = null;
+  if (isFirstUser) {
+    const company = await prisma.company.create({ data: { name: name ? `${name}'s Workspace` : "My Workspace" } });
+    companyId = company.id;
+  }
+
   const user = await prisma.user.create({
-    data: { email: email.toLowerCase(), passwordHash, name, isAdmin: isFirstUser, approved: isFirstUser },
+    data: {
+      email: email.toLowerCase(),
+      passwordHash,
+      name,
+      isAdmin: isFirstUser,
+      approved: isFirstUser,
+      companyId,
+      role: isFirstUser ? "owner" : "member",
+    },
   });
 
   if (!isFirstUser) {
     // Account created but not approved yet — no session, can't log in until
-    // an admin approves them from the Admin view.
+    // an admin approves them from the Admin view (which now also assigns a
+    // company at approval time, since a pending user doesn't have one yet).
     return res.status(201).json({
       pending: true,
       message: "Ο λογαριασμός δημιουργήθηκε. Περιμένει έγκριση από διαχειριστή πριν μπορέσεις να συνδεθείς.",
     });
   }
 
+  const userWithCompany = await prisma.user.findUnique({ where: { id: user.id }, include: { company: true } });
+
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
     req.session.userId = user.id;
-    res.status(201).json(publicUser(user, null));
+    res.status(201).json(publicUser(userWithCompany, null));
   });
 });
 
@@ -73,7 +105,7 @@ router.post("/login", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "invalid_email_or_password" });
 
   const { email, password } = parsed.data;
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() }, include: { company: true } });
 
   // Always run bcrypt.compare, even on a missing user, against a dummy hash —
   // otherwise a missing-user response returns faster than a wrong-password
@@ -89,7 +121,15 @@ router.post("/login", async (req, res) => {
     return res.status(403).json({ error: "account_pending_approval" });
   }
 
-  const gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: user.id } });
+  if (user.company && user.company.status === "suspended") {
+    return res.status(403).json({ error: "company_suspended" });
+  }
+
+  // Shared per-company mailbox now, not per-person — every teammate logging
+  // in sees the same connected Gmail account.
+  const gmailAccount = user.companyId
+    ? await prisma.gmailAccount.findUnique({ where: { companyId: user.companyId } })
+    : null;
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
@@ -160,21 +200,31 @@ router.post("/reset-password", async (req, res) => {
 
 router.get("/me", async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: "not_authenticated" });
-  const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
+  const user = await prisma.user.findUnique({ where: { id: req.session.userId }, include: { company: true } });
   if (!user) return res.status(401).json({ error: "not_authenticated" });
-  const gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: user.id } });
+  if (user.company && user.company.status === "suspended") {
+    return res.status(403).json({ error: "company_suspended" });
+  }
+  const gmailAccount = user.companyId
+    ? await prisma.gmailAccount.findUnique({ where: { companyId: user.companyId } })
+    : null;
   res.json(publicUser(user, gmailAccount));
 });
 
 // --- Gmail connection (separate from app login) ---
-// Requires an existing app session; this only links a Gmail account for
-// sending, it does not log anyone in.
-router.get("/google", (req, res) => {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: "log_in_first" });
-  }
+// The connected mailbox is shared company-wide (one GmailAccount per
+// company — see schema.prisma), so only an "owner" can (re)connect or
+// disconnect it; any member can send once it's connected. Requires an
+// existing app session; this only links a Gmail account for sending, it
+// does not log anyone in.
+router.get("/google", requireAuth, requireOwner, (req, res) => {
   const state = crypto.randomBytes(16).toString("hex");
   req.session.oauthState = state;
+  // The callback below only has the session to work with (Google redirects
+  // here with no app-specific params) — stash which company this connect is
+  // for now, rather than re-deriving it from a session.userId that may not
+  // even be needed at that point.
+  req.session.oauthCompanyId = req.user.companyId;
   res.redirect(getAuthUrl(state));
 });
 
@@ -187,8 +237,13 @@ router.get("/google/callback", async (req, res) => {
   if (!state || state !== req.session.oauthState) {
     return res.status(400).send("Invalid or expired OAuth state. Please try connecting again.");
   }
+  const companyId = req.session.oauthCompanyId;
   delete req.session.oauthState;
+  delete req.session.oauthCompanyId;
 
+  if (!companyId) {
+    return res.redirect(`${process.env.FRONTEND_URL}/?gmail_connected=0&reason=no_company`);
+  }
   if (!code) {
     return res.status(400).send("Missing authorization code from Google.");
   }
@@ -203,8 +258,9 @@ router.get("/google/callback", async (req, res) => {
     }
 
     await prisma.gmailAccount.upsert({
-      where: { userId: req.session.userId },
+      where: { companyId },
       update: {
+        userId: req.session.userId, // who (re)connected it — audit only
         googleId: profile.id,
         email: profile.email,
         encryptedAccessToken: encrypt(tokens.access_token),
@@ -213,6 +269,7 @@ router.get("/google/callback", async (req, res) => {
       },
       create: {
         id: uuid(),
+        companyId,
         userId: req.session.userId,
         googleId: profile.id,
         email: profile.email,
@@ -229,9 +286,8 @@ router.get("/google/callback", async (req, res) => {
   }
 });
 
-router.post("/google/disconnect", async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ error: "not_authenticated" });
-  await prisma.gmailAccount.deleteMany({ where: { userId: req.session.userId } });
+router.post("/google/disconnect", requireAuth, requireOwner, async (req, res) => {
+  await prisma.gmailAccount.deleteMany({ where: { companyId: req.user.companyId } });
   res.json({ ok: true });
 });
 

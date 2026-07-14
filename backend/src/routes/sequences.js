@@ -45,11 +45,11 @@ const sequenceSchema = z.object({
 // conditions, attachments} fields, fetching template content where needed.
 // Throws if a templateId doesn't belong to this user (caller should catch
 // and 400).
-async function resolveSteps(steps, userId) {
+async function resolveSteps(steps, companyId) {
   const resolved = [];
   for (const step of steps) {
     if (step.templateId) {
-      const template = await prisma.template.findFirst({ where: { id: step.templateId, userId } });
+      const template = await prisma.template.findFirst({ where: { id: step.templateId, companyId } });
       if (!template) throw new Error(`template_not_found:${step.templateId}`);
       resolved.push({
         subject: template.subject,
@@ -75,7 +75,7 @@ async function resolveSteps(steps, userId) {
 
 router.get("/", async (req, res) => {
   const sequences = await prisma.sequence.findMany({
-    where: { userId: req.user.id },
+    where: { companyId: req.user.companyId },
     include: { steps: { orderBy: { order: "asc" } }, _count: { select: { enrollments: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -88,7 +88,7 @@ router.post("/", async (req, res) => {
 
   let resolvedSteps;
   try {
-    resolvedSteps = await resolveSteps(parsed.data.steps, req.user.id);
+    resolvedSteps = await resolveSteps(parsed.data.steps, req.user.companyId);
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
@@ -96,6 +96,7 @@ router.post("/", async (req, res) => {
   const sequence = await prisma.sequence.create({
     data: {
       userId: req.user.id,
+      companyId: req.user.companyId,
       name: parsed.data.name,
       steps: {
         create: resolvedSteps.map((s, i) => ({ ...s, order: i })),
@@ -107,7 +108,7 @@ router.post("/", async (req, res) => {
 });
 
 router.patch("/:id", async (req, res) => {
-  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!sequence) return res.status(404).json({ error: "not_found" });
 
   const data = {};
@@ -119,7 +120,7 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!sequence) return res.status(404).json({ error: "not_found" });
   await prisma.sequence.delete({ where: { id: sequence.id } });
   res.json({ ok: true });
@@ -128,7 +129,7 @@ router.delete("/:id", async (req, res) => {
 // Add one step to an existing sequence (from a template or written inline).
 router.post("/:id/steps", async (req, res) => {
   const sequence = await prisma.sequence.findFirst({
-    where: { id: req.params.id, userId: req.user.id },
+    where: { id: req.params.id, companyId: req.user.companyId },
     include: { steps: true },
   });
   if (!sequence) return res.status(404).json({ error: "not_found" });
@@ -138,7 +139,7 @@ router.post("/:id/steps", async (req, res) => {
 
   let resolved;
   try {
-    [resolved] = await resolveSteps([parsed.data], req.user.id);
+    [resolved] = await resolveSteps([parsed.data], req.user.companyId);
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
@@ -150,7 +151,7 @@ router.post("/:id/steps", async (req, res) => {
 });
 
 router.delete("/:id/steps/:stepId", async (req, res) => {
-  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!sequence) return res.status(404).json({ error: "not_found" });
   const step = await prisma.sequenceStep.findFirst({ where: { id: req.params.stepId, sequenceId: sequence.id } });
   if (!step) return res.status(404).json({ error: "not_found" });
@@ -161,7 +162,7 @@ router.delete("/:id/steps/:stepId", async (req, res) => {
 // Edit an existing step's copy/timing in place (doesn't touch already-sent
 // EmailLogs — those keep whatever was sent, which is correct history).
 router.patch("/:id/steps/:stepId", async (req, res) => {
-  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!sequence) return res.status(404).json({ error: "not_found" });
   const step = await prisma.sequenceStep.findFirst({ where: { id: req.params.stepId, sequenceId: sequence.id } });
   if (!step) return res.status(404).json({ error: "not_found" });
@@ -186,12 +187,12 @@ router.patch("/:id/steps/:stepId", async (req, res) => {
 // render but nothing real gets touched — no EmailLog/enrollment created, so
 // this never shows up in analytics or the recipient's real send history.
 router.post("/:id/steps/:stepId/test-send", async (req, res) => {
-  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const sequence = await prisma.sequence.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!sequence) return res.status(404).json({ error: "not_found" });
   const step = await prisma.sequenceStep.findFirst({ where: { id: req.params.stepId, sequenceId: sequence.id } });
   if (!step) return res.status(404).json({ error: "not_found" });
 
-  const gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: req.user.id } });
+  const gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: req.user.companyId } });
   if (!gmailAccount) return res.status(400).json({ error: "gmail_not_connected" });
 
   const emailParsed = z.string().email().safeParse((req.body.testEmail || gmailAccount.email || "").trim());
@@ -222,7 +223,7 @@ router.post("/:id/steps/:stepId/test-send", async (req, res) => {
 // editor so best-practice cadence tweaks don't require delete+recreate.
 router.post("/:id/steps/reorder", async (req, res) => {
   const sequence = await prisma.sequence.findFirst({
-    where: { id: req.params.id, userId: req.user.id },
+    where: { id: req.params.id, companyId: req.user.companyId },
     include: { steps: true },
   });
   if (!sequence) return res.status(404).json({ error: "not_found" });
@@ -247,7 +248,7 @@ router.post("/:id/steps/reorder", async (req, res) => {
 // (staggered by a few seconds so the scheduler doesn't fire 500 sends at once).
 router.post("/:id/enroll", async (req, res) => {
   const sequence = await prisma.sequence.findFirst({
-    where: { id: req.params.id, userId: req.user.id },
+    where: { id: req.params.id, companyId: req.user.companyId },
     include: { steps: { orderBy: { order: "asc" } } },
   });
   if (!sequence) return res.status(404).json({ error: "not_found" });
@@ -258,7 +259,7 @@ router.post("/:id/enroll", async (req, res) => {
   if (contactIds.length > 500) return res.status(400).json({ error: "max_500_contacts_per_enroll" });
 
   const contacts = await prisma.contact.findMany({
-    where: { id: { in: contactIds }, userId: req.user.id, unsubscribed: false },
+    where: { id: { in: contactIds }, companyId: req.user.companyId, unsubscribed: false },
   });
 
   const now = Date.now();

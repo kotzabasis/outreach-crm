@@ -29,7 +29,7 @@ function countByStatus(recipients) {
 // GET /:id, fetched only when a campaign is actually opened).
 router.get("/", async (req, res) => {
   const campaigns = await prisma.campaign.findMany({
-    where: { userId: req.user.id },
+    where: { companyId: req.user.companyId },
     include: { recipients: { select: { status: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -48,7 +48,7 @@ router.post("/", async (req, res) => {
   let attachments = parsed.data.attachments;
 
   if (templateId) {
-    const template = await prisma.template.findFirst({ where: { id: templateId, userId: req.user.id } });
+    const template = await prisma.template.findFirst({ where: { id: templateId, companyId: req.user.companyId } });
     if (!template) return res.status(400).json({ error: "invalid_template" });
     subject = template.subject;
     body = template.body;
@@ -57,16 +57,17 @@ router.post("/", async (req, res) => {
 
   if (!subject || !body) return res.status(400).json({ error: "subject_and_body_required" });
 
-  // Only real contacts belonging to this user, deduplicated — silently drop
-  // anything else instead of failing the whole request over one bad id.
+  // Only real contacts belonging to this company, deduplicated — silently
+  // drop anything else instead of failing the whole request over one bad id.
   const contacts = await prisma.contact.findMany({
-    where: { id: { in: [...new Set(contactIds)] }, userId: req.user.id },
+    where: { id: { in: [...new Set(contactIds)] }, companyId: req.user.companyId },
   });
   if (contacts.length === 0) return res.status(400).json({ error: "no_valid_contacts" });
 
   const campaign = await prisma.campaign.create({
     data: {
       userId: req.user.id,
+      companyId: req.user.companyId,
       name,
       subject,
       body,
@@ -82,7 +83,7 @@ router.post("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   const campaign = await prisma.campaign.findFirst({
-    where: { id: req.params.id, userId: req.user.id },
+    where: { id: req.params.id, companyId: req.user.companyId },
     include: {
       recipients: {
         include: { contact: { select: { id: true, name: true, email: true } } },
@@ -123,7 +124,7 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/:id/start", async (req, res) => {
-  const campaign = await prisma.campaign.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const campaign = await prisma.campaign.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!campaign) return res.status(404).json({ error: "not_found" });
   if (!["draft", "paused"].includes(campaign.status)) return res.status(400).json({ error: "cannot_start" });
 
@@ -135,7 +136,7 @@ router.post("/:id/start", async (req, res) => {
 });
 
 router.post("/:id/pause", async (req, res) => {
-  const campaign = await prisma.campaign.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const campaign = await prisma.campaign.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!campaign) return res.status(404).json({ error: "not_found" });
   if (campaign.status !== "running") return res.status(400).json({ error: "not_running" });
 
@@ -144,7 +145,7 @@ router.post("/:id/pause", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const campaign = await prisma.campaign.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const campaign = await prisma.campaign.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!campaign) return res.status(404).json({ error: "not_found" });
   await prisma.campaign.delete({ where: { id: campaign.id } });
   res.json({ ok: true });

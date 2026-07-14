@@ -16,7 +16,7 @@ const templateSchema = z.object({
 
 router.get("/", async (req, res) => {
   const templates = await prisma.template.findMany({
-    where: { userId: req.user.id },
+    where: { companyId: req.user.companyId },
     orderBy: { updatedAt: "desc" },
   });
 
@@ -34,7 +34,7 @@ router.get("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const template = await prisma.template.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const template = await prisma.template.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!template) return res.status(404).json({ error: "not_found" });
   res.json(template);
 });
@@ -43,12 +43,12 @@ router.post("/", async (req, res) => {
   const parsed = templateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const template = await prisma.template.create({ data: { ...parsed.data, userId: req.user.id } });
+  const template = await prisma.template.create({ data: { ...parsed.data, userId: req.user.id, companyId: req.user.companyId } });
   res.status(201).json(template);
 });
 
 router.patch("/:id", async (req, res) => {
-  const template = await prisma.template.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const template = await prisma.template.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!template) return res.status(404).json({ error: "not_found" });
 
   const parsed = templateSchema.partial().safeParse(req.body);
@@ -59,7 +59,7 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const template = await prisma.template.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const template = await prisma.template.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!template) return res.status(404).json({ error: "not_found" });
   await prisma.template.delete({ where: { id: template.id } });
   res.json({ ok: true });

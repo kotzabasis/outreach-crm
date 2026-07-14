@@ -640,6 +640,8 @@ function AuthScreen({ onAuthenticated }) {
     } catch (err) {
       if (err instanceof ApiError && err.status === 403 && err.data?.error === "account_pending_approval") {
         setError("Ο λογαριασμός σου εκκρεμεί έγκρισης από διαχειριστή. Δοκίμασε ξανά αργότερα.");
+      } else if (err instanceof ApiError && err.status === 403 && err.data?.error === "company_suspended") {
+        setError("Το workspace της εταιρείας σου έχει ανασταλεί. Επικοινώνησε με τον διαχειριστή.");
       } else {
         setError(err instanceof ApiError ? err.message : "Κάτι πήγε στραβά. Δοκίμασε ξανά.");
       }
@@ -747,16 +749,26 @@ function AuthScreen({ onAuthenticated }) {
 
 function GmailBanner({ user }) {
   if (!user || user.gmail) return null;
+  // The connected mailbox is shared company-wide now — only the workspace
+  // owner can (re)connect it (see requireOwner on /auth/google in the
+  // backend). A plain member would otherwise hit a raw 403 clicking this.
+  const isOwner = user.role === "owner";
   return (
     <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
-      <span>Δεν έχεις συνδέσει Gmail ακόμα — η αποστολή μέσω sequences δεν θα δουλέψει χωρίς αυτό.</span>
-      <a
-        href={`${API_URL}/auth/google`}
-        className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0"
-        style={{ backgroundColor: C.amber }}
-      >
-        Σύνδεση Gmail
-      </a>
+      <span>
+        {isOwner
+          ? "Δεν έχετε συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό."
+          : "Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον owner να το συνδέσει."}
+      </span>
+      {isOwner && (
+        <a
+          href={`${API_URL}/auth/google`}
+          className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0"
+          style={{ backgroundColor: C.amber }}
+        >
+          Σύνδεση Gmail
+        </a>
+      )}
     </div>
   );
 }
@@ -3604,7 +3616,265 @@ function NewAdminUserModal({ onClose, onCreate }) {
   );
 }
 
-function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, currentUserId, teamOverview }) {
+function NewCompanyModal({ onClose, onCreate }) {
+  const [companyName, setCompanyName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await onCreate({ companyName, ownerEmail, ownerPassword, ownerName: ownerName || undefined });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία εταιρείας.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέα εταιρεία</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input required placeholder="Όνομα εταιρείας" value={companyName} onChange={(e) => setCompanyName(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <p className="text-xs font-medium pt-1" style={{ color: C.slate }}>Πρώτος χρήστης (owner)</p>
+          <input required type="email" placeholder="Email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input placeholder="Όνομα (προαιρετικό)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+          <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία εταιρείας
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+// Platform-admin-only: create/suspend/reactivate pilot companies. Each row's
+// users/contacts counts come straight from the backend's _count include.
+function CompaniesPanel({ companies, loading, error, onReload, onCreate, onSuspend, onActivate }) {
+  const [busyId, setBusyId] = useState(null);
+  const [showNew, setShowNew] = useState(false);
+
+  async function run(id, fn) {
+    setBusyId(id);
+    try {
+      await fn(id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      {showNew && <NewCompanyModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm font-medium" style={{ color: C.ink }}>Εταιρείες (workspaces)</div>
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky }}>
+          <Building2 size={13} /> Νέα εταιρεία
+        </button>
+      </div>
+      <ErrorNote message={error} onRetry={onReload} />
+      {loading ? (
+        <Spinner label="Φόρτωση εταιρειών…" />
+      ) : companies.length === 0 ? (
+        <p className="text-sm" style={{ color: C.slate }}>Δεν υπάρχουν ακόμα εταιρείες.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left" style={{ color: C.slate }}>
+                <th className="font-medium pb-2">Εταιρεία</th>
+                <th className="font-medium pb-2">Κατάσταση</th>
+                <th className="font-medium pb-2">Χρήστες</th>
+                <th className="font-medium pb-2">Επαφές</th>
+                <th className="font-medium pb-2 text-right">Ενέργειες</th>
+              </tr>
+            </thead>
+            <tbody>
+              {companies.map((c) => (
+                <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
+                  <td className="py-2.5 font-medium" style={{ color: C.ink }}>{c.name}</td>
+                  <td className="py-2.5">
+                    {c.status === "suspended" ? (
+                      <span className="text-xs font-medium" style={{ color: C.coral }}>Ανεσταλμένη</span>
+                    ) : (
+                      <span className="text-xs font-medium" style={{ color: C.mint }}>Ενεργή</span>
+                    )}
+                  </td>
+                  <td className="py-2.5" style={{ color: C.ink }}>{c.userCount ?? "—"}</td>
+                  <td className="py-2.5" style={{ color: C.ink }}>{c.contactCount ?? "—"}</td>
+                  <td className="py-2.5 text-right">
+                    {c.status === "suspended" ? (
+                      <button disabled={busyId === c.id} onClick={() => run(c.id, onActivate)}
+                        className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.mint }}>
+                        Επανενεργοποίηση
+                      </button>
+                    ) : (
+                      <button disabled={busyId === c.id} onClick={() => run(c.id, onSuspend)}
+                        className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.coral }}>
+                        Αναστολή
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function NewTeammateModal({ onClose, onInvite }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await onInvite({ email, password, name: name || undefined });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η πρόσκληση.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Πρόσκληση συνεργάτη</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input placeholder="Όνομα (προαιρετικό)" value={name} onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={password} onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <p className="text-xs" style={{ color: C.slate }}>
+            Ο συνεργάτης θα βλέπει τις ίδιες επαφές, sequences, templates και campaigns με εσένα — μοιράζεστε το ίδιο workspace.
+          </p>
+          {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+          <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Πρόσκληση
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+// Visible to every teammate; only an "owner" gets invite/remove actions.
+// Deliberately no "promote to owner" here yet — one owner per company this
+// round, matching the backend (routes/team.js refuses to remove an owner).
+function TeamView({ members, loading, error, onReload, onInvite, onRemove, currentUserId, isOwner }) {
+  const [busyId, setBusyId] = useState(null);
+  const [showNew, setShowNew] = useState(false);
+
+  async function handleRemove(m) {
+    if (!window.confirm(`Αφαίρεση του/της ${m.name || m.email} από την ομάδα;`)) return;
+    setBusyId(m.id);
+    try {
+      await onRemove(m.id);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="h-full overflow-auto">
+      {showNew && <NewTeammateModal onClose={() => setShowNew(false)} onInvite={onInvite} />}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Ομάδα</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Οι συνεργάτες στο workspace σου — μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.</p>
+        </div>
+        {isOwner && (
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
+            <UserPlus size={15} /> Πρόσκληση
+          </button>
+        )}
+      </div>
+      <div className="px-8 py-6">
+        <ErrorNote message={error} onRetry={onReload} />
+        {loading ? (
+          <Spinner label="Φόρτωση ομάδας…" />
+        ) : (
+          <Card className="p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
+                    <th className="font-medium px-4 py-2.5">Συνεργάτης</th>
+                    <th className="font-medium px-4 py-2.5">Ρόλος</th>
+                    <th className="font-medium px-4 py-2.5">Εγγραφή</th>
+                    {isOwner && <th className="font-medium px-4 py-2.5 text-right">Ενέργειες</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((m) => (
+                    <tr key={m.id} className="border-t" style={{ borderColor: C.line }}>
+                      <td className="px-4 py-3">
+                        <div className="font-medium" style={{ color: C.ink }}>{m.name || "—"}</div>
+                        <div className="text-xs" style={{ color: C.slate }}>{m.email}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {m.role === "owner" ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.navy }}><ShieldCheck size={13} /> Owner</span>
+                        ) : (
+                          <span className="text-xs" style={{ color: C.slate }}>Μέλος</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(m.createdAt)}</td>
+                      {isOwner && (
+                        <td className="px-4 py-3 text-right">
+                          {m.role !== "owner" && m.id !== currentUserId && (
+                            <button disabled={busyId === m.id} onClick={() => handleRemove(m)} title="Αφαίρεση"
+                              className="rounded-md p-1.5" style={{ color: C.coral }}>
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, currentUserId, teamOverview, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onSuspendCompany, onActivateCompany }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
 
@@ -3643,6 +3913,16 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
       </div>
       <div className="px-8 py-6 space-y-6">
         <ErrorNote message={error} onRetry={onReload} />
+
+        <CompaniesPanel
+          companies={companies}
+          loading={companiesLoading}
+          error={companiesError}
+          onReload={onReloadCompanies}
+          onCreate={onCreateCompany}
+          onSuspend={onSuspendCompany}
+          onActivate={onActivateCompany}
+        />
 
         {teamOverview && (
           <Card className="p-5">
@@ -3800,6 +4080,19 @@ export default function App() {
   const [adminError, setAdminError] = useState("");
   const [teamOverview, setTeamOverview] = useState(null);
 
+  // Companies (platform admin only) — separate from adminUsers above, which
+  // is the flat cross-company user list. This is the new Company-level
+  // management: create a pilot company + its owner, suspend/reactivate one.
+  const [companies, setCompanies] = useState([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [companiesError, setCompaniesError] = useState("");
+
+  // My own company's teammates — visible to everyone on the team; only an
+  // "owner" gets invite/remove actions (see TeamView).
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamError, setTeamError] = useState("");
+
   const [offers, setOffers] = useState([]);
   const [offersLoading, setOffersLoading] = useState(false);
   const [offersError, setOffersError] = useState("");
@@ -3894,6 +4187,30 @@ export default function App() {
     }
   }, []);
 
+  const loadCompanies = useCallback(async () => {
+    setCompaniesLoading(true);
+    setCompaniesError("");
+    try {
+      setCompanies(await api.get("/admin/companies"));
+    } catch (err) {
+      setCompaniesError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι εταιρείες.");
+    } finally {
+      setCompaniesLoading(false);
+    }
+  }, []);
+
+  const loadTeam = useCallback(async () => {
+    setTeamLoading(true);
+    setTeamError("");
+    try {
+      setTeamMembers(await api.get("/team"));
+    } catch (err) {
+      setTeamError(err instanceof ApiError ? err.message : "Δεν φορτώθηκε η ομάδα.");
+    } finally {
+      setTeamLoading(false);
+    }
+  }, []);
+
   const loadOffers = useCallback(async () => {
     setOffersLoading(true);
     setOffersError("");
@@ -3955,8 +4272,15 @@ export default function App() {
   }, [authState, refreshAll]);
 
   useEffect(() => {
-    if (authState === "authed" && user?.isAdmin) loadAdminUsers();
-  }, [authState, user, loadAdminUsers]);
+    if (authState === "authed" && user?.isAdmin) {
+      loadAdminUsers();
+      loadCompanies();
+    }
+  }, [authState, user, loadAdminUsers, loadCompanies]);
+
+  useEffect(() => {
+    if (authState === "authed") loadTeam();
+  }, [authState, loadTeam]);
 
   // Analytics/Inbox numbers otherwise only change on the actions we happen to
   // remember to refresh after (see handleManualSend etc. above) — that misses
@@ -4242,6 +4566,28 @@ export default function App() {
     await loadAdminUsers();
   }
 
+  async function handleCreateCompany(data) {
+    await api.post("/admin/companies", data);
+    await loadCompanies();
+  }
+  async function handleSuspendCompany(id) {
+    await api.post(`/admin/companies/${id}/suspend`);
+    await loadCompanies();
+  }
+  async function handleActivateCompany(id) {
+    await api.post(`/admin/companies/${id}/activate`);
+    await loadCompanies();
+  }
+
+  async function handleInviteTeammate(data) {
+    await api.post("/team", data);
+    await loadTeam();
+  }
+  async function handleRemoveTeammate(id) {
+    await api.del(`/team/${id}`);
+    await loadTeam();
+  }
+
   if (authState === "loading") {
     return (
       <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC" }}>
@@ -4308,6 +4654,7 @@ export default function App() {
           <NavItem icon={Handshake} label="Offers" active={view === "offers"} onClick={() => { setView("offers"); setSidebarOpen(false); }} count={counts.offers} />
           <NavItem icon={Megaphone} label="Campaigns" active={view === "campaigns"} onClick={() => { setView("campaigns"); setSidebarOpen(false); }} count={counts.campaigns} />
           <NavItem icon={BarChart3} label="Analytics" active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
+          <NavItem icon={UserPlus} label="Ομάδα" active={view === "team"} onClick={() => { setView("team"); setSidebarOpen(false); }} />
           {user?.isAdmin && (
             <NavItem icon={ShieldCheck} label="Admin" active={view === "admin"} onClick={() => { setView("admin"); setSidebarOpen(false); }} />
           )}
@@ -4443,6 +4790,25 @@ export default function App() {
               onDeleteUser={handleDeleteAdminUser}
               currentUserId={user.id}
               teamOverview={teamOverview}
+              companies={companies}
+              companiesLoading={companiesLoading}
+              companiesError={companiesError}
+              onReloadCompanies={loadCompanies}
+              onCreateCompany={handleCreateCompany}
+              onSuspendCompany={handleSuspendCompany}
+              onActivateCompany={handleActivateCompany}
+            />
+          )}
+          {view === "team" && (
+            <TeamView
+              members={teamMembers}
+              loading={teamLoading}
+              error={teamError}
+              onReload={loadTeam}
+              onInvite={handleInviteTeammate}
+              onRemove={handleRemoveTeammate}
+              currentUserId={user.id}
+              isOwner={user?.role === "owner"}
             />
           )}
         </div>

@@ -7,7 +7,7 @@ router.use(requireAuth);
 
 router.get("/overview", async (req, res) => {
   const sequences = await prisma.sequence.findMany({
-    where: { userId: req.user.id },
+    where: { companyId: req.user.companyId },
     include: {
       enrollments: {
         include: { emailLogs: { include: { events: true } } },
@@ -32,7 +32,7 @@ router.get("/overview", async (req, res) => {
   // totals from every EmailLog for this user instead — sequence AND manual
   // alike, same denormalized-EmailLog pattern used everywhere else in the app.
   const allLogs = await prisma.emailLog.findMany({
-    where: { userId: req.user.id },
+    where: { companyId: req.user.companyId },
     include: { events: true },
   });
   const sent = allLogs.length;
@@ -40,19 +40,19 @@ router.get("/overview", async (req, res) => {
   const clicked = allLogs.filter((l) => l.events.some((e) => e.type === "click")).length;
   // "Replied" has no per-email flag (see mark-replied route) — it's tracked
   // on the contact. Count contacts we've actually emailed at least once who
-  // are now marked replied, so the rate still means "of the people I
+  // are now marked replied, so the rate still means "of the people we
   // contacted, how many replied" regardless of whether that reply came from
   // a sequence step or a manual email.
   const emailedContactIds = [...new Set(allLogs.map((l) => l.contactId))];
   const replied = await prisma.contact.count({
-    where: { userId: req.user.id, status: "replied", id: { in: emailedContactIds } },
+    where: { companyId: req.user.companyId, status: "replied", id: { in: emailedContactIds } },
   });
 
   // Campaign reporting, same shape as perSequence — lets the frontend filter
   // Analytics down to "just this campaign" the same way it already does for
   // sequences. Reuses allLogs (already fetched above) instead of a fresh
   // query per campaign.
-  const campaigns = await prisma.campaign.findMany({ where: { userId: req.user.id }, select: { id: true, name: true, status: true } });
+  const campaigns = await prisma.campaign.findMany({ where: { companyId: req.user.companyId }, select: { id: true, name: true, status: true } });
   const perCampaign = await Promise.all(
     campaigns.map(async (camp) => {
       const logs = allLogs.filter((l) => l.campaignId === camp.id);
@@ -61,7 +61,7 @@ router.get("/overview", async (req, res) => {
       const clicked = logs.filter((l) => l.events.some((e) => e.type === "click")).length;
       const contactIds = [...new Set(logs.map((l) => l.contactId))];
       const replied = contactIds.length
-        ? await prisma.contact.count({ where: { userId: req.user.id, status: "replied", id: { in: contactIds } } })
+        ? await prisma.contact.count({ where: { companyId: req.user.companyId, status: "replied", id: { in: contactIds } } })
         : 0;
       return { id: camp.id, name: camp.name, status: camp.status, sent, opened, clicked, replied };
     })
@@ -71,13 +71,14 @@ router.get("/overview", async (req, res) => {
 });
 
 // Recent sends — manual and sequence-driven alike — for the "Sent" / inbox
-// view. userId is denormalized directly onto EmailLog now, so this no longer
-// needs to go through the enrollment/contact chain.
+// view. companyId is denormalized directly onto EmailLog now, so this no
+// longer needs to go through the enrollment/contact chain, and every
+// teammate on the same company sees the same shared send history.
 router.get("/activity", async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 30, 100);
 
   const logs = await prisma.emailLog.findMany({
-    where: { userId: req.user.id },
+    where: { companyId: req.user.companyId },
     include: {
       contact: { select: { email: true, name: true } },
       enrollment: { select: { status: true, sequence: { select: { name: true } } } },
@@ -122,7 +123,7 @@ router.get("/timeline", async (req, res) => {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
   const events = await prisma.trackingEvent.findMany({
-    where: { occurredAt: { gte: since }, emailLog: { userId: req.user.id } },
+    where: { occurredAt: { gte: since }, emailLog: { companyId: req.user.companyId } },
     select: { type: true, occurredAt: true, isBot: true },
   });
 
@@ -142,9 +143,9 @@ router.get("/timeline", async (req, res) => {
 // pipeline is doing, win rate, and why offers were won/lost.
 router.get("/crm-overview", async (req, res) => {
   const [contactsTotal, contactedCount, offers] = await Promise.all([
-    prisma.contact.count({ where: { userId: req.user.id } }),
-    prisma.contact.count({ where: { userId: req.user.id, status: { not: "new" } } }),
-    prisma.offer.findMany({ where: { userId: req.user.id } }),
+    prisma.contact.count({ where: { companyId: req.user.companyId } }),
+    prisma.contact.count({ where: { companyId: req.user.companyId, status: { not: "new" } } }),
+    prisma.offer.findMany({ where: { companyId: req.user.companyId } }),
   ]);
 
   const offersByStatus = { draft: 0, sent: 0, accepted: 0, declined: 0 };

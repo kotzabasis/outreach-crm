@@ -106,10 +106,10 @@ async function sendNextStep(enrollment) {
     return;
   }
 
-  let gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: sequence.userId } });
+  let gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: sequence.companyId } });
   if (!gmailAccount) {
-    // The app user hasn't connected Gmail yet — leave the enrollment due
-    // as-is rather than failing it; it'll send as soon as they connect.
+    // Nobody on this company has connected Gmail yet — leave the enrollment
+    // due as-is rather than failing it; it'll send as soon as someone connects.
     return;
   }
   gmailAccount = await resetDailyCounterIfNeeded(gmailAccount);
@@ -138,6 +138,7 @@ async function sendNextStep(enrollment) {
         stepId: step.id,
         contactId: contact.id,
         userId: sequence.userId,
+        companyId: sequence.companyId,
         subject: step.subject,
         source: "sequence",
         gmailMessageId,
@@ -199,7 +200,7 @@ async function sendNextCampaignRecipient(campaign) {
     return;
   }
 
-  let gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: campaign.userId } });
+  let gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: campaign.companyId } });
   if (!gmailAccount) return; // not connected — recipient stays pending, retried next tick
 
   gmailAccount = await resetDailyCounterIfNeeded(gmailAccount);
@@ -230,6 +231,7 @@ async function sendNextCampaignRecipient(campaign) {
         campaignId: campaign.id,
         contactId: contact.id,
         userId: campaign.userId,
+        companyId: campaign.companyId,
         subject: campaign.subject,
         source: "campaign",
         gmailMessageId,

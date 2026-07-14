@@ -22,7 +22,7 @@ const offerSchema = z.object({
 
 router.get("/", async (req, res) => {
   const offers = await prisma.offer.findMany({
-    where: { userId: req.user.id },
+    where: { companyId: req.user.companyId },
     include: { contact: { select: { id: true, name: true, email: true } } },
     orderBy: { updatedAt: "desc" },
   });
@@ -33,18 +33,18 @@ router.post("/", async (req, res) => {
   const parsed = offerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const contact = await prisma.contact.findFirst({ where: { id: parsed.data.contactId, userId: req.user.id } });
+  const contact = await prisma.contact.findFirst({ where: { id: parsed.data.contactId, companyId: req.user.companyId } });
   if (!contact) return res.status(404).json({ error: "contact_not_found" });
 
   const offer = await prisma.offer.create({
-    data: { ...parsed.data, userId: req.user.id },
+    data: { ...parsed.data, userId: req.user.id, companyId: req.user.companyId },
     include: { contact: { select: { id: true, name: true, email: true } } },
   });
   res.status(201).json(offer);
 });
 
 router.patch("/:id", async (req, res) => {
-  const offer = await prisma.offer.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const offer = await prisma.offer.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!offer) return res.status(404).json({ error: "not_found" });
 
   const parsed = offerSchema.partial().safeParse(req.body);
@@ -59,7 +59,7 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const offer = await prisma.offer.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const offer = await prisma.offer.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!offer) return res.status(404).json({ error: "not_found" });
   await prisma.offer.delete({ where: { id: offer.id } });
   res.json({ ok: true });

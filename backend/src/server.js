@@ -19,6 +19,7 @@ const adminRoutes = require("./routes/admin");
 const offerRoutes = require("./routes/offers");
 const sendRoutes = require("./routes/send");
 const campaignRoutes = require("./routes/campaigns");
+const teamRoutes = require("./routes/team");
 const { startScheduler } = require("./lib/scheduler");
 const prisma = require("./db");
 
@@ -117,6 +118,7 @@ app.use("/admin", adminRoutes);
 app.use("/offers", offerRoutes);
 app.use("/send", sendRoutes);
 app.use("/campaigns", campaignRoutes);
+app.use("/team", teamRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/track", trackingRoutes); // no auth — see routes/tracking.js for why
 
@@ -144,9 +146,72 @@ async function ensureBootstrapAdmin() {
   }
 }
 
+// Round 16 introduced multi-tenant Companies: every User/Contact/Sequence/
+// Template/Offer/ContactNote/Campaign/EmailLog/GmailAccount row now has a
+// (nullable) companyId. This backfills any pre-existing rows from before
+// that column existed into one shared "Legacy Workspace" Company, so the
+// already-live account keeps working exactly as before without a manual
+// migration step. Idempotent (no-ops once nothing is null) and safe to run
+// on every boot, same pattern as ensureBootstrapAdmin below.
+async function ensureCompanyAssignment() {
+  try {
+    const orphanedUsers = await prisma.user.findMany({ where: { companyId: null }, orderBy: { createdAt: "asc" } });
+    if (orphanedUsers.length === 0) return; // already backfilled
+
+    let legacyCompany = await prisma.company.findFirst({ where: { name: "Legacy Workspace" } });
+    if (!legacyCompany) {
+      legacyCompany = await prisma.company.create({ data: { name: "Legacy Workspace" } });
+    }
+    const companyId = legacyCompany.id;
+
+    for (const user of orphanedUsers) {
+      // Whoever was already a platform admin becomes the owner of this
+      // workspace, so invite/Gmail-connect UX makes sense immediately.
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { companyId, role: user.isAdmin ? "owner" : "member" },
+      });
+    }
+
+    await Promise.all([
+      prisma.contact.updateMany({ where: { companyId: null }, data: { companyId } }),
+      prisma.sequence.updateMany({ where: { companyId: null }, data: { companyId } }),
+      prisma.template.updateMany({ where: { companyId: null }, data: { companyId } }),
+      prisma.offer.updateMany({ where: { companyId: null }, data: { companyId } }),
+      prisma.contactNote.updateMany({ where: { companyId: null }, data: { companyId } }),
+      prisma.campaign.updateMany({ where: { companyId: null }, data: { companyId } }),
+      prisma.emailLog.updateMany({ where: { companyId: null }, data: { companyId } }),
+    ]);
+
+    // GmailAccount.companyId is unique — one shared mailbox per company.
+    // If more than one pre-existing user had separately connected their own
+    // Gmail account before this round (unlikely on this account, but
+    // possible), only the earliest connection can be attached to the legacy
+    // company; any others are left as orphaned rows (not deleted, just no
+    // longer reachable) rather than guessing which one to keep.
+    const orphanedGmailAccounts = await prisma.gmailAccount.findMany({
+      where: { companyId: null },
+      orderBy: { createdAt: "asc" },
+    });
+    if (orphanedGmailAccounts.length > 0) {
+      await prisma.gmailAccount.update({ where: { id: orphanedGmailAccounts[0].id }, data: { companyId } });
+      if (orphanedGmailAccounts.length > 1) {
+        console.warn(
+          `ensureCompanyAssignment: ${orphanedGmailAccounts.length - 1} extra pre-existing Gmail connection(s) ` +
+            `left unattached — only one company-wide connection is supported now.`
+        );
+      }
+    }
+
+    console.log(`ensureCompanyAssignment: backfilled ${orphanedUsers.length} user(s) into company ${companyId}`);
+  } catch (err) {
+    console.error("ensureCompanyAssignment failed:", err.message);
+  }
+}
+
 const port = process.env.PORT || 4000;
 app.listen(port, () => {
   console.log(`Outreach CRM backend listening on port ${port}`);
   startScheduler();
-  ensureBootstrapAdmin();
+  ensureBootstrapAdmin().then(() => ensureCompanyAssignment());
 });

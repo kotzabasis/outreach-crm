@@ -22,18 +22,36 @@ function publicAdminUser(u) {
     name: u.name,
     isAdmin: u.isAdmin,
     approved: u.approved,
+    companyId: u.companyId,
+    companyName: u.company?.name,
+    role: u.role,
     createdAt: u.createdAt,
   };
 }
 
-// Global list — admins manage access for the whole app, not just their own data.
+function publicCompany(c) {
+  return {
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    createdAt: c.createdAt,
+    userCount: c._count?.users,
+    contactCount: c._count?.contacts,
+  };
+}
+
+// Global list — admins manage access for the whole app, not just their own
+// company's data. Every user belongs to some company (or none yet, if
+// they're a pending self-registration awaiting approval+assignment).
 router.get("/users", async (req, res) => {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { company: true } });
   res.json(users.map(publicAdminUser));
 });
 
 // Admin-created accounts skip the approval queue entirely — the admin
 // vouching for them by creating the account directly is the approval.
+// Requires an existing company to attach them to (use POST /companies to
+// create one first if this is a brand new pilot company).
 router.post("/users", async (req, res) => {
   const parsed = newUserSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -42,11 +60,78 @@ router.post("/users", async (req, res) => {
   const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   if (existing) return res.status(400).json({ error: "email_already_registered" });
 
+  let companyId = typeof req.body.companyId === "string" ? req.body.companyId : null;
+  if (companyId) {
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) return res.status(400).json({ error: "invalid_company" });
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
-    data: { email: email.toLowerCase(), passwordHash, name, isAdmin, approved: true },
+    data: { email: email.toLowerCase(), passwordHash, name, isAdmin, approved: true, companyId },
   });
   res.status(201).json(publicAdminUser(user));
+});
+
+// --- Companies (platform admin only) ---
+// Each pilot company is a Company row; users on the same company share
+// contacts/sequences/templates/campaigns/the connected Gmail account (see
+// schema.prisma + the companyId-scoped queries throughout routes/*.js).
+
+router.get("/companies", async (req, res) => {
+  const companies = await prisma.company.findMany({
+    orderBy: { createdAt: "asc" },
+    include: { _count: { select: { users: true, contacts: true } } },
+  });
+  res.json(companies.map(publicCompany));
+});
+
+const createCompanySchema = z.object({
+  companyName: z.string().min(1).max(200),
+  ownerEmail: z.string().email(),
+  ownerPassword: z.string().min(10).max(200),
+  ownerName: z.string().min(1).max(200).optional(),
+});
+
+// Creates a company AND its first user (the owner) in one step — the
+// intended onboarding path for a new pilot company, rather than the public
+// self-registration + approval queue.
+router.post("/companies", async (req, res) => {
+  const parsed = createCompanySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { companyName, ownerEmail, ownerPassword, ownerName } = parsed.data;
+
+  const existing = await prisma.user.findUnique({ where: { email: ownerEmail.toLowerCase() } });
+  if (existing) return res.status(400).json({ error: "email_already_registered" });
+
+  const passwordHash = await bcrypt.hash(ownerPassword, 12);
+  const company = await prisma.company.create({ data: { name: companyName } });
+  const owner = await prisma.user.create({
+    data: {
+      email: ownerEmail.toLowerCase(),
+      passwordHash,
+      name: ownerName,
+      approved: true,
+      companyId: company.id,
+      role: "owner",
+    },
+  });
+
+  res.status(201).json({ company: publicCompany({ ...company, _count: { users: 1, contacts: 0 } }), owner: publicAdminUser({ ...owner, company }) });
+});
+
+router.post("/companies/:id/suspend", async (req, res) => {
+  const company = await prisma.company.findUnique({ where: { id: req.params.id } });
+  if (!company) return res.status(404).json({ error: "not_found" });
+  const updated = await prisma.company.update({ where: { id: company.id }, data: { status: "suspended" } });
+  res.json(publicCompany(updated));
+});
+
+router.post("/companies/:id/activate", async (req, res) => {
+  const company = await prisma.company.findUnique({ where: { id: req.params.id } });
+  if (!company) return res.status(404).json({ error: "not_found" });
+  const updated = await prisma.company.update({ where: { id: company.id }, data: { status: "active" } });
+  res.json(publicCompany(updated));
 });
 
 router.delete("/users/:id", async (req, res) => {
@@ -67,10 +152,22 @@ router.delete("/users/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
+// A self-registered pending user has no company yet — approving them now
+// also requires saying which company they belong to (an existing one, via
+// companyId, or leave it unset only if they're joining nobody in particular
+// — not recommended, they won't see any shared data until assigned one).
 router.post("/users/:id/approve", async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!user) return res.status(404).json({ error: "not_found" });
-  const updated = await prisma.user.update({ where: { id: user.id }, data: { approved: true } });
+
+  const data = { approved: true };
+  if (typeof req.body.companyId === "string" && req.body.companyId) {
+    const company = await prisma.company.findUnique({ where: { id: req.body.companyId } });
+    if (!company) return res.status(400).json({ error: "invalid_company" });
+    data.companyId = company.id;
+  }
+
+  const updated = await prisma.user.update({ where: { id: user.id }, data, include: { company: true } });
   res.json(publicAdminUser(updated));
 });
 

@@ -16,12 +16,28 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
-  // Access is invite/approval-gated, not open self-registration: new accounts
-  // start unapproved and can't log in until an admin approves them. The very
-  // first user ever created is auto-promoted to admin+approved (bootstrap),
-  // see auth.js register + server.js startup safety net.
+  // Platform-level flag: can manage Companies across the whole app (create,
+  // suspend, see aggregate usage). Distinct from `role` below, which is
+  // scoped to this user's own Company. isAdmin is you; role is "am I the
+  // owner of my company's workspace, or just a member of it."
   isAdmin      Boolean  @default(false)
+  // Access is invite/approval-gated, not open self-registration: new accounts
+  // start unapproved and can't log in until an admin approves them (or, once
+  // Companies exist, until a company owner invites them directly — see
+  // routes/companies.js). The very first user ever created is auto-promoted
+  // to admin+approved (bootstrap), see auth.js register + server.js startup
+  // safety net.
   approved     Boolean  @default(false)
+  // Nullable only so existing deploys can migrate cleanly (see
+  // ensureCompanyAssignment in server.js, which backfills every pre-existing
+  // user into one legacy Company on boot) — in practice every user always
+  // belongs to exactly one company from that point on.
+  companyId    String?
+  company      Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  // Within-company role: "owner" can invite/remove teammates and (re)connect
+  // the company's shared Gmail account; "member" shares the same contacts/
+  // sequences/templates/campaigns but can't manage who's on the team.
+  role         String   @default("member") // owner | member
   createdAt    DateTime @default(now())
 
   contacts             Contact[]
@@ -31,8 +47,34 @@ model User {
   contactNotes         ContactNote[]
   emailLogs            EmailLog[]
   campaigns            Campaign[]
-  gmailAccount         GmailAccount?
+  // Historical audit relation only now (see GmailAccount.userId) — no longer
+  // the access boundary, and no longer guaranteed unique per user, hence a
+  // list rather than GmailAccount? as it was before.
+  connectedGmailAccounts GmailAccount[]
   passwordResetTokens  PasswordResetToken[]
+
+  @@index([companyId])
+}
+
+// A tenant. Each pilot company is one Company row; every User belongs to
+// exactly one, and (as of this round) contacts/sequences/templates/offers/
+// campaigns/email history/the connected Gmail account are all shared across
+// everyone in the same company rather than private to one person.
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  status    String   @default("active") // active | suspended — suspended blocks login for every user in it, see requireAuth
+  createdAt DateTime @default(now())
+
+  users        User[]
+  contacts     Contact[]
+  sequences    Sequence[]
+  templates    Template[]
+  offers       Offer[]
+  contactNotes ContactNote[]
+  emailLogs    EmailLog[]
+  campaigns    Campaign[]
+  gmailAccount GmailAccount?
 }
 
 // Short-lived, single-use tokens for the "forgot password" flow. Only a
@@ -57,8 +99,10 @@ model PasswordResetToken {
 // used it, so an in-flight sequence can't change under an enrolled contact.
 model Template {
   id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String? // who created it — audit only; SetNull so removing a teammate never deletes shared templates
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name        String
   subject     String
   body        String
@@ -74,8 +118,19 @@ model Template {
 // independently — e.g. reconnecting a different Gmail account later.
 model GmailAccount {
   id                    String   @id @default(uuid())
-  userId                String   @unique
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Historical: who performed the OAuth connect — audit only now, not the
+  // access boundary. Was `@unique` (one mailbox per person); now nullable and
+  // non-unique on purpose, since a mailbox is shared company-wide (companyId
+  // below is the real access boundary) rather than owned by one individual.
+  // Deliberately NOT dropped/renamed (only relaxed) so this schema change
+  // can't trigger a destructive column-drop against the live table.
+  userId                String?
+  user                  User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // One connected mailbox per company. Nullable only for the same migration
+  // reason as User.companyId — ensureCompanyAssignment (server.js) backfills
+  // it on boot, and every write path after that guarantees it's set.
+  companyId             String?  @unique
+  company               Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   googleId              String   @unique
   email                 String
   // AES-256-GCM encrypted before storage — see src/lib/crypto.js
@@ -89,8 +144,19 @@ model GmailAccount {
 
 model Contact {
   id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Who added this contact — audit only, not the access boundary (see
+  // companyId). Nullable + onDelete: SetNull (not Cascade) on purpose: this
+  // data belongs to the company, shared with every teammate, so removing one
+  // team member must never delete the contacts the whole team relies on —
+  // only the "added by" attribution goes away.
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // Access boundary: every route filters on companyId, so a contact is
+  // visible/editable by anyone on the same company's team, not just whoever
+  // created it. Nullable only for the pre-existing-data migration — see
+  // ensureCompanyAssignment in server.js.
+  companyId      String?
+  company        Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name           String
   // Structured given/family name — separate from `name` on purpose: `name`
   // stays the free-text display name used for {{name}} personalization
@@ -149,6 +215,9 @@ model Contact {
   @@index([userId, email])
   @@index([userId, category])
   @@index([userId, nextFollowUpAt])
+  @@index([companyId, email])
+  @@index([companyId, category])
+  @@index([companyId, nextFollowUpAt])
 }
 
 // A lightweight deal/pipeline tracker — separate from Sequence/EmailLog
@@ -157,8 +226,10 @@ model Contact {
 // several offers over time.
 model Offer {
   id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String? // who created it — audit only; SetNull so removing a teammate never deletes the deal
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contactId String
   contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   title     String
@@ -173,6 +244,7 @@ model Offer {
   updatedAt     DateTime @updatedAt
 
   @@index([userId, status])
+  @@index([companyId, status])
   @@index([contactId])
 }
 
@@ -182,8 +254,10 @@ model ContactNote {
   id        String   @id @default(uuid())
   contactId String
   contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String? // who wrote it — audit only; SetNull so removing a teammate never deletes the note
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   body      String
   createdAt DateTime @default(now())
 
@@ -192,8 +266,10 @@ model ContactNote {
 
 model Sequence {
   id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String? // who created it — audit only; SetNull so removing a teammate never deletes shared sequences
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name      String
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -258,8 +334,10 @@ model EmailLog {
   // shape everywhere else in the app (Inbox view, contact timeline, analytics).
   contactId      String
   contact        Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  userId         String
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String? // who sent it — audit only; SetNull so removing a teammate never deletes send history
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId      String?
+  company        Company?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   subject        String      @default("")
   source         String      @default("sequence") // sequence | manual | campaign
   attachments    Json        @default("[]") // kept for history/audit, same shape as SequenceStep.attachments
@@ -270,6 +348,7 @@ model EmailLog {
   events TrackingEvent[]
 
   @@index([userId, sentAt])
+  @@index([companyId, sentAt])
   @@index([contactId])
 }
 
@@ -283,8 +362,10 @@ model EmailLog {
 // tick in scheduler.js.
 model Campaign {
   id              String    @id @default(uuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String? // who created it — audit only; SetNull so removing a teammate never deletes it
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId       String?
+  company         Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name            String
   subject         String
   body            String
@@ -304,6 +385,7 @@ model Campaign {
   emailLogs  EmailLog[]
 
   @@index([userId, status])
+  @@index([companyId, status])
 }
 
 model CampaignRecipient {

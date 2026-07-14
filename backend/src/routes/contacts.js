@@ -65,7 +65,7 @@ router.get("/", async (req, res) => {
   const { status, q, category, tag, unsubscribed, hasFollowUp } = req.query;
   const contacts = await prisma.contact.findMany({
     where: {
-      userId: req.user.id,
+      companyId: req.user.companyId,
       ...(status && status !== "all" ? { status: String(status) } : {}),
       ...(category && category !== "all" ? { category: String(category) } : {}),
       // tags is a comma-separated string column — "contains" is good enough
@@ -120,7 +120,7 @@ router.get("/", async (req, res) => {
 // Literal GET paths must be registered before GET "/:id" so Express doesn't
 // swallow them as an :id lookup.
 router.get("/export", async (req, res) => {
-  const contacts = await prisma.contact.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: "desc" } });
+  const contacts = await prisma.contact.findMany({ where: { companyId: req.user.companyId }, orderBy: { createdAt: "desc" } });
   const header = [
     "name", "firstName", "lastName", "email", "phone", "company", "category", "tags",
     "website", "gmb", "facebook", "instagram", "googleReviews", "reportLink",
@@ -149,7 +149,7 @@ router.get("/export", async (req, res) => {
 // which stays lightweight for the table view.
 router.get("/:id", async (req, res) => {
   const contact = await prisma.contact.findFirst({
-    where: { id: req.params.id, userId: req.user.id },
+    where: { id: req.params.id, companyId: req.user.companyId },
     include: {
       // Queried directly off the contact (EmailLog.contactId is denormalized
       // — see schema.prisma) instead of through enrollments, so a manual,
@@ -194,7 +194,7 @@ router.post("/", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const contact = await prisma.contact.create({
-    data: { ...parsed.data, userId: req.user.id },
+    data: { ...parsed.data, userId: req.user.id, companyId: req.user.companyId },
   });
   res.status(201).json(contact);
 });
@@ -240,15 +240,17 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       if (results.errors.length < 20) results.errors.push(`Row ${i + 2}: invalid email or name`);
       continue;
     }
-    // Skip duplicates for this user rather than erroring the whole batch.
+    // Skip duplicates within this company rather than erroring the whole
+    // batch (shared contact list — a teammate may have already added this
+    // person).
     const existing = await prisma.contact.findFirst({
-      where: { userId: req.user.id, email: parsed.data.email },
+      where: { companyId: req.user.companyId, email: parsed.data.email },
     });
     if (existing) {
       results.skipped++;
       continue;
     }
-    await prisma.contact.create({ data: { ...parsed.data, userId: req.user.id } });
+    await prisma.contact.create({ data: { ...parsed.data, userId: req.user.id, companyId: req.user.companyId } });
     results.created++;
   }
 
@@ -271,7 +273,7 @@ router.post("/bulk-update", async (req, res) => {
   if ("unsubscribed" in body) patch.unsubscribedAt = body.unsubscribed ? new Date() : null;
   const addTag = typeof req.body.addTag === "string" ? req.body.addTag.trim() : "";
 
-  const contacts = await prisma.contact.findMany({ where: { id: { in: ids }, userId: req.user.id } });
+  const contacts = await prisma.contact.findMany({ where: { id: { in: ids }, companyId: req.user.companyId } });
 
   const updates = contacts.map((c) => {
     const data = { ...patch };
@@ -289,12 +291,12 @@ router.post("/bulk-update", async (req, res) => {
 router.post("/bulk-delete", async (req, res) => {
   const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
   if (ids.length === 0) return res.status(400).json({ error: "no_ids_provided" });
-  const result = await prisma.contact.deleteMany({ where: { id: { in: ids }, userId: req.user.id } });
+  const result = await prisma.contact.deleteMany({ where: { id: { in: ids }, companyId: req.user.companyId } });
   res.json({ deleted: result.count });
 });
 
 router.patch("/:id", async (req, res) => {
-  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!contact) return res.status(404).json({ error: "not_found" });
 
   const allowed = [
@@ -329,7 +331,7 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!contact) return res.status(404).json({ error: "not_found" });
   await prisma.contact.delete({ where: { id: contact.id } });
   res.json({ ok: true });
@@ -340,7 +342,7 @@ router.delete("/:id", async (req, res) => {
 // This is the manual fallback: mark the contact as replied, and stop any
 // in-flight sequence for them so they don't keep getting follow-ups.
 router.post("/:id/mark-replied", async (req, res) => {
-  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!contact) return res.status(404).json({ error: "not_found" });
 
   await prisma.enrollment.updateMany({
@@ -357,27 +359,27 @@ router.post("/:id/mark-replied", async (req, res) => {
 
 // --- Notes (freeform CRM notes on a contact) ---
 router.get("/:id/notes", async (req, res) => {
-  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!contact) return res.status(404).json({ error: "not_found" });
   const notes = await prisma.contactNote.findMany({ where: { contactId: contact.id }, orderBy: { createdAt: "desc" } });
   res.json(notes);
 });
 
 router.post("/:id/notes", async (req, res) => {
-  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!contact) return res.status(404).json({ error: "not_found" });
 
   const parsed = z.object({ body: z.string().min(1).max(5000) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const note = await prisma.contactNote.create({
-    data: { contactId: contact.id, userId: req.user.id, body: parsed.data.body },
+    data: { contactId: contact.id, userId: req.user.id, companyId: req.user.companyId, body: parsed.data.body },
   });
   res.status(201).json(note);
 });
 
 router.delete("/:id/notes/:noteId", async (req, res) => {
-  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  const contact = await prisma.contact.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
   if (!contact) return res.status(404).json({ error: "not_found" });
   const note = await prisma.contactNote.findFirst({ where: { id: req.params.noteId, contactId: contact.id } });
   if (!note) return res.status(404).json({ error: "not_found" });

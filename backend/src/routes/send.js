@@ -22,11 +22,11 @@ router.post("/", async (req, res) => {
   const parsed = sendSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const contact = await prisma.contact.findFirst({ where: { id: parsed.data.contactId, userId: req.user.id } });
+  const contact = await prisma.contact.findFirst({ where: { id: parsed.data.contactId, companyId: req.user.companyId } });
   if (!contact) return res.status(404).json({ error: "contact_not_found" });
   if (contact.unsubscribed) return res.status(400).json({ error: "contact_unsubscribed" });
 
-  const gmailAccount = await prisma.gmailAccount.findUnique({ where: { userId: req.user.id } });
+  const gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: req.user.companyId } });
   if (!gmailAccount) return res.status(400).json({ error: "gmail_not_connected" });
 
   const trackingId = uuid();
@@ -49,6 +49,7 @@ router.post("/", async (req, res) => {
     data: {
       contactId: contact.id,
       userId: req.user.id,
+      companyId: req.user.companyId,
       subject: parsed.data.subject,
       source: "manual",
       attachments: parsed.data.attachments,
