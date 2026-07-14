@@ -604,7 +604,7 @@ function Brand({ size = 34, textSize = "text-lg" }) {
 
 // ---------- Auth ----------
 function AuthScreen({ onAuthenticated }) {
-  const [mode, setMode] = useState("login"); // "login" | "register"
+  const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -627,6 +627,13 @@ function AuthScreen({ onAuthenticated }) {
       if (mode === "login") {
         const user = await api.post("/auth/login", { email, password });
         onAuthenticated(user);
+      } else if (mode === "forgot") {
+        // Backend always responds the same way whether or not the email
+        // exists (see auth.js) — nothing to branch on here, just show its
+        // message and drop back to the login tab.
+        const result = await api.post("/auth/forgot-password", { email });
+        setInfo(result?.message || "Αν υπάρχει λογαριασμός με αυτό το email, στάλθηκε σύνδεσμος επαναφοράς.");
+        setMode("login");
       } else {
         const result = await api.post("/auth/register", { email, password, name: name || undefined });
         if (result && result.pending) {
@@ -661,19 +668,28 @@ function AuthScreen({ onAuthenticated }) {
         </div>
 
         <Card className="p-6">
-          <div className="flex rounded-lg p-1 mb-5" style={{ backgroundColor: C.pale }}>
-            {["login", "register"].map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => switchMode(m)}
-                className="flex-1 rounded-md py-1.5 text-sm font-medium transition-colors"
-                style={{ backgroundColor: mode === m ? "#fff" : "transparent", color: mode === m ? C.navy : C.slate }}
-              >
-                {m === "login" ? "Σύνδεση" : "Εγγραφή"}
+          {mode === "forgot" ? (
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-semibold" style={{ color: C.ink }}>Επαναφορά κωδικού</h3>
+              <button type="button" onClick={() => switchMode("login")} className="text-xs font-medium" style={{ color: C.sky }}>
+                Πίσω στη σύνδεση
               </button>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="flex rounded-lg p-1 mb-5" style={{ backgroundColor: C.pale }}>
+              {["login", "register"].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => switchMode(m)}
+                  className="flex-1 rounded-md py-1.5 text-sm font-medium transition-colors"
+                  style={{ backgroundColor: mode === m ? "#fff" : "transparent", color: mode === m ? C.navy : C.slate }}
+                >
+                  {m === "login" ? "Σύνδεση" : "Εγγραφή"}
+                </button>
+              ))}
+            </div>
+          )}
 
           {info && (
             <p className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: `${C.mint}14`, color: C.mint }}>{info}</p>
@@ -704,22 +720,29 @@ function AuthScreen({ onAuthenticated }) {
                 autoComplete="email"
               />
             </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Κωδικός</label>
-              <input
-                type="password"
-                required
-                minLength={10}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg px-3 py-2 text-sm border outline-none"
-                style={{ borderColor: C.line, color: C.ink }}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-              />
-              {mode === "register" && (
-                <p className="text-[11px] mt-1" style={{ color: C.slate }}>Τουλάχιστον 10 χαρακτήρες.</p>
-              )}
-            </div>
+            {mode !== "forgot" && (
+              <div>
+                <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Κωδικός</label>
+                <input
+                  type="password"
+                  required
+                  minLength={10}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-lg px-3 py-2 text-sm border outline-none"
+                  style={{ borderColor: C.line, color: C.ink }}
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                />
+                {mode === "register" && (
+                  <p className="text-[11px] mt-1" style={{ color: C.slate }}>Τουλάχιστον 10 χαρακτήρες.</p>
+                )}
+                {mode === "login" && (
+                  <button type="button" onClick={() => switchMode("forgot")} className="text-[11px] font-medium mt-1.5" style={{ color: C.sky }}>
+                    Ξέχασες τον κωδικό;
+                  </button>
+                )}
+              </div>
+            )}
 
             {mode === "register" && (
               <p className="text-[11px] rounded-lg px-3 py-2" style={{ backgroundColor: C.pale, color: C.navy }}>
@@ -738,9 +761,119 @@ function AuthScreen({ onAuthenticated }) {
               style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}
             >
               {busy && <Loader2 size={14} className="animate-spin" />}
-              {mode === "login" ? "Σύνδεση" : "Δημιουργία λογαριασμού"}
+              {mode === "login" ? "Σύνδεση" : mode === "forgot" ? "Αποστολή συνδέσμου" : "Δημιουργία λογαριασμού"}
             </button>
           </form>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// Standalone page at /reset-password?token=... — the destination of the
+// email link sent by AuthScreen's "forgot password" flow. Deliberately
+// separate from AuthScreen (no login/register tabs, no existing session
+// needed) since resetting a password is, by definition, something you do
+// without being logged in.
+export function ResetPasswordPage() {
+  const token = useMemo(() => new URLSearchParams(window.location.search).get("token") || "", []);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    if (password !== confirmPassword) {
+      setError("Οι κωδικοί δεν ταιριάζουν.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.post("/auth/reset-password", { token, password });
+      setDone(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.data?.error === "invalid_or_expired_token") {
+        setError("Ο σύνδεσμος έχει λήξει ή έχει ήδη χρησιμοποιηθεί. Ζήτησε νέο σύνδεσμο επαναφοράς.");
+      } else {
+        setError(err instanceof ApiError ? err.message : "Κάτι πήγε στραβά. Δοκίμασε ξανά.");
+      }
+    } finally {
+      setPassword("");
+      setConfirmPassword("");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
+      <div className="w-full max-w-sm">
+        <div className="flex items-center justify-center mb-8">
+          <Brand size={38} textSize="text-2xl" />
+        </div>
+
+        <Card className="p-6">
+          <h3 className="text-sm font-semibold mb-4" style={{ color: C.ink }}>Νέος κωδικός πρόσβασης</h3>
+
+          {!token ? (
+            <p className="text-sm" style={{ color: C.coral }}>
+              Μη έγκυρος σύνδεσμος επαναφοράς. Ζήτησε νέο σύνδεσμο από την οθόνη σύνδεσης.
+            </p>
+          ) : done ? (
+            <div className="space-y-3">
+              <p className="text-sm rounded-lg px-3 py-2" style={{ backgroundColor: `${C.mint}14`, color: C.mint }}>
+                Ο κωδικός άλλαξε επιτυχώς.
+              </p>
+              <a href="/" className="block w-full text-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky }}>
+                Σύνδεση
+              </a>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Νέος κωδικός</label>
+                <input
+                  type="password"
+                  required
+                  minLength={10}
+                  autoFocus
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-lg px-3 py-2 text-sm border outline-none"
+                  style={{ borderColor: C.line, color: C.ink }}
+                  autoComplete="new-password"
+                />
+                <p className="text-[11px] mt-1" style={{ color: C.slate }}>Τουλάχιστον 10 χαρακτήρες.</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Επιβεβαίωση κωδικού</label>
+                <input
+                  type="password"
+                  required
+                  minLength={10}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full rounded-lg px-3 py-2 text-sm border outline-none"
+                  style={{ borderColor: C.line, color: C.ink }}
+                  autoComplete="new-password"
+                />
+              </div>
+              {error && (
+                <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>
+              )}
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white mt-2"
+                style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}
+              >
+                {busy && <Loader2 size={14} className="animate-spin" />}
+                Αλλαγή κωδικού
+              </button>
+            </form>
+          )}
         </Card>
       </div>
     </div>
