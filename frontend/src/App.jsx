@@ -4078,6 +4078,208 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
   );
 }
 
+// ---------- Super Admin (separate route: /superadmin) ----------
+// Platform-wide company/user management, deliberately isolated from the main
+// SDLoop app shell — no CRM sidebar, no per-company data, and not linked from
+// any in-app nav. Reachable only by typing the URL (see main.jsx) and gated
+// to isAdmin accounts; a logged-in company owner/member who lands here sees
+// an access-denied screen, never the panel itself.
+export function SuperAdminApp() {
+  const [authState, setAuthState] = useState("loading"); // loading | anon | authed | forbidden
+  const [user, setUser] = useState(null);
+
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  const [teamOverview, setTeamOverview] = useState(null);
+
+  const [companies, setCompanies] = useState([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [companiesError, setCompaniesError] = useState("");
+
+  const loadAdminUsers = useCallback(async () => {
+    setAdminLoading(true);
+    setAdminError("");
+    try {
+      const [users, overview] = await Promise.all([
+        api.get("/admin/users"),
+        api.get("/admin/team-overview").catch(() => null),
+      ]);
+      setAdminUsers(users);
+      setTeamOverview(overview);
+    } catch (err) {
+      setAdminError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι χρήστες.");
+    } finally {
+      setAdminLoading(false);
+    }
+  }, []);
+
+  const loadCompanies = useCallback(async () => {
+    setCompaniesLoading(true);
+    setCompaniesError("");
+    try {
+      setCompanies(await api.get("/admin/companies"));
+    } catch (err) {
+      setCompaniesError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι εταιρείες.");
+    } finally {
+      setCompaniesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    api
+      .get("/auth/me")
+      .then((u) => {
+        setUser(u);
+        setAuthState(u.isAdmin ? "authed" : "forbidden");
+      })
+      .catch(() => setAuthState("anon"));
+  }, []);
+
+  useEffect(() => {
+    if (authState === "authed") {
+      loadAdminUsers();
+      loadCompanies();
+    }
+  }, [authState, loadAdminUsers, loadCompanies]);
+
+  async function handleLogout() {
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      // Same as the main app: drop client-side session state even if the
+      // request itself fails.
+    }
+    setUser(null);
+    setAuthState("anon");
+    setAdminUsers([]);
+    setCompanies([]);
+  }
+
+  async function handleApproveUser(id) {
+    await api.post(`/admin/users/${id}/approve`);
+    await loadAdminUsers();
+  }
+  async function handleRevokeUser(id) {
+    await api.post(`/admin/users/${id}/revoke`);
+    await loadAdminUsers();
+  }
+  async function handlePromoteUser(id) {
+    await api.post(`/admin/users/${id}/promote`);
+    await loadAdminUsers();
+  }
+  async function handleDemoteUser(id) {
+    await api.post(`/admin/users/${id}/demote`);
+    await loadAdminUsers();
+  }
+  async function handleCreateAdminUser(data) {
+    await api.post("/admin/users", data);
+    await loadAdminUsers();
+  }
+  async function handleDeleteAdminUser(id) {
+    await api.del(`/admin/users/${id}`);
+    await loadAdminUsers();
+  }
+  async function handleAssignUserCompany(id, companyId) {
+    await api.post(`/admin/users/${id}/assign-company`, { companyId });
+    await loadAdminUsers();
+    await loadCompanies(); // user counts per company shift when someone moves
+  }
+  async function handleCreateCompany(data) {
+    await api.post("/admin/companies", data);
+    await loadCompanies();
+  }
+  async function handleSuspendCompany(id) {
+    await api.post(`/admin/companies/${id}/suspend`);
+    await loadCompanies();
+  }
+  async function handleActivateCompany(id) {
+    await api.post(`/admin/companies/${id}/activate`);
+    await loadCompanies();
+  }
+
+  if (authState === "loading") {
+    return (
+      <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC" }}>
+        <Spinner label="Φόρτωση…" />
+      </div>
+    );
+  }
+
+  if (authState === "anon") {
+    return (
+      <AuthScreen
+        onAuthenticated={(u) => {
+          setUser(u);
+          setAuthState(u.isAdmin ? "authed" : "forbidden");
+        }}
+      />
+    );
+  }
+
+  if (authState === "forbidden") {
+    return (
+      <div className="flex h-screen w-full items-center justify-center px-6" style={{ backgroundColor: "#F7F9FC" }}>
+        <div className="max-w-sm text-center space-y-3">
+          <ShieldCheck size={28} style={{ color: C.slate, margin: "0 auto" }} />
+          <div className="text-sm font-medium" style={{ color: C.ink }}>Δεν έχεις πρόσβαση σε αυτή τη σελίδα.</div>
+          <p className="text-xs" style={{ color: C.slate }}>
+            Ο λογαριασμός {user?.email} δεν έχει δικαιώματα διαχειριστή πλατφόρμας.
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <a href="/" className="text-xs font-medium" style={{ color: C.sky }}>Πίσω στην εφαρμογή</a>
+            <button onClick={handleLogout} className="text-xs font-medium" style={{ color: C.slate }}>Αποσύνδεση</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen w-full flex flex-col" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
+      <div className="flex items-center justify-between px-6 py-4 border-b bg-white shrink-0" style={{ borderColor: C.line }}>
+        <div className="flex items-center gap-3">
+          <Brand size={28} textSize="text-sm" />
+          <span className="text-xs font-medium px-2 py-1 rounded-md" style={{ backgroundColor: C.pale, color: C.navy }}>
+            Διαχείριση πλατφόρμας
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          <a href="/" className="text-xs font-medium" style={{ color: C.sky }}>Πίσω στην εφαρμογή</a>
+          <div className="text-xs text-right" style={{ color: C.slate }}>{user?.email}</div>
+          <button onClick={handleLogout} className="text-slate-400 hover:text-slate-600" title="Αποσύνδεση">
+            <LogOut size={16} />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto">
+        <AdminView
+          users={adminUsers}
+          loading={adminLoading}
+          error={adminError}
+          onReload={loadAdminUsers}
+          onApprove={handleApproveUser}
+          onRevoke={handleRevokeUser}
+          onPromote={handlePromoteUser}
+          onDemote={handleDemoteUser}
+          onCreateUser={handleCreateAdminUser}
+          onDeleteUser={handleDeleteAdminUser}
+          onAssignCompany={handleAssignUserCompany}
+          currentUserId={user.id}
+          teamOverview={teamOverview}
+          companies={companies}
+          companiesLoading={companiesLoading}
+          companiesError={companiesError}
+          onReloadCompanies={loadCompanies}
+          onCreateCompany={handleCreateCompany}
+          onSuspendCompany={handleSuspendCompany}
+          onActivateCompany={handleActivateCompany}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ---------- App ----------
 export default function App() {
   const [authState, setAuthState] = useState("loading"); // loading | anon | authed
@@ -4110,18 +4312,6 @@ export default function App() {
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templatesError, setTemplatesError] = useState("");
-
-  const [adminUsers, setAdminUsers] = useState([]);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminError, setAdminError] = useState("");
-  const [teamOverview, setTeamOverview] = useState(null);
-
-  // Companies (platform admin only) — separate from adminUsers above, which
-  // is the flat cross-company user list. This is the new Company-level
-  // management: create a pilot company + its owner, suspend/reactivate one.
-  const [companies, setCompanies] = useState([]);
-  const [companiesLoading, setCompaniesLoading] = useState(false);
-  const [companiesError, setCompaniesError] = useState("");
 
   // My own company's teammates — visible to everyone on the team; only an
   // "owner" gets invite/remove actions (see TeamView).
@@ -4206,35 +4396,6 @@ export default function App() {
     }
   }, []);
 
-  const loadAdminUsers = useCallback(async () => {
-    setAdminLoading(true);
-    setAdminError("");
-    try {
-      const [users, overview] = await Promise.all([
-        api.get("/admin/users"),
-        api.get("/admin/team-overview").catch(() => null),
-      ]);
-      setAdminUsers(users);
-      setTeamOverview(overview);
-    } catch (err) {
-      setAdminError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι χρήστες.");
-    } finally {
-      setAdminLoading(false);
-    }
-  }, []);
-
-  const loadCompanies = useCallback(async () => {
-    setCompaniesLoading(true);
-    setCompaniesError("");
-    try {
-      setCompanies(await api.get("/admin/companies"));
-    } catch (err) {
-      setCompaniesError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι εταιρείες.");
-    } finally {
-      setCompaniesLoading(false);
-    }
-  }, []);
-
   const loadTeam = useCallback(async () => {
     setTeamLoading(true);
     setTeamError("");
@@ -4308,13 +4469,6 @@ export default function App() {
   }, [authState, refreshAll]);
 
   useEffect(() => {
-    if (authState === "authed" && user?.isAdmin) {
-      loadAdminUsers();
-      loadCompanies();
-    }
-  }, [authState, user, loadAdminUsers, loadCompanies]);
-
-  useEffect(() => {
     if (authState === "authed") loadTeam();
   }, [authState, loadTeam]);
 
@@ -4380,7 +4534,6 @@ export default function App() {
     setTimeline([]);
     setActivity([]);
     setTemplates([]);
-    setAdminUsers([]);
     setOffers([]);
     setCampaigns([]);
   }
@@ -4577,50 +4730,6 @@ export default function App() {
     setSidebarOpen(false);
   }
 
-  async function handleApproveUser(id) {
-    await api.post(`/admin/users/${id}/approve`);
-    await loadAdminUsers();
-  }
-  async function handleRevokeUser(id) {
-    await api.post(`/admin/users/${id}/revoke`);
-    await loadAdminUsers();
-  }
-  async function handlePromoteUser(id) {
-    await api.post(`/admin/users/${id}/promote`);
-    await loadAdminUsers();
-  }
-  async function handleDemoteUser(id) {
-    await api.post(`/admin/users/${id}/demote`);
-    await loadAdminUsers();
-  }
-  async function handleCreateAdminUser(data) {
-    await api.post("/admin/users", data);
-    await loadAdminUsers();
-  }
-  async function handleDeleteAdminUser(id) {
-    await api.del(`/admin/users/${id}`);
-    await loadAdminUsers();
-  }
-
-  async function handleAssignUserCompany(id, companyId) {
-    await api.post(`/admin/users/${id}/assign-company`, { companyId });
-    await loadAdminUsers();
-    await loadCompanies(); // user counts per company shift when someone moves
-  }
-
-  async function handleCreateCompany(data) {
-    await api.post("/admin/companies", data);
-    await loadCompanies();
-  }
-  async function handleSuspendCompany(id) {
-    await api.post(`/admin/companies/${id}/suspend`);
-    await loadCompanies();
-  }
-  async function handleActivateCompany(id) {
-    await api.post(`/admin/companies/${id}/activate`);
-    await loadCompanies();
-  }
-
   async function handleInviteTeammate(data) {
     await api.post("/team", data);
     await loadTeam();
@@ -4697,9 +4806,6 @@ export default function App() {
           <NavItem icon={Megaphone} label="Campaigns" active={view === "campaigns"} onClick={() => { setView("campaigns"); setSidebarOpen(false); }} count={counts.campaigns} />
           <NavItem icon={BarChart3} label="Analytics" active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
           <NavItem icon={UserPlus} label="Ομάδα" active={view === "team"} onClick={() => { setView("team"); setSidebarOpen(false); }} />
-          {user?.isAdmin && (
-            <NavItem icon={ShieldCheck} label="Admin" active={view === "admin"} onClick={() => { setView("admin"); setSidebarOpen(false); }} />
-          )}
         </div>
 
         <div className="px-5 py-4 border-t flex items-center gap-2.5" style={{ borderColor: C.line }}>
@@ -4817,30 +4923,6 @@ export default function App() {
           )}
           {view === "analytics" && (
             <AnalyticsView overview={overview} timeline={timeline} crmOverview={crmOverview} loading={analyticsLoading} error={analyticsError} onReload={loadAnalytics} />
-          )}
-          {view === "admin" && user?.isAdmin && (
-            <AdminView
-              users={adminUsers}
-              loading={adminLoading}
-              error={adminError}
-              onReload={loadAdminUsers}
-              onApprove={handleApproveUser}
-              onRevoke={handleRevokeUser}
-              onPromote={handlePromoteUser}
-              onDemote={handleDemoteUser}
-              onCreateUser={handleCreateAdminUser}
-              onDeleteUser={handleDeleteAdminUser}
-              onAssignCompany={handleAssignUserCompany}
-              currentUserId={user.id}
-              teamOverview={teamOverview}
-              companies={companies}
-              companiesLoading={companiesLoading}
-              companiesError={companiesError}
-              onReloadCompanies={loadCompanies}
-              onCreateCompany={handleCreateCompany}
-              onSuspendCompany={handleSuspendCompany}
-              onActivateCompany={handleActivateCompany}
-            />
           )}
           {view === "team" && (
             <TeamView
