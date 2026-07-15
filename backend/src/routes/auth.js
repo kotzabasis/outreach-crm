@@ -8,6 +8,7 @@ const { sendPasswordResetEmail } = require("../lib/mailer");
 const { encrypt } = require("../lib/crypto");
 const { DAILY_CAP } = require("../lib/emailCap");
 const { resolveMembershipContext } = require("../lib/membership");
+const { pendingInvitesForEmail } = require("../lib/invites");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const requireOwner = require("../lib/requireOwner");
@@ -28,7 +29,7 @@ const credentialsSchema = z.object({
 // pass it rather than reading company/role straight off the raw User row,
 // since a user can now belong to more than one company and this is what
 // decides which one is "active" for them right now.
-function publicUser(user, gmailAccount, context) {
+function publicUser(user, gmailAccount, context, pendingInvites = []) {
   let gmail = null;
   if (gmailAccount) {
     // Read-only "as of right now" view of the same counter scheduler.js/
@@ -60,6 +61,11 @@ function publicUser(user, gmailAccount, context) {
     // Every company this user belongs to, so the frontend can offer a
     // switcher once there's more than one — see POST /auth/switch-company.
     memberships: context.memberships,
+    // Invites addressed to this user's email, still awaiting a yes/no — the
+    // frontend shows these as an accept/decline prompt right after login
+    // (see App.jsx). Not company-scoped like `memberships` above, since an
+    // invite can be for a company this user has no relationship with yet.
+    pendingInvites,
     // The connected Gmail account is now shared company-wide, not per-person
     // — every teammate sees the same "gmail" block once anyone on the team
     // has connected it.
@@ -128,11 +134,12 @@ router.post("/register", async (req, res) => {
   await prisma.membership.create({ data: { userId: user.id, companyId, role: "owner" } });
 
   const context = await resolveMembershipContext(prisma, user, req.session);
+  const pendingInvites = await pendingInvitesForEmail(user.email);
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
     req.session.userId = user.id;
-    res.status(201).json(publicUser(user, null, context));
+    res.status(201).json(publicUser(user, null, context, pendingInvites));
   });
 });
 
@@ -171,11 +178,12 @@ router.post("/login", async (req, res) => {
   const gmailAccount = context.companyId
     ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
     : null;
+  const pendingInvites = await pendingInvitesForEmail(user.email);
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
     req.session.userId = user.id;
-    res.json(publicUser(user, gmailAccount, context));
+    res.json(publicUser(user, gmailAccount, context, pendingInvites));
   });
 });
 
@@ -251,7 +259,8 @@ router.get("/me", async (req, res) => {
   const gmailAccount = context.companyId
     ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
     : null;
-  res.json(publicUser(user, gmailAccount, context));
+  const pendingInvites = await pendingInvitesForEmail(user.email);
+  res.json(publicUser(user, gmailAccount, context, pendingInvites));
 });
 
 // Lets a user with more than one Membership pick which company they're
@@ -275,7 +284,8 @@ router.post("/switch-company", requireAuth, async (req, res) => {
   const gmailAccount = context.companyId
     ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
     : null;
-  res.json(publicUser(req.user, gmailAccount, context));
+  const pendingInvites = await pendingInvitesForEmail(req.user.email);
+  res.json(publicUser(req.user, gmailAccount, context, pendingInvites));
 });
 
 // --- Gmail connection (separate from app login) ---

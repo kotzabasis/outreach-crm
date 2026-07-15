@@ -60,6 +60,13 @@ model User {
   // just reads req.user.companyId/req.user.role, resolved from the active
   // membership by requireAuth — nothing downstream needed to change.
   memberships          Membership[]
+  // Invites this user has SENT (as a company owner) to existing accounts —
+  // audit only, see CompanyInvite. Named to avoid any ambiguity with
+  // `memberships` above (invites the user has *received* aren't a relation
+  // at all — they're looked up by matching email, see lib/invites.js, since
+  // an invite can exist before the invitee even has this in mind).
+  sentInvites          CompanyInvite[] @relation("SentInvites")
+  auditLogs            AuditLog[]
 
   @@index([companyId])
 }
@@ -83,6 +90,56 @@ model Membership {
   @@unique([userId, companyId])
   @@index([companyId])
   @@index([userId])
+}
+
+// A pending invitation for an EXISTING account (matched by email) to join a
+// company — the consent step between "an owner wants to add this person"
+// and a Membership actually existing. Distinct from the direct-invite path
+// in routes/team.js (POST /team), which only ever creates a brand-new
+// account: that one never needs consent because the owner is the one
+// creating the account in the first place. This one is for someone who
+// already has their own account/password elsewhere, so a Membership only
+// gets created once THEY accept — an owner can't unilaterally attach an
+// existing person's account to their company.
+model CompanyInvite {
+  id          String    @id @default(uuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Lowercased, matched against the invitee's own email at accept/decline
+  // time — not a foreign key to User, since the whole point is this can be
+  // sent to an email address without coupling to a specific account id.
+  email       String
+  role        String    @default("member") // owner | member — what they get if they accept
+  invitedById String?
+  invitedBy   User?     @relation("SentInvites", fields: [invitedById], references: [id], onDelete: SetNull)
+  status      String    @default("pending") // pending | accepted | declined | revoked
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@index([companyId])
+  @@index([email, status])
+}
+
+// Append-only trail of high-impact admin/owner actions (suspend a company,
+// remove someone's access, delete an account, etc.) — nothing in the app
+// reads this to make decisions, it exists purely so there's a record once
+// more than one admin/owner is operating. actorEmail is denormalized (kept
+// even if the actor's own account is later deleted) so an entry still reads
+// sensibly; actorId/companyId are both nullable + SetNull for the same
+// "never let cleanup elsewhere silently erase history" reason.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorEmail String
+  action     String // short machine key, e.g. "company.suspend", "team.remove"
+  summary    String // human-readable one-liner, prebuilt at write time — see lib/auditLog.js
+  companyId  String?
+  company    Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([createdAt])
 }
 
 // A tenant. Each pilot company is one Company row; every User belongs to
@@ -120,6 +177,8 @@ model Company {
   campaigns    Campaign[]
   gmailAccount GmailAccount?
   memberships  Membership[]
+  invites      CompanyInvite[]
+  auditLogs    AuditLog[]
 }
 
 // Short-lived, single-use tokens for the "forgot password" flow. Only a

@@ -4,6 +4,7 @@ const { z } = require("zod");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const requireAdmin = require("../lib/requireAdmin");
+const { logAction } = require("../lib/auditLog");
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -92,6 +93,7 @@ router.post("/users", async (req, res) => {
   if (companyId) {
     await prisma.membership.create({ data: { userId: user.id, companyId, role: "member" } });
   }
+  await logAction(req, "user.create", `${req.user.email} created the account ${user.email}`, { companyId });
   res.status(201).json(publicAdminUser({ ...user, memberships: [] }));
 });
 
@@ -189,6 +191,13 @@ router.post("/companies", async (req, res) => {
 
   const memberships = await prisma.membership.findMany({ where: { userId: owner.id }, include: { company: true } });
 
+  await logAction(
+    req,
+    "company.create",
+    `${req.user.email} created company "${company.name}" with ${existingUser ? `existing user ${owner.email}` : `new owner ${owner.email}`} as owner`,
+    { companyId: company.id }
+  );
+
   res.status(201).json({
     company: publicCompany({ ...company, _count: { users: 1, contacts: 0 } }),
     owner: publicAdminUser({ ...owner, memberships }),
@@ -233,6 +242,7 @@ router.patch("/companies/:id", async (req, res) => {
     },
     include: { _count: { select: { users: true, contacts: true } } },
   });
+  await logAction(req, "company.edit", `${req.user.email} edited company "${updated.name}"'s profile`, { companyId: updated.id });
   res.json(publicCompany(updated));
 });
 
@@ -240,6 +250,7 @@ router.post("/companies/:id/suspend", async (req, res) => {
   const company = await prisma.company.findUnique({ where: { id: req.params.id } });
   if (!company) return res.status(404).json({ error: "not_found" });
   const updated = await prisma.company.update({ where: { id: company.id }, data: { status: "suspended" } });
+  await logAction(req, "company.suspend", `${req.user.email} suspended company "${company.name}"`, { companyId: company.id });
   res.json(publicCompany(updated));
 });
 
@@ -247,6 +258,7 @@ router.post("/companies/:id/activate", async (req, res) => {
   const company = await prisma.company.findUnique({ where: { id: req.params.id } });
   if (!company) return res.status(404).json({ error: "not_found" });
   const updated = await prisma.company.update({ where: { id: company.id }, data: { status: "active" } });
+  await logAction(req, "company.activate", `${req.user.email} reactivated company "${company.name}"`, { companyId: company.id });
   res.json(publicCompany(updated));
 });
 
@@ -351,6 +363,7 @@ router.delete("/users/:id", async (req, res) => {
   // Cascades to their contacts/sequences/templates/offers/etc — see the
   // onDelete: Cascade relations in schema.prisma.
   await prisma.user.delete({ where: { id: target.id } });
+  await logAction(req, "user.delete", `${req.user.email} deleted the account ${target.email}`, {});
   res.json({ ok: true });
 });
 
@@ -377,6 +390,7 @@ router.post("/users/:id/approve", async (req, res) => {
       create: { userId: user.id, companyId: data.companyId, role: user.role || "member" },
     });
   }
+  await logAction(req, "user.approve", `${req.user.email} approved ${updated.email}`, { companyId: data.companyId });
   res.json(publicAdminUser({ ...updated, memberships: [] }));
 });
 
@@ -435,6 +449,7 @@ router.post("/users/:id/assign-company", async (req, res) => {
     where: { userId: user.id },
     include: { company: true },
   });
+  await logAction(req, "membership.assign", `${req.user.email} added ${user.email} to ${company.name} as ${nextRole}`, { companyId });
   res.json(publicAdminUser({ ...updated, memberships }));
 });
 
@@ -481,6 +496,7 @@ router.delete("/users/:id/companies/:companyId", async (req, res) => {
     where: { userId: user.id },
     include: { company: true },
   });
+  await logAction(req, "membership.remove", `${req.user.email} removed ${user.email} from a company`, { companyId });
   res.json(publicAdminUser({ ...updated, memberships }));
 });
 
@@ -491,6 +507,7 @@ router.post("/users/:id/revoke", async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!user) return res.status(404).json({ error: "not_found" });
   const updated = await prisma.user.update({ where: { id: user.id }, data: { approved: false } });
+  await logAction(req, "user.revoke", `${req.user.email} revoked access for ${updated.email}`, {});
   res.json(publicAdminUser(updated));
 });
 
@@ -499,6 +516,7 @@ router.post("/users/:id/promote", async (req, res) => {
   if (!user) return res.status(404).json({ error: "not_found" });
   // Promoting someone to admin implies approving them too.
   const updated = await prisma.user.update({ where: { id: user.id }, data: { isAdmin: true, approved: true } });
+  await logAction(req, "user.promote", `${req.user.email} made ${updated.email} a platform admin`, {});
   res.json(publicAdminUser(updated));
 });
 
@@ -513,6 +531,7 @@ router.post("/users/:id/demote", async (req, res) => {
     return res.status(400).json({ error: "cannot_demote_last_admin" });
   }
   const updated = await prisma.user.update({ where: { id: target.id }, data: { isAdmin: false } });
+  await logAction(req, "user.demote", `${req.user.email} removed platform admin rights from ${updated.email}`, {});
   res.json(publicAdminUser(updated));
 });
 
@@ -579,6 +598,32 @@ router.get("/team-overview", async (req, res) => {
   );
 
   res.json({ totals, perUser });
+});
+
+// Recent admin/owner actions — see lib/auditLog.js for what gets written and
+// why. Read-only, most-recent-first, capped at 200 rows (this is a trail to
+// scan, not a report to page through); optional ?companyId= narrows it to
+// one company's history the same way the Companies stats/team-overview
+// filters do.
+router.get("/audit-log", async (req, res) => {
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId ? req.query.companyId : undefined;
+  const logs = await prisma.auditLog.findMany({
+    where: companyId ? { companyId } : undefined,
+    include: { company: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  res.json(
+    logs.map((l) => ({
+      id: l.id,
+      actorEmail: l.actorEmail,
+      action: l.action,
+      summary: l.summary,
+      companyId: l.companyId,
+      companyName: l.company?.name || null,
+      createdAt: l.createdAt,
+    }))
+  );
 });
 
 module.exports = router;

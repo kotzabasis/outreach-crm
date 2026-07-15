@@ -648,6 +648,86 @@ function TeamPerformanceCard({ companies }) {
   );
 }
 
+// Read-only trail of admin/owner actions (see backend lib/auditLog.js for
+// exactly what gets logged and why) — self-contained/self-fetching, same
+// pattern as TeamPerformanceCard, with its own company filter since "what
+// happened in this one company" is the far more common question than "every
+// action across the whole platform."
+function AuditLogCard({ companies }) {
+  const [companyId, setCompanyId] = useState("");
+  const [logs, setLogs] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    api
+      .get(`/admin/audit-log${qs}`)
+      .then((l) => {
+        if (alive) setLogs(l);
+      })
+      .catch((err) => {
+        if (alive) setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκε το ιστορικό ενεργειών.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [companyId]);
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm font-medium" style={{ color: C.ink }}>Ιστορικό ενεργειών</div>
+        <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
+          className="rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+          <option value="">Όλες οι εταιρείες</option>
+          {(companies || []).map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {loading && <Spinner label="Φόρτωση…" />}
+      <ErrorNote message={error} />
+
+      {logs && (
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left" style={{ color: C.slate }}>
+                <th className="font-medium pb-2">Πότε</th>
+                <th className="font-medium pb-2">Ενέργεια</th>
+                <th className="font-medium pb-2">Εταιρεία</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="py-3 text-sm" style={{ color: C.slate }}>Δεν υπάρχουν καταγεγραμμένες ενέργειες.</td>
+                </tr>
+              ) : (
+                logs.map((l) => (
+                  <tr key={l.id} className="border-t align-top" style={{ borderColor: C.line }}>
+                    <td className="py-2.5 text-xs whitespace-nowrap" style={{ color: C.slate }}>{fmtDate(l.createdAt)}</td>
+                    <td className="py-2.5" style={{ color: C.ink }}>{l.summary}</td>
+                    <td className="py-2.5 text-xs" style={{ color: C.slate }}>{l.companyName || "—"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAddMembership, onRemoveMembership, currentUserId, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onEditCompany, onSuspendCompany, onActivateCompany }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -737,6 +817,8 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
         )}
 
         <TeamPerformanceCard companies={companies} />
+
+        <AuditLogCard companies={companies} />
 
         {loading ? (
           <Spinner label="Φόρτωση χρηστών…" />

@@ -3426,12 +3426,79 @@ function NewTeammateModal({ onClose, onInvite }) {
   );
 }
 
+// Owner inviting someone who ALREADY has an SDLoop account elsewhere — this
+// can't just create a Membership directly the way NewTeammateModal does,
+// since the target already owns their own account/password. It becomes a
+// pending CompanyInvite instead; a Membership only appears once they accept
+// it themselves (see the invite-response prompt near the top of App()).
+function InviteExistingModal({ onClose, onInvite }) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("member");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [sent, setSent] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await onInvite({ email, role });
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η πρόσκληση.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Πρόσκληση υπάρχοντος χρήστη</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        {sent ? (
+          <div className="space-y-3">
+            <p className="text-sm" style={{ color: C.ink }}>Η πρόσκληση στάλθηκε. Θα εμφανιστεί στον λογαριασμό του/της την επόμενη φορά που θα συνδεθεί, και θα προστεθεί στην ομάδα μόνο αν την αποδεχτεί.</p>
+            <button onClick={onClose} className="w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky }}>Κλείσιμο</button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input required type="email" placeholder="Email υπάρχοντος λογαριασμού" value={email} onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Ρόλος</label>
+              <select value={role} onChange={(e) => setRole(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+                <option value="member">Μέλος</option>
+                <option value="owner">Ιδιοκτήτης</option>
+              </select>
+            </div>
+            <p className="text-xs" style={{ color: C.slate }}>
+              Ο χρήστης πρέπει ήδη να έχει λογαριασμό SDLoop. Θα λάβει μια πρόσκληση που μπορεί να αποδεχτεί ή να απορρίψει — δεν προστίθεται αυτόματα.
+            </p>
+            {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+            <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+              {busy && <Loader2 size={14} className="animate-spin" />} Αποστολή πρόσκλησης
+            </button>
+          </form>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // Visible to every teammate; only an "owner" gets invite/remove actions.
 // Deliberately no "promote to owner" here yet — one owner per company this
 // round, matching the backend (routes/team.js refuses to remove an owner).
-function TeamView({ members, loading, error, onReload, onInvite, onRemove, currentUserId, isOwner }) {
+function TeamView({ members, loading, error, onReload, onInvite, onRemove, currentUserId, isOwner, invites, onInviteExisting, onRevokeInvite, onExport }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [showExisting, setShowExisting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   async function handleRemove(m) {
     if (!window.confirm(`Αφαίρεση του/της ${m.name || m.email} από την ομάδα;`)) return;
@@ -3443,22 +3510,61 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
     }
   }
 
+  async function handleExport() {
+    setExportError("");
+    setExporting(true);
+    try {
+      await onExport();
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : "Η εξαγωγή απέτυχε.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="h-full overflow-auto">
       {showNew && <NewTeammateModal onClose={() => setShowNew(false)} onInvite={onInvite} />}
+      {showExisting && <InviteExistingModal onClose={() => setShowExisting(false)} onInvite={onInviteExisting} />}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Ομάδα</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>Οι συνεργάτες στο workspace σου — μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.</p>
         </div>
         {isOwner && (
-          <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
-            <UserPlus size={15} /> Πρόσκληση
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border" style={{ borderColor: C.line, color: C.ink, opacity: exporting ? 0.7 : 1 }}>
+              {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Εξαγωγή δεδομένων
+            </button>
+            <button onClick={() => setShowExisting(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border" style={{ borderColor: C.line, color: C.ink }}>
+              <UserPlus size={15} /> Υπάρχων χρήστης
+            </button>
+            <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky }}>
+              <UserPlus size={15} /> Πρόσκληση
+            </button>
+          </div>
         )}
       </div>
       <div className="px-8 py-6">
+        <ErrorNote message={exportError} />
         <ErrorNote message={error} onRetry={onReload} />
+        {isOwner && invites?.length > 0 && (
+          <Card className="p-4 mb-4">
+            <div className="text-sm font-medium mb-3" style={{ color: C.ink }}>Εκκρεμείς προσκλήσεις</div>
+            <div className="space-y-2">
+              {invites.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                  <div className="text-sm" style={{ color: C.ink }}>
+                    {inv.email} <span style={{ color: C.slate }}>— {inv.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"} · {fmtDate(inv.createdAt)}</span>
+                  </div>
+                  <button onClick={() => onRevokeInvite(inv.id)} title="Ανάκληση" style={{ color: C.coral }}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
         {loading ? (
           <Spinner label="Φόρτωση ομάδας…" />
         ) : (
@@ -3510,6 +3616,70 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
   );
 }
 
+// Shown right after login/reload whenever the current account has one or
+// more pending CompanyInvites (see routes/team.js#invite-existing) — i.e.
+// someone already added them by email and is waiting on a yes/no. "Αργότερα"
+// just hides it for this session (the invite is still pending and will show
+// again next login); Accept/Decline actually resolve it server-side.
+function InviteResponseModal({ invites, onAccept, onDecline, onDismiss }) {
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState("");
+
+  async function respond(id, fn) {
+    setError("");
+    setBusyId(id);
+    try {
+      await fn(id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Η ενέργεια απέτυχε.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Προσκλήσεις σε εταιρείες</h3>
+          <button onClick={onDismiss} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <p className="text-xs mb-4" style={{ color: C.slate }}>Κάποιος σε προσκάλεσε να μπεις στην ομάδα τους.</p>
+        {error && <p className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+        <div className="space-y-2">
+          {invites.map((inv) => (
+            <div key={inv.id} className="rounded-lg px-3 py-3" style={{ backgroundColor: C.pale }}>
+              <div className="text-sm font-medium" style={{ color: C.ink }}>{inv.companyName}</div>
+              <div className="text-xs mt-0.5" style={{ color: C.slate }}>
+                Ρόλος: {inv.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"}{inv.invitedByName ? ` · από ${inv.invitedByName}` : ""}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  disabled={busyId === inv.id}
+                  onClick={() => respond(inv.id, onAccept)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
+                  style={{ backgroundColor: C.mint, opacity: busyId === inv.id ? 0.7 : 1 }}
+                >
+                  <CircleCheck size={13} /> Αποδοχή
+                </button>
+                <button
+                  disabled={busyId === inv.id}
+                  onClick={() => respond(inv.id, onDecline)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border"
+                  style={{ borderColor: C.line, color: C.slate }}
+                >
+                  <CircleX size={13} /> Απόρριψη
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button onClick={onDismiss} className="w-full text-center text-xs mt-4" style={{ color: C.slate }}>Αργότερα</button>
+      </Card>
+    </div>
+  );
+}
+
 // ---------- App ----------
 export default function App() {
   const [authState, setAuthState] = useState("loading"); // loading | anon | authed
@@ -3548,6 +3718,12 @@ export default function App() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState("");
+  // Invites THIS company has sent to existing accounts, still awaiting a
+  // response — separate from teamMembers above (those are actual
+  // Memberships; these are still pending). Owner-only, so left empty (and
+  // never fetched) for a regular member.
+  const [teamInvites, setTeamInvites] = useState([]);
+  const [inviteBannerDismissed, setInviteBannerDismissed] = useState(false);
 
   const [offers, setOffers] = useState([]);
   const [offersLoading, setOffersLoading] = useState(false);
@@ -3631,6 +3807,14 @@ export default function App() {
     setTeamError("");
     try {
       setTeamMembers(await api.get("/team"));
+      // Only an owner can see/manage pending invites (GET /team/invites is
+      // owner-only) — a plain 403 here for a regular member is expected, not
+      // an error worth surfacing.
+      try {
+        setTeamInvites(await api.get("/team/invites"));
+      } catch {
+        setTeamInvites([]);
+      }
     } catch (err) {
       setTeamError(err instanceof ApiError ? err.message : "Δεν φορτώθηκε η ομάδα.");
     } finally {
@@ -3985,6 +4169,36 @@ export default function App() {
     await api.del(`/team/${id}`);
     await loadTeam();
   }
+  async function handleInviteExistingTeammate(data) {
+    await api.post("/team/invite-existing", data);
+    await loadTeam();
+  }
+  async function handleRevokeInvite(id) {
+    await api.del(`/team/invites/${id}`);
+    await loadTeam();
+  }
+  async function handleExportTeamData() {
+    const blob = await api.downloadBlob("/team/export");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sdloop-export.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+  async function handleAcceptInvite(id) {
+    await api.post(`/team/invites/${id}/accept`);
+    // A new Membership can change the active company/gmail/permissions —
+    // simplest to just reload, same as handleSwitchCompany, rather than
+    // patching a dozen pieces of state by hand.
+    window.location.reload();
+  }
+  async function handleDeclineInvite(id) {
+    await api.post(`/team/invites/${id}/decline`);
+    setUser((u) => (u ? { ...u, pendingInvites: (u.pendingInvites || []).filter((i) => i.id !== id) } : u));
+  }
 
   if (authState === "loading") {
     return (
@@ -4016,6 +4230,14 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
+      {!inviteBannerDismissed && user?.pendingInvites?.length > 0 && (
+        <InviteResponseModal
+          invites={user.pendingInvites}
+          onAccept={handleAcceptInvite}
+          onDecline={handleDeclineInvite}
+          onDismiss={() => setInviteBannerDismissed(true)}
+        />
+      )}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
@@ -4198,6 +4420,10 @@ export default function App() {
               onRemove={handleRemoveTeammate}
               currentUserId={user.id}
               isOwner={user?.role === "owner"}
+              invites={teamInvites}
+              onInviteExisting={handleInviteExistingTeammate}
+              onRevokeInvite={handleRevokeInvite}
+              onExport={handleExportTeamData}
             />
           )}
         </div>
