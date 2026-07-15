@@ -108,41 +108,90 @@ router.get("/companies", async (req, res) => {
   res.json(companies.map(publicCompany));
 });
 
-const createCompanySchema = z.object({
-  companyName: z.string().min(1).max(200),
-  ownerEmail: z.string().email(),
-  ownerPassword: z.string().min(10).max(200),
-  ownerName: z.string().min(1).max(200).optional(),
-});
+// Either create a brand-new owner account (ownerEmail+ownerPassword) or hand
+// ownership to an existingOwnerUserId — exactly one of the two, enforced
+// below. Letting a platform admin pick an existing person avoids the
+// "email_already_registered" dead end that happens if someone (sensibly)
+// tries to reuse an existing account's email to make them owner of a second
+// company — that's a Membership to add, not a new account to create.
+const createCompanySchema = z
+  .object({
+    companyName: z.string().min(1).max(200),
+    existingOwnerUserId: z.string().min(1).optional(),
+    ownerEmail: z.string().email().optional(),
+    ownerPassword: z.string().min(10).max(200).optional(),
+    ownerName: z.string().min(1).max(200).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.existingOwnerUserId) return; // existing-user path — email/password not needed
+    if (!data.ownerEmail || !data.ownerPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide either existingOwnerUserId or ownerEmail+ownerPassword",
+        path: ["ownerEmail"],
+      });
+    }
+  });
 
-// Creates a company AND its first user (the owner) in one step — the
-// intended onboarding path for a new pilot company, rather than the public
-// self-registration + approval queue.
+// Creates a company and assigns its first owner in one step — the intended
+// onboarding path for a new pilot company, rather than the public
+// self-registration + approval queue. The owner is either a brand-new
+// account, or (existingOwnerUserId) an existing person elsewhere on the
+// platform who's simply gaining an additional company — same additive rule
+// as POST /users/:id/assign-company: their "home" company only changes if
+// they didn't already have one.
 router.post("/companies", async (req, res) => {
   const parsed = createCompanySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { companyName, ownerEmail, ownerPassword, ownerName } = parsed.data;
+  const { companyName, existingOwnerUserId, ownerEmail, ownerPassword, ownerName } = parsed.data;
 
-  const existing = await prisma.user.findUnique({ where: { email: ownerEmail.toLowerCase() } });
-  if (existing) return res.status(400).json({ error: "email_already_registered" });
+  let existingUser = null;
+  if (existingOwnerUserId) {
+    existingUser = await prisma.user.findUnique({ where: { id: existingOwnerUserId } });
+    if (!existingUser) return res.status(400).json({ error: "invalid_user" });
+  } else {
+    const existing = await prisma.user.findUnique({ where: { email: ownerEmail.toLowerCase() } });
+    if (existing) return res.status(400).json({ error: "email_already_registered" });
+  }
 
-  const passwordHash = await bcrypt.hash(ownerPassword, 12);
   const company = await prisma.company.create({ data: { name: companyName } });
-  const owner = await prisma.user.create({
-    data: {
-      email: ownerEmail.toLowerCase(),
-      passwordHash,
-      name: ownerName,
-      approved: true,
-      companyId: company.id,
-      role: "owner",
-    },
-  });
-  await prisma.membership.create({ data: { userId: owner.id, companyId: company.id, role: "owner" } });
+
+  let owner;
+  if (existingUser) {
+    await prisma.membership.upsert({
+      where: { userId_companyId: { userId: existingUser.id, companyId: company.id } },
+      update: { role: "owner" },
+      create: { userId: existingUser.id, companyId: company.id, role: "owner" },
+    });
+    const data = {};
+    if (!existingUser.companyId) {
+      data.companyId = company.id;
+      data.role = "owner";
+    }
+    owner = Object.keys(data).length
+      ? await prisma.user.update({ where: { id: existingUser.id }, data, include: { company: true } })
+      : await prisma.user.findUnique({ where: { id: existingUser.id }, include: { company: true } });
+  } else {
+    const passwordHash = await bcrypt.hash(ownerPassword, 12);
+    owner = await prisma.user.create({
+      data: {
+        email: ownerEmail.toLowerCase(),
+        passwordHash,
+        name: ownerName,
+        approved: true,
+        companyId: company.id,
+        role: "owner",
+      },
+      include: { company: true },
+    });
+    await prisma.membership.create({ data: { userId: owner.id, companyId: company.id, role: "owner" } });
+  }
+
+  const memberships = await prisma.membership.findMany({ where: { userId: owner.id }, include: { company: true } });
 
   res.status(201).json({
     company: publicCompany({ ...company, _count: { users: 1, contacts: 0 } }),
-    owner: publicAdminUser({ ...owner, company, memberships: [] }),
+    owner: publicAdminUser({ ...owner, memberships }),
   });
 });
 
@@ -471,12 +520,25 @@ router.post("/users/:id/demote", async (req, res) => {
 // (counts/rates), never the underlying contact/offer records themselves, so
 // this doesn't become a backdoor around the per-user data isolation used
 // everywhere else (contacts.js, offers.js, sequences.js, etc.).
+//
+// Optional ?companyId= scopes everything to one company: only members of
+// that company appear in perUser, and contacts/sends/offers are filtered to
+// that companyId (not by the viewed user's home company — a rep can be a
+// member of several companies, so scoping by companyId scalar is the only
+// way to get numbers that add up for one specific pilot). Omitting it keeps
+// the original cross-platform rollup (every user, every company).
 router.get("/team-overview", async (req, res) => {
+  const companyId = typeof req.query.companyId === "string" && req.query.companyId ? req.query.companyId : null;
+
   const [users, contactsByUser, sentByUser, offers] = await Promise.all([
-    prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.contact.groupBy({ by: ["userId"], _count: { _all: true } }),
-    prisma.emailLog.groupBy({ by: ["userId"], _count: { _all: true } }),
-    prisma.offer.findMany({ select: { userId: true, status: true, value: true } }),
+    companyId
+      ? prisma.membership
+          .findMany({ where: { companyId }, include: { user: true }, orderBy: { createdAt: "asc" } })
+          .then((memberships) => memberships.map((m) => m.user))
+      : prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.contact.groupBy({ by: ["userId"], where: companyId ? { companyId } : undefined, _count: { _all: true } }),
+    prisma.emailLog.groupBy({ by: ["userId"], where: companyId ? { companyId } : undefined, _count: { _all: true } }),
+    prisma.offer.findMany({ where: companyId ? { companyId } : undefined, select: { userId: true, status: true, value: true } }),
   ]);
 
   const contactsMap = Object.fromEntries(contactsByUser.map((c) => [c.userId, c._count._all]));

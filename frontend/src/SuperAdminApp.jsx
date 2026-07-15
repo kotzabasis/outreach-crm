@@ -72,11 +72,20 @@ function NewAdminUserModal({ onClose, onCreate, companies }) {
   );
 }
 
-function NewCompanyModal({ onClose, onCreate }) {
+// `users` (all existing accounts, passed down from AdminView) lets a platform
+// admin make an EXISTING person the owner of this new company — e.g. someone
+// who already owns/works at one pilot company is now also launching another
+// — without hitting "email_already_registered" trying to create a duplicate
+// account for them. That error is correct for a brand-new account; it just
+// isn't the right tool for "add this person to another company," which is a
+// Membership, not a new user (see POST /admin/companies + assign-company).
+function NewCompanyModal({ onClose, onCreate, users }) {
   const [companyName, setCompanyName] = useState("");
+  const [ownerMode, setOwnerMode] = useState("new"); // "new" | "existing"
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
+  const [existingOwnerUserId, setExistingOwnerUserId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -85,7 +94,12 @@ function NewCompanyModal({ onClose, onCreate }) {
     setError("");
     setBusy(true);
     try {
-      await onCreate({ companyName, ownerEmail, ownerPassword, ownerName: ownerName || undefined });
+      if (ownerMode === "existing") {
+        if (!existingOwnerUserId) throw new Error("no_owner_selected");
+        await onCreate({ companyName, existingOwnerUserId });
+      } else {
+        await onCreate({ companyName, ownerEmail, ownerPassword, ownerName: ownerName || undefined });
+      }
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία εταιρείας.");
@@ -104,13 +118,46 @@ function NewCompanyModal({ onClose, onCreate }) {
         <form onSubmit={handleSubmit} className="space-y-3">
           <input required placeholder="Όνομα εταιρείας" value={companyName} onChange={(e) => setCompanyName(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <p className="text-xs font-medium pt-1" style={{ color: C.slate }}>Πρώτος χρήστης (ιδιοκτήτης)</p>
-          <input required type="email" placeholder="Email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Όνομα (προαιρετικό)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+
+          <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: C.pale }}>
+            <button type="button" onClick={() => setOwnerMode("new")}
+              className="flex-1 rounded-md py-1.5 text-xs font-medium"
+              style={{ backgroundColor: ownerMode === "new" ? "white" : "transparent", color: ownerMode === "new" ? C.ink : C.slate }}>
+              Νέος ιδιοκτήτης
+            </button>
+            <button type="button" onClick={() => setOwnerMode("existing")}
+              className="flex-1 rounded-md py-1.5 text-xs font-medium"
+              style={{ backgroundColor: ownerMode === "existing" ? "white" : "transparent", color: ownerMode === "existing" ? C.ink : C.slate }}>
+              Υπάρχων χρήστης
+            </button>
+          </div>
+
+          {ownerMode === "existing" ? (
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Ιδιοκτήτης</label>
+              <select required value={existingOwnerUserId} onChange={(e) => setExistingOwnerUserId(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+                <option value="">— επίλεξε χρήστη —</option>
+                {(users || []).map((u) => (
+                  <option key={u.id} value={u.id}>{u.name ? `${u.name} (${u.email})` : u.email}</option>
+                ))}
+              </select>
+              <p className="text-xs mt-1" style={{ color: C.slate }}>
+                Ο χρήστης θα γίνει ιδιοκτήτης της νέας εταιρείας, χωρίς να αγγίξει τις υπόλοιπες εταιρείες του.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs font-medium pt-1" style={{ color: C.slate }}>Πρώτος χρήστης (ιδιοκτήτης)</p>
+              <input required type="email" placeholder="Email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+              <input placeholder="Όνομα (προαιρετικό)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+              <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            </>
+          )}
+
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
             {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία εταιρείας
@@ -295,7 +342,7 @@ function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
 
 // Platform-admin-only: create/suspend/reactivate pilot companies. Each row's
 // users/contacts counts come straight from the backend's _count include.
-function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditCompany, onSuspend, onActivate }) {
+function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditCompany, onSuspend, onActivate, users }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [statsCompany, setStatsCompany] = useState(null);
@@ -312,7 +359,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
 
   return (
     <Card className="p-5">
-      {showNew && <NewCompanyModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
+      {showNew && <NewCompanyModal onClose={() => setShowNew(false)} onCreate={onCreate} users={users} />}
       {statsCompany && <CompanyStatsModal company={statsCompany} onClose={() => setStatsCompany(null)} />}
       {editCompany && (
         <EditCompanyModal company={editCompany} onClose={() => setEditCompany(null)} onSave={onEditCompany} />
@@ -507,7 +554,101 @@ function CompanyStatsModal({ company, onClose }) {
   );
 }
 
-function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAddMembership, onRemoveMembership, currentUserId, teamOverview, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onEditCompany, onSuspendCompany, onActivateCompany }) {
+// Self-contained (fetches its own data, same pattern as CompanyStatsModal)
+// so the company filter dropdown can just live here rather than threading a
+// selected-company-id up through AdminView/SuperAdminApp. Defaults to "every
+// company" (companyId omitted) — the original cross-platform rollup — and
+// refetches /admin/team-overview?companyId=... whenever the dropdown changes,
+// since a rep's numbers only make sense scoped to one company (someone who's
+// a member of two companies would otherwise have contacts/sends from both
+// mixed into one row).
+function TeamPerformanceCard({ companies }) {
+  const [companyId, setCompanyId] = useState("");
+  const [overview, setOverview] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    const qs = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+    api
+      .get(`/admin/team-overview${qs}`)
+      .then((o) => {
+        if (alive) setOverview(o);
+      })
+      .catch((err) => {
+        if (alive) setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκε η απόδοση ομάδας.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [companyId]);
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm font-medium" style={{ color: C.ink }}>Απόδοση ομάδας</div>
+        <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
+          className="rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+          <option value="">Όλες οι εταιρείες</option>
+          {(companies || []).map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {loading && <Spinner label="Φόρτωση…" />}
+      <ErrorNote message={error} />
+
+      {overview && (
+        <>
+          <div className="flex flex-wrap gap-4 mb-4">
+            <StatCard label="Επαφές" value={overview.totals.contacts} sub="σύνολο team" color={C.sky} />
+            <StatCard label="Στάλθηκαν" value={overview.totals.sent} sub="emails, όλοι" color={C.navy} />
+            <StatCard label="Προσφορές" value={overview.totals.offers} sub={fmtMoney(overview.totals.offersValue)} color={C.mint} />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left" style={{ color: C.slate }}>
+                  <th className="font-medium pb-2">Χρήστης</th>
+                  <th className="font-medium pb-2">Επαφές</th>
+                  <th className="font-medium pb-2">Στάλθηκαν</th>
+                  <th className="font-medium pb-2">Προσφορές</th>
+                  <th className="font-medium pb-2">Win rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overview.perUser.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-3 text-sm" style={{ color: C.slate }}>Δεν υπάρχουν χρήστες σε αυτή την εταιρεία.</td>
+                  </tr>
+                ) : (
+                  overview.perUser.map((u) => (
+                    <tr key={u.userId} className="border-t" style={{ borderColor: C.line }}>
+                      <td className="py-2.5 font-medium" style={{ color: C.ink }}>{u.name || u.email}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.contacts}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.sent}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.offers} <span style={{ color: C.slate }}>({fmtMoney(u.offersValue)})</span></td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.winRate == null ? "—" : `${Math.round(u.winRate * 100)}%`}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAddMembership, onRemoveMembership, currentUserId, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onEditCompany, onSuspendCompany, onActivateCompany }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [membershipsUser, setMembershipsUser] = useState(null);
@@ -568,6 +709,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
           onEditCompany={onEditCompany}
           onSuspend={onSuspendCompany}
           onActivate={onActivateCompany}
+          users={users}
         />
 
         {membershipsUser && (
@@ -594,40 +736,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
           />
         )}
 
-        {teamOverview && (
-          <Card className="p-5">
-            <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Απόδοση ομάδας</div>
-            <div className="flex flex-wrap gap-4 mb-4">
-              <StatCard label="Επαφές" value={teamOverview.totals.contacts} sub="σύνολο team" color={C.sky} />
-              <StatCard label="Στάλθηκαν" value={teamOverview.totals.sent} sub="emails, όλοι" color={C.navy} />
-              <StatCard label="Προσφορές" value={teamOverview.totals.offers} sub={fmtMoney(teamOverview.totals.offersValue)} color={C.mint} />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left" style={{ color: C.slate }}>
-                    <th className="font-medium pb-2">Χρήστης</th>
-                    <th className="font-medium pb-2">Επαφές</th>
-                    <th className="font-medium pb-2">Στάλθηκαν</th>
-                    <th className="font-medium pb-2">Προσφορές</th>
-                    <th className="font-medium pb-2">Win rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {teamOverview.perUser.map((u) => (
-                    <tr key={u.userId} className="border-t" style={{ borderColor: C.line }}>
-                      <td className="py-2.5 font-medium" style={{ color: C.ink }}>{u.name || u.email}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{u.contacts}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{u.sent}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{u.offers} <span style={{ color: C.slate }}>({fmtMoney(u.offersValue)})</span></td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{u.winRate == null ? "—" : `${Math.round(u.winRate * 100)}%`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        )}
+        <TeamPerformanceCard companies={companies} />
 
         {loading ? (
           <Spinner label="Φόρτωση χρηστών…" />
@@ -739,22 +848,19 @@ export function SuperAdminApp() {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState("");
-  const [teamOverview, setTeamOverview] = useState(null);
 
   const [companies, setCompanies] = useState([]);
   const [companiesLoading, setCompaniesLoading] = useState(false);
   const [companiesError, setCompaniesError] = useState("");
 
+  // Team performance (Απόδοση ομάδας) fetches itself now — see
+  // TeamPerformanceCard — since it needs to refetch on its own company filter
+  // independently of the users list.
   const loadAdminUsers = useCallback(async () => {
     setAdminLoading(true);
     setAdminError("");
     try {
-      const [users, overview] = await Promise.all([
-        api.get("/admin/users"),
-        api.get("/admin/team-overview").catch(() => null),
-      ]);
-      setAdminUsers(users);
-      setTeamOverview(overview);
+      setAdminUsers(await api.get("/admin/users"));
     } catch (err) {
       setAdminError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι χρήστες.");
     } finally {
@@ -847,6 +953,9 @@ export function SuperAdminApp() {
   async function handleCreateCompany(data) {
     await api.post("/admin/companies", data);
     await loadCompanies();
+    // An existingOwnerUserId create can change that user's memberships/home
+    // company — refresh the users list too so it's reflected immediately.
+    await loadAdminUsers();
   }
   async function handleEditCompany(id, data) {
     await api.patch(`/admin/companies/${id}`, data);
@@ -930,7 +1039,6 @@ export function SuperAdminApp() {
           onAddMembership={handleAddMembership}
           onRemoveMembership={handleRemoveMembership}
           currentUserId={user.id}
-          teamOverview={teamOverview}
           companies={companies}
           companiesLoading={companiesLoading}
           companiesError={companiesError}
