@@ -11,9 +11,59 @@
 
 export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
+// The backend returns error codes as raw snake_case strings (e.g.
+// { error: "email_already_registered" }) — without this, ApiError.message
+// WAS that raw code, shown verbatim in the UI wherever a catch block falls
+// back to `err.message` (which is most of them). Translates every known code
+// to a proper Greek sentence; anything not listed here still falls through to
+// the raw code below rather than breaking, so a new/rare backend error code
+// degrades gracefully instead of throwing.
+const ERROR_MESSAGES = {
+  not_found: "Δεν βρέθηκε.",
+  email_already_registered: "Υπάρχει ήδη λογαριασμός με αυτό το email.",
+  invalid_company: "Μη έγκυρη εταιρεία.",
+  invalid_user: "Μη έγκυρος χρήστης.",
+  cannot_delete_self: "Δεν μπορείς να διαγράψεις τον εαυτό σου.",
+  cannot_delete_last_admin: "Δεν μπορεί να διαγραφεί ο τελευταίος διαχειριστής.",
+  would_leave_company_ownerless: "Η ενέργεια θα άφηνε την εταιρεία χωρίς ιδιοκτήτη.",
+  not_a_member: "Ο χρήστης δεν ανήκει σε αυτή την εταιρεία.",
+  not_a_member_of_that_company: "Δεν ανήκεις σε αυτή την εταιρεία.",
+  cannot_revoke_self: "Δεν μπορείς να ανακαλέσεις την πρόσβαση του εαυτού σου.",
+  cannot_demote_self: "Δεν μπορείς να υποβιβάσεις τον εαυτό σου.",
+  cannot_demote_last_admin: "Δεν μπορεί να υποβιβαστεί ο τελευταίος διαχειριστής.",
+  cannot_remove_self: "Δεν μπορείς να αφαιρέσεις τον εαυτό σου.",
+  cannot_remove_owner: "Δεν μπορείς να αφαιρέσεις τον ιδιοκτήτη.",
+  no_ids_provided: "Δεν επιλέχθηκαν επαφές.",
+  no_contacts_provided: "Δεν επιλέχθηκαν επαφές.",
+  gmail_not_connected: "Δεν έχει συνδεθεί λογαριασμός Gmail.",
+  gmail_needs_reconnect: "Χρειάζεται επανασύνδεση του Gmail.",
+  invalid_test_email: "Μη έγκυρο email δοκιμής.",
+  send_failed: "Η αποστολή απέτυχε.",
+  sequence_has_no_steps: "Το sequence δεν έχει βήματα.",
+  invalid_email_or_password: "Λάθος email ή κωδικός.",
+  session_error: "Σφάλμα σύνδεσης — δοκίμασε ξανά.",
+  account_pending_approval: "Ο λογαριασμός εκκρεμεί έγκρισης από διαχειριστή.",
+  company_suspended: "Η εταιρεία είναι ανεσταλμένη.",
+  invalid_request: "Μη έγκυρο αίτημα.",
+  invalid_or_expired_token: "Ο σύνδεσμος έληξε ή δεν είναι πλέον έγκυρος.",
+  not_authenticated: "Η σύνδεση έληξε — συνδέσου ξανά.",
+  invalid_template: "Μη έγκυρο template.",
+  subject_and_body_required: "Χρειάζονται θέμα και κείμενο.",
+  no_valid_contacts: "Δεν υπάρχουν έγκυρες επαφές για αποστολή.",
+  cannot_start: "Δεν μπορεί να ξεκινήσει.",
+  not_running: "Δεν εκτελείται αυτή τη στιγμή.",
+  contact_not_found: "Η επαφή δεν βρέθηκε.",
+  contact_unsubscribed: "Η επαφή έχει γίνει unsubscribe.",
+  daily_send_cap_reached: "Συμπληρώθηκε το ημερήσιο όριο αποστολών.",
+  admin_only: "Απαιτούνται δικαιώματα διαχειριστή πλατφόρμας.",
+  owner_only: "Απαιτούνται δικαιώματα ιδιοκτήτη εταιρείας.",
+};
+
 export class ApiError extends Error {
   constructor(status, data) {
+    const rawCode = data && typeof data === "object" && typeof data.error === "string" ? data.error : null;
     const message =
+      (rawCode && ERROR_MESSAGES[rawCode]) ||
       (data && typeof data === "object" && (data.error?.formErrors?.[0] || data.error)) ||
       `Αίτημα απέτυχε (HTTP ${status})`;
     super(typeof message === "string" ? message : "Αίτημα απέτυχε");
