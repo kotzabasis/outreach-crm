@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@sentry/react": "^10.65.0",
     "dompurify": "^3.4.12",
     "lucide-react": "^0.383.0",
     "papaparse": "^5.4.1",

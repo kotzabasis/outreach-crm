@@ -1,6 +1,8 @@
 import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
+import { Sentry } from "./lib/sentry"; // side-effect: initializes Sentry if VITE_SENTRY_DSN is set (no-op otherwise)
+import { Brand, C, Card } from "./lib/ui.jsx";
 
 // /superadmin is a separate area for platform-admin-only work (creating
 // companies, managing every user across companies) — deliberately kept out
@@ -27,10 +29,40 @@ const Screen = path.startsWith("/superadmin")
   ? ResetPasswordPage
   : App;
 
+// Before this, a crash mid-render anywhere in the app (any of the three
+// screens above) was invisible to us — the backend had Sentry, but nothing
+// caught a broken component on the frontend; the user just saw a blank
+// white page with no way for it to reach us. Sentry.ErrorBoundary reports
+// the crash (when VITE_SENTRY_DSN is configured — a no-op otherwise, same as
+// the backend) and swaps in this friendly screen instead of a blank one.
+function ErrorFallback() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center px-6" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
+      <Card className="max-w-sm w-full p-6 text-center space-y-3">
+        <div className="flex justify-center mb-1">
+          <Brand size={30} textSize="text-base" />
+        </div>
+        <p className="text-sm" style={{ color: C.ink }}>
+          Κάτι πήγε στραβά. Δοκίμασε να ανανεώσεις τη σελίδα.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white"
+          style={{ backgroundColor: C.sky }}
+        >
+          Ανανέωση σελίδας
+        </button>
+      </Card>
+    </div>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <Suspense fallback={null}>
-      <Screen />
-    </Suspense>
+    <Sentry.ErrorBoundary fallback={<ErrorFallback />} showDialog={false}>
+      <Suspense fallback={null}>
+        <Screen />
+      </Suspense>
+    </Sentry.ErrorBoundary>
   </React.StrictMode>
 );
