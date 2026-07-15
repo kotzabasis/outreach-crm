@@ -163,7 +163,14 @@ model Contact {
   // created it. Nullable only for the pre-existing-data migration — see
   // ensureCompanyAssignment in server.js.
   companyId      String?
-  company        Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Named `workspace`, not `company` — Contact already has a plain-text
+  // `company` field below (the contact's employer/business name, used as
+  // the {{company}} merge token) and Prisma doesn't allow two fields with
+  // the same name on one model. Nothing in the codebase traverses this
+  // relation as an object (every query filters by the companyId scalar
+  // instead), so renaming just this side is safe — see lib/gmailClient.js
+  // for the unrelated string field this would otherwise collide with.
+  workspace      Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name           String
   // Structured given/family name — separate from `name` on purpose: `name`
   // stays the free-text display name used for {{name}} personalization
