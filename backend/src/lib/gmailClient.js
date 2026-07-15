@@ -248,9 +248,36 @@ async function sendTrackedEmail({ gmailAccount, contact, subject, body, tracking
   return res.data.id; // Gmail message id
 }
 
+// Distinguishes "Gmail access is actually broken" (revoked/expired refresh
+// token, disabled account) from a transient failure (rate limit, network
+// blip, temporary Google-side 5xx) — only the former should stop the
+// scheduler from retrying and prompt the owner to reconnect. googleapis
+// surfaces auth failures inconsistently depending on where they occur (token
+// refresh vs. the actual send call), so this checks every shape observed:
+// a 401/403 HTTP status, google-auth-library's `invalid_grant`/
+// `unauthorized_client` error codes, or the equivalent text in err.message.
+function isAuthError(err) {
+  const status = err?.response?.status || err?.code;
+  if (status === 401 || status === 403) return true;
+  const reason = err?.response?.data?.error || err?.errors?.[0]?.reason;
+  if (reason === "invalid_grant" || reason === "unauthorized_client" || reason === "deleted_client") return true;
+  const msg = String(err?.message || "");
+  return /invalid_grant|invalid credentials|unauthorized_client|invalid_client/i.test(msg);
+}
+
+// Best-effort — never let a failure to record the flag mask the original
+// send error (callers still throw/log that separately).
+async function flagNeedsReconnect(gmailAccountId) {
+  await prisma.gmailAccount
+    .update({ where: { id: gmailAccountId }, data: { needsReconnect: true, authErrorAt: new Date() } })
+    .catch((updateErr) => console.error("flagNeedsReconnect failed:", updateErr.message));
+}
+
 module.exports = {
   getAuthUrl,
   exchangeCodeForTokens,
   sendTrackedEmail,
   renderTemplate,
+  isAuthError,
+  flagNeedsReconnect,
 };

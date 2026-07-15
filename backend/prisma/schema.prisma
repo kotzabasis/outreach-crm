@@ -140,6 +140,13 @@ model GmailAccount {
   emailsSentToday       Int      @default(0)
   sendCounterResetAt    DateTime @default(now())
   createdAt             DateTime @default(now())
+  // Set when a send attempt fails with a Gmail auth error (revoked access,
+  // expired/invalid refresh token) — see lib/gmailClient.js#isAuthError. Once
+  // set, the scheduler stops attempting sends for this account (no point
+  // hammering a known-broken connection every tick) until an owner
+  // reconnects, which clears both fields (see routes/auth.js google/callback).
+  needsReconnect        Boolean   @default(false)
+  authErrorAt           DateTime?
 }
 
 model Contact {

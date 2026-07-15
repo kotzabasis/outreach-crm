@@ -3,9 +3,10 @@ const { v4: uuid } = require("uuid");
 const { z } = require("zod");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
-const { sendTrackedEmail } = require("../lib/gmailClient");
+const { sendTrackedEmail, isAuthError, flagNeedsReconnect } = require("../lib/gmailClient");
 const { attachmentsSchema } = require("../lib/attachments");
 const { DAILY_CAP, resetDailyCounterIfNeeded } = require("../lib/emailCap");
+const { captureException } = require("../lib/sentry");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -29,6 +30,13 @@ router.post("/", async (req, res) => {
 
   let gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: req.user.companyId } });
   if (!gmailAccount) return res.status(400).json({ error: "gmail_not_connected" });
+  if (gmailAccount.needsReconnect) {
+    // Same known-broken-connection flag the scheduler checks (see
+    // scheduler.js) — surfaced here as a clear error instead of a generic
+    // send_failed, since the fix (reconnect) is different from a one-off
+    // send glitch.
+    return res.status(400).json({ error: "gmail_needs_reconnect" });
+  }
 
   // Manual sends used to skip this entirely — only the scheduler (sequence/
   // campaign sends) enforced it, so someone could blow well past the daily
@@ -53,6 +61,12 @@ router.post("/", async (req, res) => {
     });
   } catch (err) {
     console.error("Manual send failed:", err.message);
+    if (isAuthError(err)) {
+      await flagNeedsReconnect(gmailAccount.id);
+      captureException(err, { scope: "send.manual", reason: "auth_error" });
+      return res.status(400).json({ error: "gmail_needs_reconnect" });
+    }
+    captureException(err, { scope: "send.manual" });
     return res.status(502).json({ error: "send_failed" });
   }
 

@@ -207,7 +207,9 @@ router.get("/companies/:id/stats", async (req, res) => {
   res.json({
     company: { id: company.id, name: company.name, status: company.status, createdAt: company.createdAt },
     users,
-    gmail: gmailAccount ? { email: gmailAccount.email, connectedAt: gmailAccount.createdAt } : null,
+    gmail: gmailAccount
+      ? { email: gmailAccount.email, connectedAt: gmailAccount.createdAt, needsReconnect: gmailAccount.needsReconnect }
+      : null,
     contacts: {
       total: contactsTotal,
       byStatus: Object.fromEntries(contactsByStatus.map((c) => [c.status, c._count._all])),

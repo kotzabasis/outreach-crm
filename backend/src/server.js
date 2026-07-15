@@ -1,4 +1,8 @@
 require("dotenv").config();
+// Loaded before everything else so Sentry.init() (if SENTRY_DSN is set) can
+// instrument as much of the app's startup/request lifecycle as possible —
+// see lib/sentry.js for why this is a safe no-op without a DSN configured.
+const { captureException, setupExpressErrorHandler } = require("./lib/sentry");
 const express = require("express");
 const compression = require("compression");
 const session = require("express-session");
@@ -98,7 +102,20 @@ app.use(
 const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 20 });
 const forgotPasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
 
-app.get("/health", (req, res) => res.json({ ok: true }));
+// Previously just returned {ok:true} unconditionally — that only proves the
+// Express process is up, not that the app actually works (Neon being down/
+// unreachable would look identical to "healthy" to both this endpoint and
+// the keep-alive ping that hits it every 5 min). A cheap round-trip query
+// makes this a real health check instead of a liveness-only one.
+app.get("/health", async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ ok: true, db: "ok" });
+  } catch (err) {
+    console.error("Health check: DB query failed:", err.message);
+    res.status(503).json({ ok: false, db: "unreachable" });
+  }
+});
 
 // This is an API-only server with no UI of its own — the actual app lives on
 // Vercel. Visiting this bare URL in a browser used to 404 with Express's
@@ -122,9 +139,14 @@ app.use("/team", teamRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/track", trackingRoutes); // no auth — see routes/tracking.js for why
 
+// Must be registered after all routes, before the app's own final error
+// handler below — no-op if SENTRY_DSN isn't set (see lib/sentry.js).
+setupExpressErrorHandler(app);
+
 // Central error handler — never leak stack traces to the client.
 app.use((err, req, res, next) => {
   console.error(err);
+  captureException(err);
   res.status(err.status || 500).json({ error: isProd ? "internal_error" : err.message });
 });
 
@@ -143,6 +165,7 @@ async function ensureBootstrapAdmin() {
     console.log(`Bootstrapped admin access for ${oldest.email}`);
   } catch (err) {
     console.error("ensureBootstrapAdmin failed:", err.message);
+    captureException(err, { scope: "ensureBootstrapAdmin" });
   }
 }
 
@@ -206,6 +229,7 @@ async function ensureCompanyAssignment() {
     console.log(`ensureCompanyAssignment: backfilled ${orphanedUsers.length} user(s) into company ${companyId}`);
   } catch (err) {
     console.error("ensureCompanyAssignment failed:", err.message);
+    captureException(err, { scope: "ensureCompanyAssignment" });
   }
 }
 

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
+    "@sentry/node": "^10.65.0",
     "bcryptjs": "^2.4.3",
     "compression": "^1.8.1",
     "connect-pg-simple": "^10.0.0",

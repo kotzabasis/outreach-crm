@@ -35,6 +35,10 @@ function publicUser(user, gmailAccount) {
       connectedAt: gmailAccount.createdAt,
       sentToday: hoursSinceReset >= 24 ? 0 : gmailAccount.emailsSentToday,
       dailyCap: DAILY_CAP,
+      // True once a send has failed with a Gmail auth error (revoked/expired
+      // access) — see lib/gmailClient.js#isAuthError. The scheduler stops
+      // trying to send for this account until an owner reconnects.
+      needsReconnect: gmailAccount.needsReconnect,
     };
   }
   return {
@@ -281,6 +285,11 @@ router.get("/google/callback", async (req, res) => {
         encryptedAccessToken: encrypt(tokens.access_token),
         encryptedRefreshToken: encrypt(tokens.refresh_token),
         tokenExpiry: new Date(tokens.expiry_date),
+        // A fresh, successful OAuth grant means access is good again — clear
+        // any earlier auth-failure flag (see lib/gmailClient.js#isAuthError)
+        // so the scheduler resumes sending for this company.
+        needsReconnect: false,
+        authErrorAt: null,
       },
       create: {
         id: uuid(),

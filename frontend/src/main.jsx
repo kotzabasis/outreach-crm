@@ -1,6 +1,5 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
-import App, { SuperAdminApp, ResetPasswordPage } from "./App.jsx";
 import "./index.css";
 
 // /superadmin is a separate area for platform-admin-only work (creating
@@ -11,6 +10,16 @@ import "./index.css";
 // own top-level screen too rather than something nested inside App's auth
 // gate. Same deploy either way, just a different top-level screen based on
 // the URL path.
+//
+// Each screen now lives in its own file (App.jsx, SuperAdminApp.jsx,
+// ResetPasswordPage.jsx) and is lazy-loaded here, so a visitor only
+// downloads the JS for the screen they actually land on — a regular company
+// user's browser never fetches the platform-admin-only SuperAdminApp code,
+// and vice versa.
+const App = lazy(() => import("./App.jsx"));
+const SuperAdminApp = lazy(() => import("./SuperAdminApp.jsx"));
+const ResetPasswordPage = lazy(() => import("./ResetPasswordPage.jsx"));
+
 const path = window.location.pathname;
 const Screen = path.startsWith("/superadmin")
   ? SuperAdminApp
@@ -20,6 +29,8 @@ const Screen = path.startsWith("/superadmin")
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <Screen />
+    <Suspense fallback={null}>
+      <Screen />
+    </Suspense>
   </React.StrictMode>
 );

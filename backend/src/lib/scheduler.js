@@ -1,7 +1,8 @@
 const { v4: uuid } = require("uuid");
 const prisma = require("../db");
-const { sendTrackedEmail } = require("./gmailClient");
+const { sendTrackedEmail, isAuthError, flagNeedsReconnect } = require("./gmailClient");
 const { DAILY_CAP, resetDailyCounterIfNeeded } = require("./emailCap");
+const { captureException } = require("./sentry");
 
 async function processDueEnrollments() {
   const due = await prisma.enrollment.findMany({
@@ -111,6 +112,13 @@ async function sendNextStep(enrollment) {
     // due as-is rather than failing it; it'll send as soon as someone connects.
     return;
   }
+  if (gmailAccount.needsReconnect) {
+    // Already known-broken (revoked/expired refresh token) — don't hammer
+    // Gmail (or the logs) every tick. Leave due; it'll resume the moment an
+    // owner reconnects (see routes/auth.js google/callback, which clears
+    // this flag).
+    return;
+  }
   gmailAccount = await resetDailyCounterIfNeeded(gmailAccount);
 
   if (gmailAccount.emailsSentToday >= DAILY_CAP) {
@@ -121,14 +129,21 @@ async function sendNextStep(enrollment) {
   }
 
   const trackingId = uuid();
-  const gmailMessageId = await sendTrackedEmail({
-    gmailAccount,
-    contact,
-    subject: step.subject,
-    body: step.body,
-    trackingId,
-    attachments: Array.isArray(step.attachments) ? step.attachments : [],
-  });
+  let gmailMessageId;
+  try {
+    gmailMessageId = await sendTrackedEmail({
+      gmailAccount,
+      contact,
+      subject: step.subject,
+      body: step.body,
+      trackingId,
+      attachments: Array.isArray(step.attachments) ? step.attachments : [],
+    });
+  } catch (err) {
+    if (isAuthError(err)) await flagNeedsReconnect(gmailAccount.id);
+    captureException(err, { scope: "scheduler.sendNextStep", enrollmentId: enrollment.id });
+    throw err;
+  }
 
   await prisma.$transaction([
     prisma.emailLog.create({
@@ -206,6 +221,7 @@ async function sendNextCampaignRecipient(campaign) {
 
   let gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: campaign.companyId } });
   if (!gmailAccount) return; // not connected — recipient stays pending, retried next tick
+  if (gmailAccount.needsReconnect) return; // known-broken connection — see sendNextStep above
 
   gmailAccount = await resetDailyCounterIfNeeded(gmailAccount);
   if (gmailAccount.emailsSentToday >= DAILY_CAP) return; // leave pending, retry once the cap resets
@@ -222,6 +238,8 @@ async function sendNextCampaignRecipient(campaign) {
       attachments: Array.isArray(campaign.attachments) ? campaign.attachments : [],
     });
   } catch (err) {
+    if (isAuthError(err)) await flagNeedsReconnect(gmailAccount.id);
+    captureException(err, { scope: "scheduler.sendNextCampaignRecipient", campaignId: campaign.id });
     await prisma.campaignRecipient.update({
       where: { id: nextRecipient.id },
       data: { status: "failed", note: String(err.message || err).slice(0, 300) },
@@ -273,6 +291,7 @@ async function enrollmentTick() {
     await processDueEnrollments();
   } catch (err) {
     console.error("Scheduler tick failed:", err.message);
+    captureException(err, { scope: "scheduler.enrollmentTick" });
   }
   try {
     const activeCount = await prisma.enrollment.count({ where: { status: "active" } });
@@ -293,6 +312,7 @@ async function campaignTick() {
     await processDueCampaigns();
   } catch (err) {
     console.error("Campaign scheduler tick failed:", err.message);
+    captureException(err, { scope: "scheduler.campaignTick" });
   }
   try {
     const runningCount = await prisma.campaign.count({ where: { status: "running" } });
