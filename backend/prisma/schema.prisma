@@ -52,8 +52,37 @@ model User {
   // list rather than GmailAccount? as it was before.
   connectedGmailAccounts GmailAccount[]
   passwordResetTokens  PasswordResetToken[]
+  // A user can belong to more than one Company now (e.g. owner of their own
+  // workspace, member of a client's) — see Membership below. companyId/role
+  // above stay as-is as the "default/home" company: whichever membership is
+  // active when there's no explicit switch in the session (see
+  // lib/membership.js#resolveMembershipContext). Every existing route still
+  // just reads req.user.companyId/req.user.role, resolved from the active
+  // membership by requireAuth — nothing downstream needed to change.
+  memberships          Membership[]
 
   @@index([companyId])
+}
+
+// Join table making User<->Company many-to-many. One row per (user, company)
+// pair, each with its own role — the same person can be "owner" of one
+// company and "member" of another. Existing single-company users get exactly
+// one row here (backfilled on boot from User.companyId/role — see
+// ensureMembershipsBackfilled in server.js), so nothing about their
+// day-to-day experience changes; this only matters once someone is added to
+// a second company.
+model Membership {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role      String   @default("member") // owner | member — scoped to this one company, not global
+  createdAt DateTime @default(now())
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@index([userId])
 }
 
 // A tenant. Each pilot company is one Company row; every User belongs to
@@ -66,6 +95,21 @@ model Company {
   status    String   @default("active") // active | suspended — suspended blocks login for every user in it, see requireAuth
   createdAt DateTime @default(now())
 
+  // Business/legal profile — entirely optional (a pilot company can start
+  // with just a name and fill these in later, or never). Greek-business
+  // oriented since that's this app's primary market: legalName is the full
+  // registered "επωνυμία" (may differ from the display `name` above), taxId
+  // is the ΑΦΜ, taxOffice is the ΔΟΥ, gemhNumber is the ΓΕΜΗ registry number.
+  // Not validated for format/checksum — just free text, since the point is
+  // having a place to keep them, not enforcing tax-authority rules.
+  legalName  String?
+  taxId      String? // ΑΦΜ
+  taxOffice  String? // ΔΟΥ
+  gemhNumber String? // ΓΕΜΗ
+  address    String?
+  phone      String?
+  email      String?
+
   users        User[]
   contacts     Contact[]
   sequences    Sequence[]
@@ -75,6 +119,7 @@ model Company {
   emailLogs    EmailLog[]
   campaigns    Campaign[]
   gmailAccount GmailAccount?
+  memberships  Membership[]
 }
 
 // Short-lived, single-use tokens for the "forgot password" flow. Only a

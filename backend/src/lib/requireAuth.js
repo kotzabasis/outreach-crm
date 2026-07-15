@@ -1,23 +1,32 @@
 const prisma = require("../db");
+const { resolveMembershipContext } = require("./membership");
 
 async function requireAuth(req, res, next) {
   if (!req.session.userId) {
     return res.status(401).json({ error: "not_authenticated" });
   }
-  // include: company so req.user.company.status is available to every route
-  // without a second query — this is also the one central place that blocks
-  // a suspended company's users from doing anything at all.
-  const user = await prisma.user.findUnique({
-    where: { id: req.session.userId },
-    include: { company: true },
-  });
+  const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
   if (!user) {
     return res.status(401).json({ error: "not_authenticated" });
   }
-  if (user.company && user.company.status === "suspended") {
+
+  // A user can belong to more than one company now — this resolves which
+  // one they're acting as for this request (explicit session switch, else
+  // their home company, else a sane default) and folds it onto req.user so
+  // every existing route (which just reads req.user.companyId/req.user.role)
+  // keeps working unchanged. See lib/membership.js for the precedence rules.
+  const context = await resolveMembershipContext(prisma, user, req.session);
+  if (context.company && context.company.status === "suspended") {
     return res.status(403).json({ error: "company_suspended" });
   }
-  req.user = user; // req.user.companyId (scalar) + req.user.company (nested, may be null pre-backfill) + req.user.role
+
+  req.user = {
+    ...user,
+    companyId: context.companyId,
+    role: context.role,
+    company: context.company,
+    memberships: context.memberships,
+  };
   next();
 }
 

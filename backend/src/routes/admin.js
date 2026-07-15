@@ -22,9 +22,18 @@ function publicAdminUser(u) {
     name: u.name,
     isAdmin: u.isAdmin,
     approved: u.approved,
+    // companyId/companyName is the "home" company (User.companyId) — kept
+    // for backward compat with anything still reading a single company off
+    // a user. `memberships` is the real, complete picture now that a user
+    // can belong to more than one company — see schema.prisma's Membership.
     companyId: u.companyId,
     companyName: u.company?.name,
     role: u.role,
+    memberships: (u.memberships || []).map((m) => ({
+      companyId: m.companyId,
+      companyName: m.company.name,
+      role: m.role,
+    })),
     createdAt: u.createdAt,
   };
 }
@@ -37,6 +46,13 @@ function publicCompany(c) {
     createdAt: c.createdAt,
     userCount: c._count?.users,
     contactCount: c._count?.contacts,
+    legalName: c.legalName,
+    taxId: c.taxId,
+    taxOffice: c.taxOffice,
+    gemhNumber: c.gemhNumber,
+    address: c.address,
+    phone: c.phone,
+    email: c.email,
   };
 }
 
@@ -44,7 +60,10 @@ function publicCompany(c) {
 // company's data. Every user belongs to some company (or none yet, if
 // they're a pending self-registration awaiting approval+assignment).
 router.get("/users", async (req, res) => {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { company: true } });
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: "asc" },
+    include: { company: true, memberships: { include: { company: true } } },
+  });
   res.json(users.map(publicAdminUser));
 });
 
@@ -70,7 +89,10 @@ router.post("/users", async (req, res) => {
   const user = await prisma.user.create({
     data: { email: email.toLowerCase(), passwordHash, name, isAdmin, approved: true, companyId },
   });
-  res.status(201).json(publicAdminUser(user));
+  if (companyId) {
+    await prisma.membership.create({ data: { userId: user.id, companyId, role: "member" } });
+  }
+  res.status(201).json(publicAdminUser({ ...user, memberships: [] }));
 });
 
 // --- Companies (platform admin only) ---
@@ -116,22 +138,50 @@ router.post("/companies", async (req, res) => {
       role: "owner",
     },
   });
+  await prisma.membership.create({ data: { userId: owner.id, companyId: company.id, role: "owner" } });
 
-  res.status(201).json({ company: publicCompany({ ...company, _count: { users: 1, contacts: 0 } }), owner: publicAdminUser({ ...owner, company }) });
+  res.status(201).json({
+    company: publicCompany({ ...company, _count: { users: 1, contacts: 0 } }),
+    owner: publicAdminUser({ ...owner, company, memberships: [] }),
+  });
 });
 
-const renameCompanySchema = z.object({ name: z.string().min(1).max(200) });
+// Everything besides `name` is optional business/legal profile info (see
+// schema.prisma's Company model) — a company can be created and used
+// indefinitely with just a name. Empty strings are normalized to null rather
+// than stored as-is, so "cleared the field" reads the same as "never filled
+// in" everywhere else that checks `company.taxId` etc. for truthiness.
+const editCompanySchema = z.object({
+  name: z.string().min(1).max(200),
+  legalName: z.string().max(300).optional(),
+  taxId: z.string().max(50).optional(),
+  taxOffice: z.string().max(150).optional(),
+  gemhNumber: z.string().max(50).optional(),
+  address: z.string().max(300).optional(),
+  phone: z.string().max(50).optional(),
+  email: z.string().max(200).optional(),
+});
 
 router.patch("/companies/:id", async (req, res) => {
-  const parsed = renameCompanySchema.safeParse(req.body);
+  const parsed = editCompanySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const company = await prisma.company.findUnique({ where: { id: req.params.id } });
   if (!company) return res.status(404).json({ error: "not_found" });
 
+  const norm = (v) => (v && v.trim() ? v.trim() : null);
   const updated = await prisma.company.update({
     where: { id: company.id },
-    data: { name: parsed.data.name.trim() },
+    data: {
+      name: parsed.data.name.trim(),
+      legalName: norm(parsed.data.legalName),
+      taxId: norm(parsed.data.taxId),
+      taxOffice: norm(parsed.data.taxOffice),
+      gemhNumber: norm(parsed.data.gemhNumber),
+      address: norm(parsed.data.address),
+      phone: norm(parsed.data.phone),
+      email: norm(parsed.data.email),
+    },
     include: { _count: { select: { users: true, contacts: true } } },
   });
   res.json(publicCompany(updated));
@@ -162,7 +212,7 @@ router.get("/companies/:id/stats", async (req, res) => {
 
   const companyId = company.id;
   const [
-    users,
+    memberships,
     gmailAccount,
     contactsTotal,
     contactsByStatus,
@@ -175,9 +225,12 @@ router.get("/companies/:id/stats", async (req, res) => {
     opens,
     clicks,
   ] = await Promise.all([
-    prisma.user.findMany({
+    // Sourced from Membership, not User.companyId — a user can be a member
+    // of this company without it being their "home" company (see
+    // schema.prisma), so scanning User.companyId alone would miss them.
+    prisma.membership.findMany({
       where: { companyId },
-      select: { id: true, email: true, name: true, role: true, approved: true, createdAt: true },
+      include: { user: { select: { id: true, email: true, name: true, approved: true, createdAt: true } } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.gmailAccount.findUnique({ where: { companyId } }),
@@ -204,9 +257,18 @@ router.get("/companies/:id/stats", async (req, res) => {
     { total: 0, accepted: 0, declined: 0, value: 0 }
   );
 
+  const members = memberships.map((m) => ({
+    id: m.user.id,
+    email: m.user.email,
+    name: m.user.name,
+    role: m.role,
+    approved: m.user.approved,
+    createdAt: m.createdAt,
+  }));
+
   res.json({
     company: { id: company.id, name: company.name, status: company.status, createdAt: company.createdAt },
-    users,
+    users: members,
     gmail: gmailAccount
       ? { email: gmailAccount.email, connectedAt: gmailAccount.createdAt, needsReconnect: gmailAccount.needsReconnect }
       : null,
@@ -259,57 +321,118 @@ router.post("/users/:id/approve", async (req, res) => {
   }
 
   const updated = await prisma.user.update({ where: { id: user.id }, data, include: { company: true } });
-  res.json(publicAdminUser(updated));
+  if (data.companyId) {
+    await prisma.membership.upsert({
+      where: { userId_companyId: { userId: user.id, companyId: data.companyId } },
+      update: {},
+      create: { userId: user.id, companyId: data.companyId, role: user.role || "member" },
+    });
+  }
+  res.json(publicAdminUser({ ...updated, memberships: [] }));
 });
 
-// Standalone assign/reassign — the general-purpose way to put an existing
-// user (approved or still pending) into a company, independent of creation
-// or approval time. Pass companyId: null to detach them from their current
-// company (they'll see no shared data until assigned a new one).
+// Additive: adds (or updates the role on) a Membership for this user in the
+// given company — a user can belong to more than one company now (owner of
+// one, member of another), so this no longer moves them out of any company
+// they're already in. Their "home" company (User.companyId/role, used as
+// the default active company on login — see lib/membership.js) is only set
+// here if they didn't already have one, so an existing single-company
+// user's default experience never changes just because someone assigns them
+// a second company later.
 router.post("/users/:id/assign-company", async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!user) return res.status(404).json({ error: "not_found" });
 
-  const companyId = typeof req.body.companyId === "string" && req.body.companyId ? req.body.companyId : null;
-  if (companyId) {
-    const company = await prisma.company.findUnique({ where: { id: companyId } });
-    if (!company) return res.status(400).json({ error: "invalid_company" });
-  }
+  const companyId = typeof req.body.companyId === "string" && req.body.companyId ? req.body.companyId : "";
+  if (!companyId) return res.status(400).json({ error: "invalid_company" });
+  const company = await prisma.company.findUnique({ where: { id: companyId } });
+  if (!company) return res.status(400).json({ error: "invalid_company" });
 
-  const nextRole = req.body.role === "owner" || req.body.role === "member" ? req.body.role : undefined;
+  const nextRole = req.body.role === "owner" || req.body.role === "member" ? req.body.role : "member";
 
-  // Guard against leaving user's CURRENT company with zero owners — either
-  // by moving/detaching its last owner elsewhere, or by demoting them to
-  // "member" in place without anyone else holding "owner". A no-op call
-  // (same company, no role change) never trips this. Only one owner per
-  // company is supported today (see team.js), so there's no "promote someone
-  // else first" step to fall back on here — the caller has to pick a
-  // different target company/role instead.
-  const leavingCurrentCompany = !!user.companyId && companyId !== user.companyId;
-  const losingOwnerRoleInPlace = !leavingCurrentCompany && nextRole === "member";
-  if (user.role === "owner" && user.companyId && (leavingCurrentCompany || losingOwnerRoleInPlace)) {
-    const otherOwners = await prisma.user.count({
-      where: { companyId: user.companyId, role: "owner", id: { not: user.id } },
+  // Guard against demoting the last owner of a company they're ALREADY in —
+  // only relevant when this call is changing an existing membership's role
+  // from owner to member in place, not when adding a brand new membership.
+  const existingMembership = await prisma.membership.findUnique({
+    where: { userId_companyId: { userId: user.id, companyId } },
+  });
+  if (existingMembership?.role === "owner" && nextRole === "member") {
+    const otherOwners = await prisma.membership.count({
+      where: { companyId, role: "owner", userId: { not: user.id } },
     });
     if (otherOwners === 0) {
       return res.status(400).json({ error: "would_leave_company_ownerless" });
     }
   }
 
-  const data = { companyId };
-  // Optional: also set their role in the new company (owner | member) —
-  // e.g. moving someone into a company as its owner. Defaults to leaving
-  // whatever role they already had untouched if not provided.
-  if (nextRole) {
+  await prisma.membership.upsert({
+    where: { userId_companyId: { userId: user.id, companyId } },
+    update: { role: nextRole },
+    create: { userId: user.id, companyId, role: nextRole },
+  });
+
+  // First company ever assigned to this user becomes their home company —
+  // every subsequent assign-company call only touches Membership.
+  const data = {};
+  if (!user.companyId) {
+    data.companyId = companyId;
     data.role = nextRole;
   }
+  const updated = Object.keys(data).length
+    ? await prisma.user.update({ where: { id: user.id }, data, include: { company: true } })
+    : await prisma.user.findUnique({ where: { id: user.id }, include: { company: true } });
 
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data,
+  const memberships = await prisma.membership.findMany({
+    where: { userId: user.id },
     include: { company: true },
   });
-  res.json(publicAdminUser(updated));
+  res.json(publicAdminUser({ ...updated, memberships }));
+});
+
+// Removes one specific company membership — the counterpart to
+// assign-company's additive behavior. Guards against removing a user's last
+// "owner" membership on a company (same rule as demoting them in place
+// above). If the removed membership was their home company (User.companyId),
+// falls back to another remaining membership, or null if they have none
+// left — matches what a brand new, not-yet-assigned user looks like.
+router.delete("/users/:id/companies/:companyId", async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) return res.status(404).json({ error: "not_found" });
+
+  const { companyId } = req.params;
+  const membership = await prisma.membership.findUnique({
+    where: { userId_companyId: { userId: user.id, companyId } },
+  });
+  if (!membership) return res.status(404).json({ error: "not_a_member" });
+
+  if (membership.role === "owner") {
+    const otherOwners = await prisma.membership.count({
+      where: { companyId, role: "owner", userId: { not: user.id } },
+    });
+    if (otherOwners === 0) {
+      return res.status(400).json({ error: "would_leave_company_ownerless" });
+    }
+  }
+
+  await prisma.membership.delete({ where: { userId_companyId: { userId: user.id, companyId } } });
+
+  if (user.companyId === companyId) {
+    const fallback = await prisma.membership.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: "asc" },
+    });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: fallback ? { companyId: fallback.companyId, role: fallback.role } : { companyId: null },
+    });
+  }
+
+  const updated = await prisma.user.findUnique({ where: { id: user.id }, include: { company: true } });
+  const memberships = await prisma.membership.findMany({
+    where: { userId: user.id },
+    include: { company: true },
+  });
+  res.json(publicAdminUser({ ...updated, memberships }));
 });
 
 router.post("/users/:id/revoke", async (req, res) => {

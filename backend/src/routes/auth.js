@@ -7,6 +7,7 @@ const { getAuthUrl, exchangeCodeForTokens } = require("../lib/gmailClient");
 const { sendPasswordResetEmail } = require("../lib/mailer");
 const { encrypt } = require("../lib/crypto");
 const { DAILY_CAP } = require("../lib/emailCap");
+const { resolveMembershipContext } = require("../lib/membership");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const requireOwner = require("../lib/requireOwner");
@@ -22,7 +23,12 @@ const credentialsSchema = z.object({
   name: z.string().min(1).max(200).optional(),
 });
 
-function publicUser(user, gmailAccount) {
+// `context` is the resolved active-company info from
+// resolveMembershipContext (companyId/role/company/memberships) — always
+// pass it rather than reading company/role straight off the raw User row,
+// since a user can now belong to more than one company and this is what
+// decides which one is "active" for them right now.
+function publicUser(user, gmailAccount, context) {
   let gmail = null;
   if (gmailAccount) {
     // Read-only "as of right now" view of the same counter scheduler.js/
@@ -47,8 +53,13 @@ function publicUser(user, gmailAccount) {
     name: user.name,
     isAdmin: user.isAdmin,
     approved: user.approved,
-    role: user.role, // owner | member — within their own company
-    company: user.company ? { id: user.company.id, name: user.company.name, status: user.company.status } : null,
+    role: context.role, // owner | member — within the currently active company
+    company: context.company
+      ? { id: context.company.id, name: context.company.name, status: context.company.status }
+      : null,
+    // Every company this user belongs to, so the frontend can offer a
+    // switcher once there's more than one — see POST /auth/switch-company.
+    memberships: context.memberships,
     // The connected Gmail account is now shared company-wide, not per-person
     // — every teammate sees the same "gmail" block once anyone on the team
     // has connected it.
@@ -110,12 +121,18 @@ router.post("/register", async (req, res) => {
     });
   }
 
-  const userWithCompany = await prisma.user.findUnique({ where: { id: user.id }, include: { company: true } });
+  // Bootstrap owner's Membership row — every other path that assigns a
+  // companyId (admin create-company, team invite, admin approve) does the
+  // same, so Membership always has a matching row for whatever
+  // companyId/role a User was given directly.
+  await prisma.membership.create({ data: { userId: user.id, companyId, role: "owner" } });
+
+  const context = await resolveMembershipContext(prisma, user, req.session);
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
     req.session.userId = user.id;
-    res.status(201).json(publicUser(userWithCompany, null));
+    res.status(201).json(publicUser(user, null, context));
   });
 });
 
@@ -124,7 +141,7 @@ router.post("/login", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "invalid_email_or_password" });
 
   const { email, password } = parsed.data;
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() }, include: { company: true } });
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 
   // Always run bcrypt.compare, even on a missing user, against a dummy hash —
   // otherwise a missing-user response returns faster than a wrong-password
@@ -140,20 +157,25 @@ router.post("/login", async (req, res) => {
     return res.status(403).json({ error: "account_pending_approval" });
   }
 
-  if (user.company && user.company.status === "suspended") {
+  // A fresh login always starts from the user's home company (no
+  // session.activeCompanyId yet at this point) — resolveMembershipContext
+  // falls back to user.companyId, or a sane default if they have
+  // memberships but no home company set.
+  const context = await resolveMembershipContext(prisma, user, req.session);
+  if (context.company && context.company.status === "suspended") {
     return res.status(403).json({ error: "company_suspended" });
   }
 
   // Shared per-company mailbox now, not per-person — every teammate logging
-  // in sees the same connected Gmail account.
-  const gmailAccount = user.companyId
-    ? await prisma.gmailAccount.findUnique({ where: { companyId: user.companyId } })
+  // in sees the same connected Gmail account for whichever company is active.
+  const gmailAccount = context.companyId
+    ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
     : null;
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
     req.session.userId = user.id;
-    res.json(publicUser(user, gmailAccount));
+    res.json(publicUser(user, gmailAccount, context));
   });
 });
 
@@ -219,15 +241,41 @@ router.post("/reset-password", async (req, res) => {
 
 router.get("/me", async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: "not_authenticated" });
-  const user = await prisma.user.findUnique({ where: { id: req.session.userId }, include: { company: true } });
+  const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
   if (!user) return res.status(401).json({ error: "not_authenticated" });
-  if (user.company && user.company.status === "suspended") {
+
+  const context = await resolveMembershipContext(prisma, user, req.session);
+  if (context.company && context.company.status === "suspended") {
     return res.status(403).json({ error: "company_suspended" });
   }
-  const gmailAccount = user.companyId
-    ? await prisma.gmailAccount.findUnique({ where: { companyId: user.companyId } })
+  const gmailAccount = context.companyId
+    ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
     : null;
-  res.json(publicUser(user, gmailAccount));
+  res.json(publicUser(user, gmailAccount, context));
+});
+
+// Lets a user with more than one Membership pick which company they're
+// acting as — persists in the session (not on the User row), so it's
+// per-login-session rather than a permanent "home company" change. Rejects
+// switching into a company the user isn't actually a member of, and into a
+// suspended one (same rule as login).
+router.post("/switch-company", requireAuth, async (req, res) => {
+  const targetCompanyId = typeof req.body.companyId === "string" ? req.body.companyId : "";
+  const membership = req.user.memberships.find((m) => m.companyId === targetCompanyId);
+  if (!membership) {
+    return res.status(400).json({ error: "not_a_member_of_that_company" });
+  }
+  if (membership.companyStatus === "suspended") {
+    return res.status(403).json({ error: "company_suspended" });
+  }
+
+  req.session.activeCompanyId = targetCompanyId;
+
+  const context = await resolveMembershipContext(prisma, req.user, req.session);
+  const gmailAccount = context.companyId
+    ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
+    : null;
+  res.json(publicUser(req.user, gmailAccount, context));
 });
 
 // --- Gmail connection (separate from app login) ---

@@ -121,20 +121,37 @@ function NewCompanyModal({ onClose, onCreate }) {
   );
 }
 
-function RenameCompanyModal({ company, onClose, onRename }) {
-  const [name, setName] = useState(company.name);
+// Only `name` is required — legalName/taxId/taxOffice/gemhNumber/address/
+// phone/email are the optional Greek-business profile fields (see
+// schema.prisma's Company model); a pilot company can go indefinitely
+// without ever filling them in.
+function EditCompanyModal({ company, onClose, onSave }) {
+  const [form, setForm] = useState({
+    name: company.name || "",
+    legalName: company.legalName || "",
+    taxId: company.taxId || "",
+    taxOffice: company.taxOffice || "",
+    gemhNumber: company.gemhNumber || "",
+    address: company.address || "",
+    phone: company.phone || "",
+    email: company.email || "",
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  function set(field) {
+    return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setBusy(true);
     try {
-      await onRename(company.id, name);
+      await onSave(company.id, form);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η μετονομασία.");
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποθήκευση.");
     } finally {
       setBusy(false);
     }
@@ -142,14 +159,32 @@ function RenameCompanyModal({ company, onClose, onRename }) {
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
-      <Card className="w-full max-w-sm p-5">
+      <Card className="w-full max-w-md p-5 max-h-[85vh] overflow-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Μετονομασία εταιρείας</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Στοιχεία εταιρείας</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <input required autoFocus placeholder="Όνομα εταιρείας" value={name} onChange={(e) => setName(e.target.value)}
+          <input required autoFocus placeholder="Όνομα εταιρείας" value={form.name} onChange={set("name")}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input placeholder="Επωνυμία (νομική, προαιρετικό)" value={form.legalName} onChange={set("legalName")}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <div className="grid grid-cols-2 gap-3">
+            <input placeholder="ΑΦΜ" value={form.taxId} onChange={set("taxId")}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <input placeholder="ΔΟΥ" value={form.taxOffice} onChange={set("taxOffice")}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
+          <input placeholder="ΓΕΜΗ" value={form.gemhNumber} onChange={set("gemhNumber")}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input placeholder="Διεύθυνση" value={form.address} onChange={set("address")}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <div className="grid grid-cols-2 gap-3">
+            <input placeholder="Τηλέφωνο" value={form.phone} onChange={set("phone")}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <input placeholder="Email επικοινωνίας" value={form.email} onChange={set("email")}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
             {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
@@ -160,13 +195,111 @@ function RenameCompanyModal({ company, onClose, onRename }) {
   );
 }
 
+// Lets a platform admin add this user to another company (or change their
+// role in one they're already in), and remove them from one — the additive
+// counterpart to the single "assign a company" dropdown this replaced, now
+// that a user can belong to more than one company at once (owner of one,
+// member of another). See POST/DELETE /admin/users/:id/(assign-company|
+// companies/:companyId) in admin.js.
+function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
+  const [companyId, setCompanyId] = useState("");
+  const [role, setRole] = useState("member");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const memberships = user.memberships || [];
+  const availableCompanies = (companies || []).filter((c) => !memberships.some((m) => m.companyId === c.id));
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    if (!companyId) return;
+    setError("");
+    setBusy(true);
+    try {
+      await onAdd(user.id, companyId, role);
+      setCompanyId("");
+      setRole("member");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η προσθήκη.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove(m) {
+    setError("");
+    setBusy(true);
+    try {
+      await onRemove(user.id, m.companyId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αφαίρεση.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Εταιρείες χρήστη</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <p className="text-xs mb-4" style={{ color: C.slate }}>{user.email}</p>
+
+        {memberships.length === 0 ? (
+          <p className="text-sm mb-4" style={{ color: C.slate }}>Δεν ανήκει σε καμία εταιρεία ακόμα.</p>
+        ) : (
+          <div className="space-y-1.5 mb-4">
+            {memberships.map((m) => (
+              <div key={m.companyId} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                <div className="text-sm" style={{ color: C.ink }}>
+                  {m.companyName} <span style={{ color: C.slate }}>— {m.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"}</span>
+                </div>
+                <button disabled={busy} onClick={() => handleRemove(m)} title="Αφαίρεση" style={{ color: C.coral }}>
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {error && <p className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
+
+        {availableCompanies.length > 0 && (
+          <form onSubmit={handleAdd} className="flex items-end gap-2 pt-3 border-t" style={{ borderColor: C.line }}>
+            <div className="flex-1">
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Προσθήκη σε εταιρεία</label>
+              <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
+                className="w-full rounded-lg px-2.5 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+                <option value="">— επίλεξε —</option>
+                {availableCompanies.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <select value={role} onChange={(e) => setRole(e.target.value)}
+              className="rounded-lg px-2.5 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+              <option value="member">Μέλος</option>
+              <option value="owner">Ιδιοκτήτης</option>
+            </select>
+            <button type="submit" disabled={busy || !companyId} className="rounded-lg px-3 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky, opacity: busy || !companyId ? 0.6 : 1 }}>
+              Προσθήκη
+            </button>
+          </form>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // Platform-admin-only: create/suspend/reactivate pilot companies. Each row's
 // users/contacts counts come straight from the backend's _count include.
-function CompaniesPanel({ companies, loading, error, onReload, onCreate, onRename, onSuspend, onActivate }) {
+function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditCompany, onSuspend, onActivate }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [statsCompany, setStatsCompany] = useState(null);
-  const [renameCompany, setRenameCompany] = useState(null);
+  const [editCompany, setEditCompany] = useState(null);
 
   async function run(id, fn) {
     setBusyId(id);
@@ -181,8 +314,8 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onRenam
     <Card className="p-5">
       {showNew && <NewCompanyModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
       {statsCompany && <CompanyStatsModal company={statsCompany} onClose={() => setStatsCompany(null)} />}
-      {renameCompany && (
-        <RenameCompanyModal company={renameCompany} onClose={() => setRenameCompany(null)} onRename={onRename} />
+      {editCompany && (
+        <EditCompanyModal company={editCompany} onClose={() => setEditCompany(null)} onSave={onEditCompany} />
       )}
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm font-medium" style={{ color: C.ink }}>Εταιρείες</div>
@@ -220,9 +353,9 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onRenam
                     <span className="inline-flex items-center gap-1.5">
                       {c.name}
                       <button
-                        onClick={(e) => { e.stopPropagation(); setRenameCompany(c); }}
+                        onClick={(e) => { e.stopPropagation(); setEditCompany(c); }}
                         className="text-slate-300 hover:text-slate-500"
-                        title="Μετονομασία"
+                        title="Επεξεργασία στοιχείων"
                       >
                         <Pencil size={12} />
                       </button>
@@ -374,9 +507,10 @@ function CompanyStatsModal({ company, onClose }) {
   );
 }
 
-function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAssignCompany, currentUserId, teamOverview, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onRenameCompany, onSuspendCompany, onActivateCompany }) {
+function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAddMembership, onRemoveMembership, currentUserId, teamOverview, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onEditCompany, onSuspendCompany, onActivateCompany }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [membershipsUser, setMembershipsUser] = useState(null);
 
   async function run(id, fn) {
     setBusyId(id);
@@ -387,22 +521,15 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
     }
   }
 
-  async function handleAssignCompany(u, companyId) {
-    setBusyId(u.id);
-    try {
-      await onAssignCompany(u.id, companyId || null);
-    } catch (err) {
-      if (err instanceof ApiError && err.data?.error === "would_leave_company_ownerless") {
-        window.alert(
-          "Δεν μπορείς να μετακινήσεις/αφαιρέσεις τον μοναδικό ιδιοκτήτη αυτής της εταιρείας. " +
-          "Ανάθεσε πρώτα σε κάποιον άλλον τον ρόλο ιδιοκτήτη."
-        );
-      } else {
-        window.alert(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αλλαγή εταιρείας.");
-      }
-    } finally {
-      setBusyId(null);
+  function ownerlessAlert(err) {
+    if (err instanceof ApiError && err.data?.error === "would_leave_company_ownerless") {
+      window.alert(
+        "Δεν μπορείς να αφαιρέσεις/υποβαθμίσεις τον μοναδικό ιδιοκτήτη αυτής της εταιρείας. " +
+        "Ανάθεσε πρώτα σε κάποιον άλλον τον ρόλο ιδιοκτήτη."
+      );
+      return true;
     }
+    return false;
   }
 
   async function handleDelete(u) {
@@ -438,10 +565,34 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
           error={companiesError}
           onReload={onReloadCompanies}
           onCreate={onCreateCompany}
-          onRename={onRenameCompany}
+          onEditCompany={onEditCompany}
           onSuspend={onSuspendCompany}
           onActivate={onActivateCompany}
         />
+
+        {membershipsUser && (
+          <ManageMembershipsModal
+            user={membershipsUser}
+            companies={companies}
+            onClose={() => setMembershipsUser(null)}
+            onAdd={async (userId, companyId, role) => {
+              try {
+                const updated = await onAddMembership(userId, companyId, role);
+                setMembershipsUser(updated);
+              } catch (err) {
+                if (!ownerlessAlert(err)) throw err;
+              }
+            }}
+            onRemove={async (userId, companyId) => {
+              try {
+                const updated = await onRemoveMembership(userId, companyId);
+                setMembershipsUser(updated);
+              } catch (err) {
+                if (!ownerlessAlert(err)) throw err;
+              }
+            }}
+          />
+        )}
 
         {teamOverview && (
           <Card className="p-5">
@@ -489,7 +640,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                   <th className="font-medium px-4 py-2.5">Χρήστης</th>
                   <th className="font-medium px-4 py-2.5">Κατάσταση</th>
                   <th className="font-medium px-4 py-2.5">Ρόλος</th>
-                  <th className="font-medium px-4 py-2.5">Εταιρεία</th>
+                  <th className="font-medium px-4 py-2.5">Εταιρείες</th>
                   <th className="font-medium px-4 py-2.5">Εγγραφή</th>
                   <th className="font-medium px-4 py-2.5 text-right">Ενέργειες</th>
                 </tr>
@@ -516,19 +667,17 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <select
-                        disabled={busyId === u.id}
-                        value={u.companyId || ""}
-                        onChange={(e) => handleAssignCompany(u, e.target.value)}
-                        className="rounded-md px-2 py-1 text-xs border bg-white"
+                      <button
+                        onClick={() => setMembershipsUser(u)}
+                        className="rounded-md px-2 py-1 text-xs border"
                         style={{ borderColor: C.line, color: C.ink }}
-                        title="Ανάθεση σε εταιρεία"
                       >
-                        <option value="">— χωρίς εταιρεία —</option>
-                        {(companies || []).map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+                        {(u.memberships || []).length === 0
+                          ? "— καμία —"
+                          : u.memberships.length === 1
+                          ? u.memberships[0].companyName
+                          : `${u.memberships.length} εταιρείες`}
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(u.createdAt)}</td>
                     <td className="px-4 py-3">
@@ -679,17 +828,28 @@ export function SuperAdminApp() {
     await api.del(`/admin/users/${id}`);
     await loadAdminUsers();
   }
-  async function handleAssignUserCompany(id, companyId) {
-    await api.post(`/admin/users/${id}/assign-company`, { companyId });
+  // Additive — adds/updates a Membership without touching any other company
+  // the user already belongs to (see admin.js). Returns the updated user
+  // (with its fresh memberships list) so ManageMembershipsModal can refresh
+  // itself without a full users reload round-trip.
+  async function handleAddMembership(id, companyId, role) {
+    const updated = await api.post(`/admin/users/${id}/assign-company`, { companyId, role });
     await loadAdminUsers();
-    await loadCompanies(); // user counts per company shift when someone moves
+    await loadCompanies(); // user counts per company shift when someone joins
+    return updated;
+  }
+  async function handleRemoveMembership(id, companyId) {
+    const updated = await api.del(`/admin/users/${id}/companies/${companyId}`);
+    await loadAdminUsers();
+    await loadCompanies();
+    return updated;
   }
   async function handleCreateCompany(data) {
     await api.post("/admin/companies", data);
     await loadCompanies();
   }
-  async function handleRenameCompany(id, name) {
-    await api.patch(`/admin/companies/${id}`, { name });
+  async function handleEditCompany(id, data) {
+    await api.patch(`/admin/companies/${id}`, data);
     await loadCompanies();
   }
   async function handleSuspendCompany(id) {
@@ -767,7 +927,8 @@ export function SuperAdminApp() {
           onDemote={handleDemoteUser}
           onCreateUser={handleCreateAdminUser}
           onDeleteUser={handleDeleteAdminUser}
-          onAssignCompany={handleAssignUserCompany}
+          onAddMembership={handleAddMembership}
+          onRemoveMembership={handleRemoveMembership}
           currentUserId={user.id}
           teamOverview={teamOverview}
           companies={companies}
@@ -775,7 +936,7 @@ export function SuperAdminApp() {
           companiesError={companiesError}
           onReloadCompanies={loadCompanies}
           onCreateCompany={handleCreateCompany}
-          onRenameCompany={handleRenameCompany}
+          onEditCompany={handleEditCompany}
           onSuspendCompany={handleSuspendCompany}
           onActivateCompany={handleActivateCompany}
         />

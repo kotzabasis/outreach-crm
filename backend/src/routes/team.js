@@ -49,6 +49,11 @@ router.post("/", requireOwner, async (req, res) => {
       role: "member",
     },
   });
+  // Keep Membership in sync with the legacy companyId/role fields — see
+  // schema.prisma's Membership model. This invite path only ever creates a
+  // brand-new account (rejected above if the email already exists), so
+  // there's never a prior membership to worry about here.
+  await prisma.membership.create({ data: { userId: member.id, companyId: req.user.companyId, role: "member" } });
   res.status(201).json(publicTeamMember(member));
 });
 

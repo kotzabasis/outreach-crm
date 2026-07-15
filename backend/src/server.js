@@ -233,9 +233,40 @@ async function ensureCompanyAssignment() {
   }
 }
 
+// Multi-company support: a user can now belong to more than one Company
+// (Membership join table — see schema.prisma). This backfills a Membership
+// row for every User that already has a companyId/role from before this
+// round existed, so nothing about a single-company user's access changes —
+// they end up with exactly one Membership, matching what User.companyId/
+// role already said. Idempotent (upsert on the unique [userId, companyId]
+// pair) and safe to run on every boot, same pattern as the two functions
+// above. Must run after ensureCompanyAssignment, since that's what
+// guarantees pre-existing users have a companyId to backfill from.
+async function ensureMembershipsBackfilled() {
+  try {
+    const usersWithCompany = await prisma.user.findMany({
+      where: { companyId: { not: null } },
+      select: { id: true, companyId: true, role: true },
+    });
+    for (const u of usersWithCompany) {
+      await prisma.membership.upsert({
+        where: { userId_companyId: { userId: u.id, companyId: u.companyId } },
+        update: {},
+        create: { userId: u.id, companyId: u.companyId, role: u.role || "member" },
+      });
+    }
+    console.log(`ensureMembershipsBackfilled: verified ${usersWithCompany.length} membership row(s)`);
+  } catch (err) {
+    console.error("ensureMembershipsBackfilled failed:", err.message);
+    captureException(err, { scope: "ensureMembershipsBackfilled" });
+  }
+}
+
 const port = process.env.PORT || 4000;
 app.listen(port, () => {
   console.log(`Outreach CRM backend listening on port ${port}`);
   startScheduler();
-  ensureBootstrapAdmin().then(() => ensureCompanyAssignment());
+  ensureBootstrapAdmin()
+    .then(() => ensureCompanyAssignment())
+    .then(() => ensureMembershipsBackfilled());
 });

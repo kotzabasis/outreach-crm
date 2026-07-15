@@ -3768,6 +3768,23 @@ export default function App() {
     setCampaigns([]);
   }
 
+  // Switching companies changes literally every piece of company-scoped
+  // state on this page (contacts, sequences, templates, offers, campaigns,
+  // gmail connection...) — rather than carefully resetting each one here and
+  // risking something stale slipping through, a full reload re-runs the
+  // normal auth-gated load path from scratch against the new session
+  // (session.activeCompanyId is set server-side first, so the reload's
+  // /auth/me + subsequent loads all reflect the newly active company).
+  async function handleSwitchCompany(companyId) {
+    if (!companyId || companyId === user?.company?.id) return;
+    try {
+      await api.post("/auth/switch-company", { companyId });
+      window.location.reload();
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αλλαγή εταιρείας.");
+    }
+  }
+
   async function handleCreateContact(data) {
     await api.post("/contacts", data);
     await loadContacts();
@@ -4038,6 +4055,23 @@ export default function App() {
           <NavItem icon={UserPlus} label="Ομάδα" active={view === "team"} onClick={() => { setView("team"); setSidebarOpen(false); }} />
         </div>
 
+        {user?.memberships?.length > 1 && (
+          <div className="px-5 pb-2">
+            <label className="text-[11px] font-medium block mb-1" style={{ color: C.slate }}>Εταιρεία</label>
+            <select
+              value={user.company?.id || ""}
+              onChange={(e) => handleSwitchCompany(e.target.value)}
+              className="w-full rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white"
+              style={{ borderColor: C.line, color: C.ink }}
+            >
+              {user.memberships.map((m) => (
+                <option key={m.companyId} value={m.companyId}>
+                  {m.companyName} ({m.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="px-5 py-4 border-t flex items-center gap-2.5" style={{ borderColor: C.line }}>
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0" style={{ backgroundColor: C.navy }}>
             {(user?.name || user?.email || "?").slice(0, 2).toUpperCase()}
