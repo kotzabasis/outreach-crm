@@ -3,6 +3,10 @@ const prisma = require("../db");
 const { sendTrackedEmail, isAuthError, flagNeedsReconnect } = require("./gmailClient");
 const { pickSendableMailbox, mailboxUsedUpdate } = require("./emailCap");
 const { weeklyDigestTick } = require("./weeklyDigest");
+const { decrypt } = require("./crypto");
+const { listLeadFormResponsesSince, flattenLeadFormResponse, isAuthError: isLinkedInAuthError } = require("./linkedinLeads");
+const { mapGenericPayload, upsertLeadContact } = require("./leadIntake");
+const { logAction } = require("./auditLog");
 const { captureException } = require("./sentry");
 
 async function processDueEnrollments() {
@@ -307,6 +311,62 @@ async function campaignTick() {
   setTimeout(campaignTick, campaignIntervalMs);
 }
 
+// Backup path alongside the LinkedIn webhook (routes/integrations.js) — a
+// missed/failed webhook delivery (server downtime, a bad deploy window,
+// LinkedIn's own retry giving up) would otherwise silently lose that lead
+// forever. This periodically asks the Lead Sync API for anything new since
+// the last successful poll per connection and upserts it the same way the
+// webhook does — pure belt-and-suspenders, not the primary path, so a wide
+// interval is fine. Falls back to a 24h lookback window the first time a
+// connection is ever polled (lastPolledAt is null right after connecting).
+const LINKEDIN_RECONCILIATION_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+
+async function linkedinReconciliationTick() {
+  try {
+    const connections = await prisma.linkedInLeadConnection.findMany({
+      where: { active: true, needsReconnect: false },
+    });
+    for (const connection of connections) {
+      try {
+        const accessToken = decrypt(connection.encryptedAccessToken);
+        const since = connection.lastPolledAt || new Date(Date.now() - LINKEDIN_RECONCILIATION_LOOKBACK_MS);
+        const responses = await listLeadFormResponsesSince(connection.organizationUrn, accessToken, since);
+
+        for (const response of responses) {
+          const flat = flattenLeadFormResponse(response);
+          const mapped = mapGenericPayload(flat);
+          const result = await upsertLeadContact({ companyId: connection.companyId, mapped, sourceTag: "lead:linkedin" });
+          if (result.ok) {
+            await logAction(
+              { user: null },
+              "lead.received",
+              `Νέο lead από LinkedIn (${connection.organizationName || connection.organizationUrn}) — reconciliation poll: ${result.contact.email}`,
+              { companyId: connection.companyId }
+            );
+          }
+        }
+
+        await prisma.linkedInLeadConnection.update({
+          where: { id: connection.id },
+          data: {
+            lastPolledAt: new Date(),
+            ...(responses.length > 0 ? { lastReceivedAt: new Date(), receivedCount: { increment: responses.length } } : {}),
+          },
+        });
+      } catch (err) {
+        console.error(`LinkedIn reconciliation poll failed for connection ${connection.id}:`, err.message);
+        captureException(err, { scope: "scheduler.linkedinReconciliationTick", connectionId: connection.id });
+        if (isLinkedInAuthError(err)) {
+          await prisma.linkedInLeadConnection.update({ where: { id: connection.id }, data: { needsReconnect: true } });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("LinkedIn reconciliation tick failed:", err.message);
+    captureException(err, { scope: "scheduler.linkedinReconciliationTick" });
+  }
+}
+
 // Weekly digest doesn't need backoff logic like the two ticks above — it's
 // cheap (one query to find due companies, usually zero of them on any given
 // check) and its own "due" window is already 7 days wide, so a fixed
@@ -314,6 +374,7 @@ async function campaignTick() {
 // companies cross the 7-day line since last send." No need for exact cron
 // timing (see weeklyDigest.js's getCompaniesDueForDigest comment).
 const DIGEST_INTERVAL_MS = 4 * 60 * 60 * 1000; // every 4 hours
+const LINKEDIN_RECONCILIATION_INTERVAL_MS = 30 * 60 * 1000; // every 30 min
 
 function startScheduler() {
   enrollmentTick();
@@ -325,6 +386,10 @@ function startScheduler() {
   weeklyDigestTick();
   setInterval(weeklyDigestTick, DIGEST_INTERVAL_MS);
   console.log(`Weekly digest checker started (every ${DIGEST_INTERVAL_MS / 3600000} h).`);
+
+  linkedinReconciliationTick();
+  setInterval(linkedinReconciliationTick, LINKEDIN_RECONCILIATION_INTERVAL_MS);
+  console.log(`LinkedIn lead reconciliation poll started (every ${LINKEDIN_RECONCILIATION_INTERVAL_MS / 60000} min).`);
 }
 
 module.exports = { startScheduler, processDueEnrollments, processDueCampaigns };

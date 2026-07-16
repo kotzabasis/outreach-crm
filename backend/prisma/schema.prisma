@@ -192,6 +192,7 @@ model Company {
   auditLogs    AuditLog[]
   integrations Integration[]
   metaLeadConnections MetaLeadConnection[]
+  linkedinLeadConnections LinkedInLeadConnection[]
 }
 
 // A generic inbound-lead webhook, one (or more) per company. Covers
@@ -336,6 +337,52 @@ model GmailAccount {
   // which naturally sorts first (a brand-new mailbox gets used immediately
   // rather than waiting behind ones with real send history).
   lastUsedAt            DateTime?
+
+  @@index([companyId])
+}
+
+// A connected LinkedIn organization (Company Page / ad account) for Lead
+// Gen Forms — the third lead-intake source alongside Integration (generic
+// webhook) and MetaLeadConnection. Unlike Meta, LinkedIn's OAuth is a
+// standard 3-legged flow (see lib/linkedinLeads.js), so the owner
+// authenticates via a real "Connect LinkedIn" redirect rather than pasting a
+// token — but the underlying `r_marketing_leadgen_automation` scope only
+// actually returns lead data once LinkedIn has approved this app for its
+// separate, application-based Lead Sync API program (see SETUP.md — this
+// approval is slower and less guaranteed than Meta's App Review). Both a
+// real-time webhook AND a periodic reconciliation poll feed leads in (see
+// scheduler.js's linkedinReconciliationTick) — LinkedIn's own docs note
+// webhook deliveries can be missed/duplicated, so the poll is a belt-and
+// -suspenders backstop, not a replacement for the webhook.
+model LinkedInLeadConnection {
+  id                        String    @id @default(uuid())
+  companyId                 String
+  company                   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // e.g. "urn:li:organization:12345" — how an inbound webhook notification
+  // (which carries LinkedIn's own URNs, not our ids) is mapped back to which
+  // company it belongs to, same role as MetaLeadConnection.pageId.
+  organizationUrn           String    @unique
+  organizationName          String?
+  // AES-256-GCM encrypted before storage, same helper as GmailAccount/
+  // MetaLeadConnection — see src/lib/crypto.js.
+  encryptedAccessToken      String
+  // Nullable: LinkedIn only issues a refresh token for apps with
+  // "Programmatic Refresh Token" access (itself a separate, approval-gated
+  // product) — without it, the access token simply has to be re-authorized
+  // (owner clicks "Σύνδεση LinkedIn" again) before/after it expires.
+  encryptedRefreshToken     String?
+  tokenExpiry               DateTime?
+  // Same meaning/handling as GmailAccount.needsReconnect — set when a token
+  // has expired or a call fails with an auth error; the reconciliation poll
+  // skips connections in this state until the owner reconnects.
+  needsReconnect            Boolean   @default(false)
+  active                    Boolean   @default(true)
+  lastReceivedAt            DateTime?
+  // Bookmark for the reconciliation poll — "fetch anything created since
+  // this timestamp," advanced after each successful poll pass.
+  lastPolledAt              DateTime?
+  receivedCount             Int       @default(0)
+  createdAt                 DateTime  @default(now())
 
   @@index([companyId])
 }

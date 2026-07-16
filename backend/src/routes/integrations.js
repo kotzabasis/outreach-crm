@@ -6,6 +6,14 @@ const requireOwner = require("../lib/requireOwner");
 const { encrypt, decrypt } = require("../lib/crypto");
 const { mapGenericPayload, mapMetaFieldData, upsertLeadContact } = require("../lib/leadIntake");
 const { verifyMetaSignature, fetchLeadFieldData } = require("../lib/metaLeads");
+const {
+  buildAuthorizeUrl,
+  exchangeCodeForToken,
+  fetchLeadFormResponse,
+  flattenLeadFormResponse,
+  registerWebhookSubscription,
+  isAuthError,
+} = require("../lib/linkedinLeads");
 const { logAction } = require("../lib/auditLog");
 const { captureException } = require("../lib/sentry");
 
@@ -20,18 +28,29 @@ function generateToken() {
 // management pattern in routes/auth.js — company-scoped, owner-only.
 
 router.get("/", requireAuth, requireOwner, async (req, res) => {
-  const [webhooks, metaConnections] = await Promise.all([
+  const [webhooks, metaConnections, linkedinConnections] = await Promise.all([
     prisma.integration.findMany({ where: { companyId: req.user.companyId }, orderBy: { createdAt: "asc" } }),
     prisma.metaLeadConnection.findMany({ where: { companyId: req.user.companyId }, orderBy: { createdAt: "asc" } }),
+    prisma.linkedInLeadConnection.findMany({ where: { companyId: req.user.companyId }, orderBy: { createdAt: "asc" } }),
   ]);
   res.json({
     webhooks,
-    // Never return encryptedPageAccessToken to the client.
+    // Never return encrypted tokens to the client.
     metaConnections: metaConnections.map((c) => ({
       id: c.id,
       pageId: c.pageId,
       pageName: c.pageName,
       active: c.active,
+      lastReceivedAt: c.lastReceivedAt,
+      receivedCount: c.receivedCount,
+      createdAt: c.createdAt,
+    })),
+    linkedinConnections: linkedinConnections.map((c) => ({
+      id: c.id,
+      organizationUrn: c.organizationUrn,
+      organizationName: c.organizationName,
+      active: c.active,
+      needsReconnect: c.needsReconnect,
       lastReceivedAt: c.lastReceivedAt,
       receivedCount: c.receivedCount,
       createdAt: c.createdAt,
@@ -210,6 +229,175 @@ async function processMetaLead(pageId, leadgenId) {
       { user: null },
       "lead.received",
       `Νέο lead από Meta (${connection.pageName || connection.pageId}): ${result.contact.email}`,
+      { companyId: connection.companyId }
+    );
+  }
+}
+
+// ---------- LinkedIn Lead Gen Forms (direct Lead Sync API) ----------
+// Standard 3-legged OAuth (unlike Meta's manual token paste) but split into
+// two steps: /connect + /callback obtain the token, then /finalize attaches
+// it to a specific LinkedIn organization the owner enters manually — actual
+// org discovery would need the same r_organization_admin API access this
+// whole integration is already waiting on Lead Sync API approval for, so
+// there's no reliable way to offer a dropdown of "your orgs" yet.
+
+router.get("/linkedin/connect", requireAuth, requireOwner, (req, res) => {
+  const state = crypto.randomBytes(16).toString("hex");
+  req.session.linkedinOAuthState = state;
+  res.redirect(buildAuthorizeUrl(state));
+});
+
+router.get("/linkedin/callback", requireAuth, requireOwner, async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error) return res.redirect(`${process.env.FRONTEND_URL}/?linkedin_connected=0&reason=${encodeURIComponent(String(error))}`);
+  if (!code || !state || state !== req.session.linkedinOAuthState) {
+    return res.redirect(`${process.env.FRONTEND_URL}/?linkedin_connected=0&reason=invalid_state`);
+  }
+  delete req.session.linkedinOAuthState;
+
+  try {
+    const tokenData = await exchangeCodeForToken(code);
+    // Held server-side in the session (never in a URL) until /finalize below
+    // attaches it to an organization — see routes comment above for why that
+    // extra step exists.
+    req.session.linkedinPendingToken = {
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token || null,
+      expiresAt: Date.now() + Number(tokenData.expires_in || 0) * 1000,
+    };
+    res.redirect(`${process.env.FRONTEND_URL}/?linkedin_connected=pending`);
+  } catch (err) {
+    console.error("LinkedIn token exchange failed:", err.message);
+    captureException(err, { scope: "integrations.linkedin_callback" });
+    res.redirect(`${process.env.FRONTEND_URL}/?linkedin_connected=0&reason=token_exchange_failed`);
+  }
+});
+
+router.post("/linkedin/finalize", requireAuth, requireOwner, async (req, res) => {
+  const pending = req.session.linkedinPendingToken;
+  if (!pending) return res.status(400).json({ error: "no_pending_linkedin_token" });
+
+  const organizationUrn = typeof req.body.organizationUrn === "string" ? req.body.organizationUrn.trim() : "";
+  const organizationName = typeof req.body.organizationName === "string" ? req.body.organizationName.trim().slice(0, 200) : "";
+  if (!organizationUrn) return res.status(400).json({ error: "invalid_request" });
+
+  const tokenData = {
+    encryptedAccessToken: encrypt(pending.accessToken),
+    encryptedRefreshToken: pending.refreshToken ? encrypt(pending.refreshToken) : null,
+    tokenExpiry: new Date(pending.expiresAt),
+    needsReconnect: false,
+  };
+
+  try {
+    const existing = await prisma.linkedInLeadConnection.findUnique({ where: { organizationUrn } });
+    if (existing && existing.companyId !== req.user.companyId) {
+      return res.status(409).json({ error: "organization_already_connected" });
+    }
+
+    const connection = existing
+      ? await prisma.linkedInLeadConnection.update({
+          where: { id: existing.id },
+          data: { ...tokenData, organizationName: organizationName || existing.organizationName },
+        })
+      : await prisma.linkedInLeadConnection.create({
+          data: { companyId: req.user.companyId, organizationUrn, organizationName: organizationName || null, ...tokenData },
+        });
+
+    delete req.session.linkedinPendingToken;
+
+    try {
+      await registerWebhookSubscription(organizationUrn, pending.accessToken);
+    } catch (err) {
+      // Expected to fail until this app has real Lead Sync API approval —
+      // the connection is still saved so the reconciliation poll can pick up
+      // leads once approval comes through (see scheduler.js), and webhook
+      // registration can be retried by disconnecting/reconnecting then.
+      console.error("LinkedIn webhook registration failed:", err.message);
+      captureException(err, { scope: "integrations.linkedin_finalize_webhook" });
+    }
+
+    await logAction(
+      req,
+      "integration.linkedin_connect",
+      `${req.user.email} connected LinkedIn organization ${organizationName || organizationUrn}`,
+      { companyId: req.user.companyId }
+    );
+    res.status(201).json({ id: connection.id, organizationUrn: connection.organizationUrn, organizationName: connection.organizationName });
+  } catch (err) {
+    if (err.code === "P2002") return res.status(409).json({ error: "organization_already_connected" });
+    throw err;
+  }
+});
+
+router.delete("/linkedin/connections/:id", requireAuth, requireOwner, async (req, res) => {
+  const existing = await prisma.linkedInLeadConnection.findFirst({ where: { id: req.params.id, companyId: req.user.companyId } });
+  if (!existing) return res.status(404).json({ error: "not_found" });
+  await prisma.linkedInLeadConnection.delete({ where: { id: existing.id } });
+  await logAction(
+    req,
+    "integration.linkedin_disconnect",
+    `${req.user.email} disconnected LinkedIn organization ${existing.organizationName || existing.organizationUrn}`,
+    { companyId: req.user.companyId }
+  );
+  res.json({ ok: true });
+});
+
+// LinkedIn's webhook validation handshake shape isn't fully confirmed
+// against a live payload yet (see lib/linkedinLeads.js's file-level caveat)
+// — this handles both a GET-style handshake and a POST body that includes a
+// validationToken to echo back, defensively, alongside real notifications.
+router.get("/linkedin/webhook", (req, res) => {
+  res.sendStatus(200);
+});
+
+router.post("/linkedin/webhook", async (req, res) => {
+  if (req.body && req.body.validationToken && !req.body.leadNotification) {
+    return res.status(200).json({ validationToken: req.body.validationToken });
+  }
+
+  res.sendStatus(200); // ack fast — same reasoning as the Meta webhook above
+
+  try {
+    const notification = req.body?.leadNotification || req.body || {};
+    const organizationUrn = notification.owner || notification.organization || notification.organizationUrn;
+    const responseId = notification.leadFormResponse || notification.responseId || notification.id;
+    if (!organizationUrn || !responseId) return;
+    await processLinkedInLead(organizationUrn, responseId);
+  } catch (err) {
+    console.error("LinkedIn lead processing failed:", err.message);
+    captureException(err, { scope: "integrations.linkedin_webhook" });
+  }
+});
+
+async function processLinkedInLead(organizationUrn, responseId) {
+  const connection = await prisma.linkedInLeadConnection.findUnique({ where: { organizationUrn } });
+  if (!connection || !connection.active || connection.needsReconnect) return;
+
+  const accessToken = decrypt(connection.encryptedAccessToken);
+  let response;
+  try {
+    response = await fetchLeadFormResponse(responseId, accessToken);
+  } catch (err) {
+    if (isAuthError(err)) {
+      await prisma.linkedInLeadConnection.update({ where: { id: connection.id }, data: { needsReconnect: true } });
+    }
+    throw err;
+  }
+  const flat = flattenLeadFormResponse(response);
+  const mapped = mapGenericPayload(flat);
+  const result = await upsertLeadContact({ companyId: connection.companyId, mapped, sourceTag: "lead:linkedin" });
+
+  await prisma.linkedInLeadConnection.update({
+    where: { id: connection.id },
+    data: { lastReceivedAt: new Date(), receivedCount: { increment: 1 } },
+  });
+
+  if (result.ok) {
+    await logAction(
+      { user: null },
+      "lead.received",
+      `Νέο lead από LinkedIn (${connection.organizationName || connection.organizationUrn}): ${result.contact.email}`,
       { companyId: connection.companyId }
     );
   }

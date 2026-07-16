@@ -3766,16 +3766,18 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
 // webhook) and connected Meta Lead Ads pages (direct Graph API integration —
 // see routes/integrations.js). Non-owners see a locked message, same
 // treatment as the mailbox section inside TeamView.
-function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWebhook, onRotateWebhook, onDeleteWebhook, onConnectMeta, onDisconnectMeta, recentLeads, onLoadRecentLeads }) {
+function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWebhook, onRotateWebhook, onDeleteWebhook, onConnectMeta, onDisconnectMeta, linkedinPendingConnect, onFinalizeLinkedIn, onDisconnectLinkedIn, recentLeads, onLoadRecentLeads }) {
   const [newWebhookName, setNewWebhookName] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
   const [copiedId, setCopiedId] = useState("");
   const [metaForm, setMetaForm] = useState({ pageId: "", pageName: "", pageAccessToken: "" });
+  const [linkedinForm, setLinkedinForm] = useState({ organizationUrn: "", organizationName: "" });
   const [showRecent, setShowRecent] = useState(false);
 
   const webhooks = data?.webhooks || [];
   const metaConnections = data?.metaConnections || [];
+  const linkedinConnections = data?.linkedinConnections || [];
 
   function webhookUrl(token) {
     return `${API_URL}/integrations/inbound/${token}`;
@@ -3846,6 +3848,31 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
     setActionError("");
     try {
       await onDisconnectMeta(id);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποσύνδεση.");
+    }
+  }
+
+  async function handleFinalizeLinkedIn(e) {
+    e.preventDefault();
+    if (!linkedinForm.organizationUrn.trim()) return;
+    setActionError("");
+    setBusy(true);
+    try {
+      await onFinalizeLinkedIn(linkedinForm);
+      setLinkedinForm({ organizationUrn: "", organizationName: "" });
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η ολοκλήρωση της σύνδεσης.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDisconnectLinkedIn(id) {
+    if (!window.confirm("Αποσύνδεση αυτού του LinkedIn organization; Νέα leads από αυτό δεν θα καταγράφονται πια.")) return;
+    setActionError("");
+    try {
+      await onDisconnectLinkedIn(id);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποσύνδεση.");
     }
@@ -3994,6 +4021,67 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
           </form>
         </Card>
 
+        <Card className="p-5">
+          <div className="text-sm font-semibold mb-1" style={{ color: C.ink }}>LinkedIn Lead Gen Forms</div>
+          <p className="text-xs mb-3" style={{ color: C.slate }}>
+            Απευθείας σύνδεση μέσω LinkedIn's Lead Sync API. Χρειάζεται έγκριση από το LinkedIn (Lead Sync API access) πριν λειτουργήσει για πραγματικά organizations — δες το SETUP.md. Μέχρι τότε η σύνδεση αποθηκεύεται αλλά δεν θα λαμβάνει leads.
+          </p>
+          {linkedinConnections.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {linkedinConnections.map((c) => (
+                <div key={c.id} className="flex items-center justify-between rounded-lg px-3 py-2.5" style={{ backgroundColor: C.pale }}>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{c.organizationName || c.organizationUrn}</div>
+                    <div className="text-xs" style={{ color: c.needsReconnect ? C.coral : C.slate }}>
+                      {c.needsReconnect
+                        ? "χρειάζεται επανασύνδεση"
+                        : `${c.receivedCount} leads ${c.lastReceivedAt ? `· τελευταίο ${fmtDate(c.lastReceivedAt)}` : "· κανένα ακόμα"}`}
+                    </div>
+                  </div>
+                  <button onClick={() => handleDisconnectLinkedIn(c.id)} title="Αποσύνδεση" className="rounded-md p-1.5 shrink-0" style={{ color: C.coral }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {linkedinPendingConnect ? (
+            <form onSubmit={handleFinalizeLinkedIn} className="space-y-2">
+              <p className="text-xs" style={{ color: C.sky }}>Η σύνδεση με το LinkedIn έγινε — πρόσθεσε το Organization URN για να ολοκληρωθεί.</p>
+              <input
+                value={linkedinForm.organizationUrn}
+                onChange={(e) => setLinkedinForm({ ...linkedinForm, organizationUrn: e.target.value })}
+                placeholder="Organization URN (π.χ. urn:li:organization:12345)"
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: C.line }}
+              />
+              <input
+                value={linkedinForm.organizationName}
+                onChange={(e) => setLinkedinForm({ ...linkedinForm, organizationName: e.target.value })}
+                placeholder="Όνομα (προαιρετικό)"
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: C.line }}
+              />
+              <button
+                disabled={busy}
+                type="submit"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white"
+                style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}
+              >
+                <Plus size={14} /> Ολοκλήρωση σύνδεσης
+              </button>
+            </form>
+          ) : (
+            <a
+              href={`${API_URL}/integrations/linkedin/connect`}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white w-fit"
+              style={{ backgroundColor: C.sky }}
+            >
+              <Globe size={14} /> Σύνδεση LinkedIn
+            </a>
+          )}
+        </Card>
+
         <div>
           <button onClick={toggleRecent} className="text-sm font-medium flex items-center gap-1.5" style={{ color: C.sky }}>
             <ChevronRight size={14} style={{ transform: showRecent ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
@@ -4115,10 +4203,12 @@ export default function App() {
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState("");
 
-  const [integrations, setIntegrations] = useState({ webhooks: [], metaConnections: [] });
+  const [integrations, setIntegrations] = useState({ webhooks: [], metaConnections: [], linkedinConnections: [] });
   const [integrationsLoading, setIntegrationsLoading] = useState(false);
   const [integrationsError, setIntegrationsError] = useState("");
   const [recentLeads, setRecentLeads] = useState([]);
+  const [linkedinPendingConnect, setLinkedinPendingConnect] = useState(false);
+  const [linkedinNotice, setLinkedinNotice] = useState("");
 
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -4258,6 +4348,17 @@ export default function App() {
     await loadIntegrations();
   }
 
+  async function handleFinalizeLinkedIn({ organizationUrn, organizationName }) {
+    await api.post("/integrations/linkedin/finalize", { organizationUrn, organizationName });
+    setLinkedinPendingConnect(false);
+    await loadIntegrations();
+  }
+
+  async function handleDisconnectLinkedIn(id) {
+    await api.del(`/integrations/linkedin/connections/${id}`);
+    await loadIntegrations();
+  }
+
   const loadTemplates = useCallback(async () => {
     setTemplatesLoading(true);
     setTemplatesError("");
@@ -4333,6 +4434,25 @@ export default function App() {
     if (gmailConnected !== null) {
       setGmailNotice(gmailConnected === "1" ? "Το Gmail συνδέθηκε." : "Η σύνδεση Gmail απέτυχε ή ακυρώθηκε.");
       params.delete("gmail_connected");
+      params.delete("reason");
+      const clean = window.location.pathname + (params.toString() ? `?${params}` : "");
+      window.history.replaceState({}, "", clean);
+    }
+
+    // Same idea for the LinkedIn OAuth redirect (?linkedin_connected=pending|0)
+    // — "pending" means the token exchange succeeded but the connection still
+    // needs an organization URN to attach to (see routes/integrations.js's
+    // /linkedin/finalize), so send the owner straight to the Integrations tab
+    // to finish that step rather than leaving them on whatever tab they left.
+    const linkedinConnected = params.get("linkedin_connected");
+    if (linkedinConnected !== null) {
+      if (linkedinConnected === "pending") {
+        setLinkedinPendingConnect(true);
+        setView("integrations");
+      } else if (linkedinConnected === "0") {
+        setLinkedinNotice("Η σύνδεση LinkedIn απέτυχε ή ακυρώθηκε.");
+      }
+      params.delete("linkedin_connected");
       params.delete("reason");
       const clean = window.location.pathname + (params.toString() ? `?${params}` : "");
       window.history.replaceState({}, "", clean);
@@ -4804,6 +4924,12 @@ export default function App() {
             <button onClick={() => setGmailNotice("")} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
           </div>
         )}
+        {linkedinNotice && (
+          <div className="px-6 py-2 text-sm flex items-center justify-between" style={{ backgroundColor: C.pale, color: C.navy }}>
+            {linkedinNotice}
+            <button onClick={() => setLinkedinNotice("")} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+          </div>
+        )}
         <GmailBanner user={user} />
         <div className="flex-1 min-w-0">
           {view === "dashboard" && (
@@ -4925,6 +5051,9 @@ export default function App() {
               onDeleteWebhook={handleDeleteWebhook}
               onConnectMeta={handleConnectMeta}
               onDisconnectMeta={handleDisconnectMeta}
+              linkedinPendingConnect={linkedinPendingConnect}
+              onFinalizeLinkedIn={handleFinalizeLinkedIn}
+              onDisconnectLinkedIn={handleDisconnectLinkedIn}
               recentLeads={recentLeads}
               onLoadRecentLeads={loadRecentLeads}
             />
