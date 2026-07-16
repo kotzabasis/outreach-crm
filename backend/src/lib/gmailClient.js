@@ -175,10 +175,27 @@ function injectTracking(html, trackingId) {
   return `${withUnsubscribeLink}${pixel}`;
 }
 
+// One-click unsubscribe headers (RFC 8058). Gmail/Yahoo bulk-sender guidance
+// now effectively requires these: the recipient's mail client shows a native
+// "Unsubscribe" button, and clicking it makes the provider POST to the URL
+// directly (no page load, no human on our side) — see the POST handler in
+// routes/tracking.js. This lives in the message *headers*, independent of
+// whatever the sender did or didn't leave in the body's {{unsubscribe_link}},
+// so a compliant unsubscribe path is always present. Both headers must be sent
+// together for one-click to be honored.
+function unsubscribeHeaders(listUnsubscribeUrl) {
+  if (!listUnsubscribeUrl) return [];
+  return [
+    `List-Unsubscribe: <${listUnsubscribeUrl}>`,
+    "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
+  ];
+}
+
 // attachments: [{filename, mimeType, contentBase64}] — plain (unwrapped)
 // base64, size-validated upstream by lib/attachments.js.
-function buildRawMessage({ from, to, subject, html, attachments = [] }) {
+function buildRawMessage({ from, to, subject, html, attachments = [], listUnsubscribeUrl = null }) {
   const encodedSubject = encodeSubject(subject);
+  const unsubHeaders = unsubscribeHeaders(listUnsubscribeUrl);
 
   if (!attachments.length) {
     const messageParts = [
@@ -188,6 +205,7 @@ function buildRawMessage({ from, to, subject, html, attachments = [] }) {
       "Content-Transfer-Encoding: 8bit",
       "MIME-Version: 1.0",
       `Subject: ${encodedSubject}`,
+      ...unsubHeaders,
       "",
       html,
     ];
@@ -200,6 +218,7 @@ function buildRawMessage({ from, to, subject, html, attachments = [] }) {
     `To: ${to}`,
     "MIME-Version: 1.0",
     `Subject: ${encodedSubject}`,
+    ...unsubHeaders,
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     "",
     `--${boundary}`,
@@ -238,6 +257,10 @@ async function sendTrackedEmail({ gmailAccount, contact, subject, body, tracking
     subject: renderedSubject,
     html: htmlWithTracking,
     attachments,
+    // Same URL the {{unsubscribe_link}} body token resolves to — surfaced in
+    // the headers too so one-click unsubscribe works even if the sender edited
+    // or removed the in-body link.
+    listUnsubscribeUrl: `${process.env.BASE_URL}/track/unsubscribe/${trackingId}`,
   });
 
   const res = await gmail.users.messages.send({

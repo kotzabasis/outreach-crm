@@ -10,6 +10,20 @@ const { logAction } = require("./auditLog");
 const { captureException } = require("./sentry");
 const { webhookRetryTick } = require("./webhookRetry");
 
+// Space real sends apart by a randomized delay instead of firing a whole due
+// batch back-to-back. Sending N emails from one mailbox in the same instant is
+// a bot signature; a few seconds of human-like jitter between them protects
+// deliverability. Applied only between *actual* sequence sends (skips don't
+// wait). Campaign sends are already one-per-tick spaced by intervalMinutes, so
+// they don't need this.
+const SEND_JITTER_MIN_MS = Number(process.env.SEND_JITTER_MIN_MS || 2000);
+const SEND_JITTER_MAX_MS = Number(process.env.SEND_JITTER_MAX_MS || 8000);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function sendJitterMs() {
+  const span = Math.max(0, SEND_JITTER_MAX_MS - SEND_JITTER_MIN_MS);
+  return SEND_JITTER_MIN_MS + Math.floor(Math.random() * (span + 1));
+}
+
 async function processDueEnrollments() {
   const due = await prisma.enrollment.findMany({
     where: {
@@ -33,7 +47,10 @@ async function processDueEnrollments() {
 
   for (const enrollment of due) {
     try {
-      await sendNextStep(enrollment);
+      const sent = await sendNextStep(enrollment);
+      // Only wait between genuine sends — a skip (unsubscribed, condition
+      // unmet, no sendable mailbox) shouldn't burn jitter time.
+      if (sent) await sleep(sendJitterMs());
     } catch (err) {
       console.error(`Failed to send step for enrollment ${enrollment.id}:`, err.message);
       // Leave nextSendAt as-is; it'll be retried on the next tick rather than
@@ -90,18 +107,20 @@ async function advanceEnrollment(enrollment, sequence) {
   }
 }
 
+// Returns true if an email was actually sent, false for any no-op/skip — the
+// caller uses this to decide whether to apply inter-send jitter.
 async function sendNextStep(enrollment) {
   const { contact, sequence } = enrollment;
 
   if (contact.unsubscribed) {
     await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
-    return;
+    return false;
   }
 
   const step = sequence.steps[enrollment.currentStep];
   if (!step) {
     await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "completed" } });
-    return;
+    return false;
   }
 
   if (!(await stepConditionsMet(step, enrollment, contact))) {
@@ -109,7 +128,7 @@ async function sendNextStep(enrollment) {
     // re-evaluate the next one on the next tick, rather than retrying this
     // one forever.
     await advanceEnrollment(enrollment, sequence);
-    return;
+    return false;
   }
 
   // Picks whichever of this company's connected mailboxes is sendable right
@@ -118,7 +137,7 @@ async function sendNextStep(enrollment) {
   // single mailbox used to fail this check (none connected, all broken, all
   // capped) — same "leave it due, retry next tick" handling either way.
   const gmailAccount = await pickSendableMailbox(sequence.companyId);
-  if (!gmailAccount) return;
+  if (!gmailAccount) return false;
 
   const trackingId = uuid();
   let gmailMessageId;
@@ -159,6 +178,7 @@ async function sendNextStep(enrollment) {
   ]);
 
   await advanceEnrollment(enrollment, sequence);
+  return true;
 }
 
 // Sends at most one recipient per running campaign per tick, gated by

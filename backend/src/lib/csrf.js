@@ -29,14 +29,20 @@ function csrfValidationMiddleware(req, res, next) {
     return next();
   }
 
-  // Webhook/public routes (GitHub, stripe, meta, generic webhook handlers)
-  // use signature-based auth, not CSRF tokens — skip validation for these
+  // Public, unauthenticated POST endpoints that are hit by external systems
+  // (mailbox providers, Meta/LinkedIn/WordPress) which cannot carry our
+  // session-based CSRF token. Each has its own auth instead — inbound webhooks
+  // validate a per-source signature/token, and one-click unsubscribe only
+  // toggles a boolean keyed on an unguessable tracking id. These are matched
+  // against the *real* mounted paths (see server.js): tracking is under
+  // /track, and the lead webhooks live under /integrations — the previous
+  // list used "/tracking" and "/webhook" prefixes that matched nothing, which
+  // meant the inbound webhooks were being rejected with csrf_token_invalid.
   const publicMutatingPaths = [
-    "/tracking/click",    // public tracking link
-    "/tracking/open",     // public tracking pixel
-    "/webhook/generic",   // generic webhook (validates signature)
-    "/webhook/meta",      // meta webhook (validates signature)
-    "/webhook/linkedin",  // linkedin webhook (validates signature)
+    "/track/unsubscribe",             // one-click List-Unsubscribe POST (RFC 8058)
+    "/integrations/inbound",          // generic inbound lead webhook (/integrations/inbound/:token)
+    "/integrations/meta/webhook",     // Meta Lead Ads webhook (validates X-Hub-Signature)
+    "/integrations/linkedin/webhook", // LinkedIn Lead Sync webhook
   ];
   if (publicMutatingPaths.some((p) => req.path.startsWith(p))) {
     return next();

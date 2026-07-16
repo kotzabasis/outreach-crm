@@ -104,21 +104,23 @@ router.get("/click/:trackingId", async (req, res) => {
   res.redirect(302, target.toString());
 });
 
-// Public, unauthenticated, hit directly from the link in the email footer
-// (see gmailClient.js injectTracking). Ties back to the specific send via
-// trackingId, then flips the contact's unsubscribed flag — the scheduler
-// already checks this before every sequence step, so no other bookkeeping
-// is needed here.
-router.get("/unsubscribe/:trackingId", async (req, res) => {
-  const { trackingId } = req.params;
+// Ties a tracking id back to its send and flips the contact's unsubscribed
+// flag — the scheduler checks this before every sequence step, so no other
+// bookkeeping is needed here. Safe to call for an unknown/invalid id (no-op)
+// and idempotent for an already-unsubscribed contact.
+async function applyUnsubscribe(trackingId) {
   const emailLog = await prisma.emailLog.findUnique({ where: { trackingId } }).catch(() => null);
-
   if (emailLog) {
     await prisma.contact
       .update({ where: { id: emailLog.contactId }, data: { unsubscribed: true, unsubscribedAt: new Date() } })
       .catch(() => {});
   }
+}
 
+// GET: the human-facing path — someone clicks the {{unsubscribe_link}} in the
+// email body and lands on a confirmation page.
+router.get("/unsubscribe/:trackingId", async (req, res) => {
+  await applyUnsubscribe(req.params.trackingId);
   // Always show the same confirmation, whether or not the tracking id was
   // valid — never reveal anything about the underlying data to the visitor.
   res.set("Content-Type", "text/html; charset=utf-8");
@@ -128,6 +130,17 @@ router.get("/unsubscribe/:trackingId", async (req, res) => {
   <h2>Έγινε η απεγγραφή σου.</h2>
   <p style="color:#64748B;">Δεν θα λαμβάνεις άλλα emails.</p>
 </body></html>`);
+});
+
+// POST: the one-click path (RFC 8058). The recipient's mail provider POSTs
+// here directly (body: "List-Unsubscribe=One-Click") when they hit the native
+// "Unsubscribe" button — no page is rendered, so just do the work and return
+// 200. CSRF is intentionally skipped for this path (see lib/csrf.js): the
+// caller is an external mail server that can't carry our session token, and
+// the action is a harmless, idempotent opt-out keyed on an unguessable id.
+router.post("/unsubscribe/:trackingId", async (req, res) => {
+  await applyUnsubscribe(req.params.trackingId);
+  res.sendStatus(200);
 });
 
 module.exports = router;

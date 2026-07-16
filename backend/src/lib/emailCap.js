@@ -11,6 +11,29 @@ const prisma = require("../db");
 // just what any single mailbox pushes through it in a day.
 const DAILY_CAP = Number(process.env.MAX_EMAILS_PER_DAY_PER_ACCOUNT || 300);
 
+// Warmup ramp. A brand-new Gmail account that suddenly starts pushing hundreds
+// of cold emails a day is a classic spam/abuse signal — Google (and receiving
+// servers) trust a mailbox more when its volume grows gradually. So for the
+// first couple of weeks after a mailbox is connected, its effective daily cap
+// ramps up instead of jumping straight to DAILY_CAP.
+//
+// This keys off GmailAccount.createdAt, which is set once on first connect and
+// NOT reset on reconnect (auth.js upserts) — so any mailbox that's been
+// connected longer than the ramp window is already at the full cap and is
+// completely unaffected. Disable with WARMUP_ENABLED=false to send at the full
+// cap from day one.
+const WARMUP_ENABLED = process.env.WARMUP_ENABLED !== "false";
+const WARMUP_START = Number(process.env.WARMUP_START_PER_DAY || 20); // day 0 allowance
+const WARMUP_STEP = Number(process.env.WARMUP_DAILY_STEP || 20); // added per day of age
+
+// Effective cap for a mailbox right now: the lesser of the configured daily cap
+// and its current warmup allowance. Never below WARMUP_START, never above DAILY_CAP.
+function effectiveDailyCap(account) {
+  if (!WARMUP_ENABLED || !account.createdAt) return DAILY_CAP;
+  const ageDays = Math.floor((Date.now() - new Date(account.createdAt).getTime()) / 86400000);
+  return Math.min(DAILY_CAP, WARMUP_START + Math.max(0, ageDays) * WARMUP_STEP);
+}
+
 async function resetDailyCounterIfNeeded(gmailAccount) {
   const hoursSinceReset = (Date.now() - new Date(gmailAccount.sendCounterResetAt).getTime()) / 36e5;
   if (hoursSinceReset >= 24) {
@@ -42,7 +65,7 @@ async function pickSendableMailbox(companyId) {
     if (raw.needsReconnect) continue;
     const acc = await resetDailyCounterIfNeeded(raw);
     if (acc.needsReconnect) continue; // resetDailyCounterIfNeeded never sets this, but stay defensive
-    if (acc.emailsSentToday >= DAILY_CAP) continue;
+    if (acc.emailsSentToday >= effectiveDailyCap(acc)) continue; // warmup-aware cap
     candidates.push(acc);
   }
   if (candidates.length === 0) return null;
@@ -70,4 +93,4 @@ function mailboxUsedUpdate(gmailAccountId) {
   });
 }
 
-module.exports = { DAILY_CAP, resetDailyCounterIfNeeded, pickSendableMailbox, mailboxUsedUpdate };
+module.exports = { DAILY_CAP, effectiveDailyCap, resetDailyCounterIfNeeded, pickSendableMailbox, mailboxUsedUpdate };
