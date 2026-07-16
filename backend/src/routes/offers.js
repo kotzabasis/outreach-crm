@@ -20,13 +20,23 @@ const offerSchema = z.object({
   outcomeReason: z.string().max(500).optional().nullable(),
 });
 
+// Paginated offers list. Response is an envelope (not a bare array) so total
+// count travels alongside the page of rows without a second round-trip.
 router.get("/", async (req, res) => {
-  const offers = await prisma.offer.findMany({
-    where: { companyId: req.user.companyId },
-    include: { contact: { select: { id: true, name: true, email: true } } },
-    orderBy: { updatedAt: "desc" },
-  });
-  res.json(offers);
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(Math.max(1, Number(req.query.pageSize) || 50), 200);
+
+  const [offers, total] = await Promise.all([
+    prisma.offer.findMany({
+      where: { companyId: req.user.companyId },
+      include: { contact: { select: { id: true, name: true, email: true } } },
+      orderBy: { updatedAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.offer.count({ where: { companyId: req.user.companyId } }),
+  ]);
+  res.json({ offers, total, page, pageSize });
 });
 
 router.post("/", async (req, res) => {

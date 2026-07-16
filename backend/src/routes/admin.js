@@ -57,15 +57,24 @@ function publicCompany(c) {
   };
 }
 
-// Global list — admins manage access for the whole app, not just their own
-// company's data. Every user belongs to some company (or none yet, if
-// they're a pending self-registration awaiting approval+assignment).
+// Paginated global user list — admins manage access for the whole app, not just
+// their own company's data. Every user belongs to some company (or none yet, if
+// they're a pending self-registration awaiting approval+assignment). Response
+// is an envelope including total count alongside the page of rows.
 router.get("/users", async (req, res) => {
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: "asc" },
-    include: { company: true, memberships: { include: { company: true } } },
-  });
-  res.json(users.map(publicAdminUser));
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(Math.max(1, Number(req.query.pageSize) || 50), 200);
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: "asc" },
+      include: { company: true, memberships: { include: { company: true } } },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.user.count(),
+  ]);
+  res.json({ users: users.map(publicAdminUser), total, page, pageSize });
 });
 
 // Admin-created accounts skip the approval queue entirely — the admin

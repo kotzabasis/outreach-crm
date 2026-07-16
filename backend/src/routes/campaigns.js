@@ -25,17 +25,26 @@ function countByStatus(recipients) {
   return counts;
 }
 
-// List view — lightweight recipient counts only (full per-recipient trace is
-// GET /:id, fetched only when a campaign is actually opened).
+// Paginated list view — lightweight recipient counts only (full per-recipient
+// trace is GET /:id, fetched only when a campaign is actually opened). Response
+// is an envelope to include total count alongside the paginated rows.
 router.get("/", async (req, res) => {
-  const campaigns = await prisma.campaign.findMany({
-    where: { companyId: req.user.companyId },
-    include: { recipients: { select: { status: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(Math.max(1, Number(req.query.pageSize) || 50), 200);
+
+  const [campaigns, total] = await Promise.all([
+    prisma.campaign.findMany({
+      where: { companyId: req.user.companyId },
+      include: { recipients: { select: { status: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.campaign.count({ where: { companyId: req.user.companyId } }),
+  ]);
 
   const withCounts = campaigns.map(({ recipients, ...c }) => ({ ...c, counts: countByStatus(recipients) }));
-  res.json(withCounts);
+  res.json({ campaigns: withCounts, total, page, pageSize });
 });
 
 router.post("/", async (req, res) => {

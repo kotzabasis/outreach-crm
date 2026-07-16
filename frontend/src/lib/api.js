@@ -4,12 +4,22 @@
 // - Auth is a first-party session cookie, never a token in JS-readable storage
 //   (no localStorage/sessionStorage involved) — so `credentials: "include"` is
 //   required on every request, and is the one thing every call below shares.
+// - CSRF protection uses double-submit tokens: the backend sends a token in
+//   the X-CSRF-Token response header, and we include it in that same header
+//   on all state-changing requests (POST/PATCH/DELETE). Stored in memory only
+//   (no persistent storage), so a page refresh clears it and the next server
+//   interaction repopulates it.
 // - The API base URL is a public value (not a secret) set at build time via
 //   VITE_API_URL; it's fine for it to be visible in the bundle.
 // - We never log request bodies (which may contain passwords) — only status
 //   codes and the server's own error payloads make it into thrown errors.
 
 export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+// CSRF token stored in memory (cleared on page reload). On the first request,
+// the server sends it in X-CSRF-Token header; we read it from the response
+// and include it in the same header on all subsequent state-changing requests.
+let csrfToken = null;
 
 // The backend returns error codes as raw snake_case strings (e.g.
 // { error: "email_already_registered" }) — without this, ApiError.message
@@ -76,10 +86,18 @@ export class ApiError extends Error {
 async function request(path, { method = "GET", body, isForm = false, _retried = false } = {}) {
   let res;
   try {
+    const headers = {};
+    // Include CSRF token on state-changing requests
+    if (!isForm && body !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (csrfToken && method !== "GET") {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
     res = await fetch(`${API_URL}${path}`, {
       method,
       credentials: "include",
-      headers: isForm ? undefined : body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: isForm ? body : body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -92,6 +110,12 @@ async function request(path, { method = "GET", body, isForm = false, _retried = 
       return request(path, { method, body, isForm, _retried: true });
     }
     throw new ApiError(0, { error: "Δεν ήταν δυνατή η επικοινωνία με τον server. Δοκίμασε ξανά σε λίγο." });
+  }
+
+  // Read CSRF token from response header if present (sent by server on all responses)
+  const newToken = res.headers.get("X-CSRF-Token");
+  if (newToken) {
+    csrfToken = newToken;
   }
 
   const text = await res.text();

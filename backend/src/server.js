@@ -27,6 +27,7 @@ const teamRoutes = require("./routes/team");
 const dashboardRoutes = require("./routes/dashboard");
 const integrationsRoutes = require("./routes/integrations");
 const { startScheduler } = require("./lib/scheduler");
+const { csrfTokenMiddleware, csrfValidationMiddleware } = require("./lib/csrf");
 const prisma = require("./db");
 
 for (const required of ["SESSION_SECRET", "ENCRYPTION_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "DATABASE_URL"]) {
@@ -113,6 +114,12 @@ app.use(
 
 const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 20 });
 const forgotPasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
+
+// CSRF protection: generate token on first request, validate on state-changing
+// requests. Required because sameSite=none disables built-in CSRF protection
+// (needed for Vercel/Render cross-domain split). See lib/csrf.js.
+app.use(csrfTokenMiddleware);
+app.use(csrfValidationMiddleware);
 
 // Previously just returned {ok:true} unconditionally — that only proves the
 // Express process is up, not that the app actually works (Neon being down/
