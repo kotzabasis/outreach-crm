@@ -4415,17 +4415,19 @@ export default function App() {
     }
   }, []);
 
-  const refreshAll = useCallback(() => {
+  // Loaded once on login: the dashboard's own data, plus the broadly-shared
+  // lists that many tabs read (contact pickers, sequence/enroll dropdowns,
+  // template insert). Everything else — analytics, inbox, offers, campaigns,
+  // integrations, team — is fetched only when its tab is opened (see the
+  // view-gated effect below), so login fires ~5 requests instead of ~10. That
+  // matters most right after a cold start, when the backend is still waking up.
+  const loadCore = useCallback(() => {
     loadSummary();
+    loadDashboard();
     loadContacts();
     loadSequences();
-    loadAnalytics();
-    loadActivity();
-    loadDashboard();
     loadTemplates();
-    loadOffers();
-    loadCampaigns();
-  }, [loadSummary, loadContacts, loadSequences, loadAnalytics, loadActivity, loadDashboard, loadTemplates, loadOffers, loadCampaigns]);
+  }, [loadSummary, loadDashboard, loadContacts, loadSequences, loadTemplates]);
 
   // Session check on mount, plus handling the redirect back from Google OAuth
   // (?gmail_connected=1|0) without leaving it sitting in the address bar.
@@ -4469,12 +4471,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (authState === "authed") refreshAll();
-  }, [authState, refreshAll]);
-
-  useEffect(() => {
-    if (authState === "authed") loadTeam();
-  }, [authState, loadTeam]);
+    if (authState === "authed") loadCore();
+  }, [authState, loadCore]);
 
   // Analytics/Inbox numbers otherwise only change on the actions we happen to
   // remember to refresh after (see handleManualSend etc. above) — that misses
@@ -4485,16 +4483,21 @@ export default function App() {
   // Analytics stat board stay current without needing a manual reload.
   useEffect(() => {
     if (authState !== "authed") return;
+    // First open of a tab loads its data (it's no longer fetched upfront on
+    // login); re-opening it refreshes so background changes (tracking events,
+    // scheduler progress) look live.
     if (view === "analytics") loadAnalytics();
     if (view === "inbox") loadActivity();
     if (view === "dashboard") loadDashboard();
     if (view === "integrations") loadIntegrations();
+    if (view === "offers") loadOffers();
+    if (view === "team") loadTeam();
     // Running campaigns send in the background via the scheduler, one
     // recipient at a time — reload whenever this tab is actually open so
     // progress (sent/pending counts) looks live rather than stuck at
     // whatever it was on last page load.
     if (view === "campaigns") loadCampaigns();
-  }, [view, authState, loadAnalytics, loadActivity, loadDashboard, loadIntegrations, loadCampaigns]);
+  }, [view, authState, loadAnalytics, loadActivity, loadDashboard, loadIntegrations, loadOffers, loadTeam, loadCampaigns]);
 
   // Gated on whichever tab is actually open — this used to unconditionally
   // refresh analytics/activity/dashboard/campaigns every tick regardless of
