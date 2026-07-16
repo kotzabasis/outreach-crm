@@ -190,6 +190,65 @@ model Company {
   memberships  Membership[]
   invites      CompanyInvite[]
   auditLogs    AuditLog[]
+  integrations Integration[]
+  metaLeadConnections MetaLeadConnection[]
+}
+
+// A generic inbound-lead webhook, one (or more) per company. Covers
+// WordPress form plugins (Contact Form 7 + a webhook add-on, Gravity Forms,
+// WPForms, Fluent Forms — all of which already support POSTing to an
+// arbitrary URL on submit) and any other leadgen/landing-page tool with an
+// outgoing-webhook or Zapier/Make option, with zero per-source code needed:
+// they all just get told to POST at
+// `${API_URL}/integrations/inbound/:token`. The token alone is the auth —
+// deliberately unauthenticated in the session sense (the sender is a third
+// party's server, not a logged-in user) but unguessable and revocable, same
+// posture as EmailLog.trackingId elsewhere in this schema.
+model Integration {
+  id             String    @id @default(uuid())
+  companyId      String
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Only "generic_webhook" exists today — kept as a string (not an enum) in
+  // case a source-specific variant is ever needed without a migration.
+  type           String    @default("generic_webhook")
+  // Owner-facing label so a company with multiple inbound sources (e.g. one
+  // per WordPress site) can tell them apart — purely cosmetic.
+  name           String?
+  token          String    @unique
+  active         Boolean   @default(true)
+  lastReceivedAt DateTime?
+  receivedCount  Int       @default(0)
+  createdAt      DateTime  @default(now())
+
+  @@index([companyId])
+}
+
+// A connected Meta (Facebook/Instagram) Lead Ads page, direct Graph API
+// integration rather than the generic webhook above — Meta doesn't let an
+// arbitrary URL receive full lead data, only a "a new lead exists, here's
+// its id" ping at one single app-level webhook URL (see
+// routes/integrations.js's /meta/webhook), which then has to call back into
+// the Graph API with a page access token to fetch the actual answers. pageId
+// is how an inbound ping (which only carries Meta's own page-scoped IDs) is
+// mapped back to which company it belongs to.
+model MetaLeadConnection {
+  id                       String    @id @default(uuid())
+  companyId                String
+  company                  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  pageId                   String    @unique
+  pageName                 String?
+  // AES-256-GCM encrypted before storage, same helper as GmailAccount's
+  // tokens — see src/lib/crypto.js. A long-lived Page Access Token, pasted in
+  // by the owner today (see SETUP.md) rather than obtained via an in-app
+  // OAuth connect flow, since discovering a user's pages via `pages_show_list`
+  // is itself gated behind the same Meta App Review as `leads_retrieval`.
+  encryptedPageAccessToken String
+  active                   Boolean   @default(true)
+  lastReceivedAt           DateTime?
+  receivedCount            Int       @default(0)
+  createdAt                DateTime  @default(now())
+
+  @@index([companyId])
 }
 
 // Short-lived, single-use tokens for the "forgot password" flow. Only a

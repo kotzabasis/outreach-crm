@@ -140,3 +140,31 @@ once you're happy with it.
 
 - Read `SECURITY.md` — a few of the items there (consent, unsubscribe links, sending limits) matter as much as the code.
 - Test the full flow — connect, upload a small CSV of your own test addresses, create a 1-step sequence, enroll, confirm the email arrives with tracking working — before pointing it at a real list.
+
+## 9. Lead integrations (Integrations tab)
+
+Every company can automatically turn form submissions into Contacts, from two kinds of source: a generic inbound webhook, and a direct Meta Lead Ads connection. Both live under the app's "Integrations" tab (owner-only) and both upsert-by-email — a lead that submits twice updates the same Contact rather than creating a duplicate.
+
+### Generic webhook (WordPress, Zapier/Make, any leadgen form)
+
+No setup on this side at all — it works the moment an owner clicks "Νέο webhook" in the Integrations tab, which hands them a URL like `https://your-api.onrender.com/integrations/inbound/<token>`. Paste that URL into:
+
+- **WordPress**: any form plugin with an outgoing-webhook option — WP Webhooks, Gravity Forms' Webhooks add-on, Fluent Forms' native webhook action, or Contact Form 7 paired with a webhook add-on. Set the method to `POST` and the format to JSON (form-urlencoded also works, but JSON is preferred if the plugin offers a choice).
+- **Meta Lead Ads, the fast way**: instead of the Facebook App setup below, connect a Zapier or Make "New Lead" trigger (both have a ready-made, already-reviewed Meta Lead Ads connector) and set its action to a webhook POST at the same URL. Ships immediately, small ongoing Zapier/Make cost, no App Review wait.
+- **Anything else with an outgoing webhook** — Typeform, Unbounce, Instapage, etc. — same idea.
+
+The endpoint looks for common field-name variants (`email`/`Email`/`your-email`, `name`/`full_name`/`your-name`, `phone`/`phone_number`, etc. — see `src/lib/leadIntake.js`) so it works with most tools' default field naming without extra configuration. A submission with no usable email is acknowledged but doesn't create a Contact.
+
+### Meta Lead Ads — direct Graph API integration
+
+This is the "skip Zapier entirely" path, and it requires real setup on Meta's side before it'll work for any page beyond your own test pages:
+
+1. Go to [developers.facebook.com](https://developers.facebook.com/apps) and create an App (type: Business).
+2. Add the **Webhooks** product. Subscribe to object type **Page**, field **leadgen**.
+3. Callback URL: `https://your-api.onrender.com/integrations/meta/webhook`. Verify token: any string you choose — put the same value in this backend's `META_VERIFY_TOKEN` env var before clicking Verify and Save (Meta calls the URL once to confirm you control it).
+4. **Settings > Basic** — copy the App Secret into this backend's `META_APP_SECRET` env var. Every webhook POST is HMAC-signed with this secret and rejected if it doesn't match (see `src/lib/metaLeads.js#verifyMetaSignature`).
+5. Add the **`leads_retrieval`** permission (App Review > Permissions and Features). **This is the same kind of gate the Gmail integration hit with sensitive scopes**: in Development Mode, it only works for pages that an admin/tester of this specific Facebook App also administers. To receive leads from a page you don't personally run — i.e. an actual customer's page — the app needs to pass Meta's App Review for `leads_retrieval` (privacy policy URL, a written use-case description, usually a screencast; typically takes days to a couple of weeks) and the page's Business Manager needs to explicitly grant this app access to it.
+6. Once a page is authorized, generate a **Page Access Token** for it (Graph API Explorer, or your own long-lived token exchange) and paste it into the "Meta Lead Ads" card in the Integrations tab along with the Page ID. This is a manual paste, not an in-app OAuth "Connect" button — building that would additionally require the `pages_show_list` permission, gated behind the same App Review.
+7. From then on, every new lead on that page triggers Meta's webhook → this backend fetches the full answers via the Graph API → upserts a Contact, tagged `lead:meta`.
+
+Until App Review is approved, this integration is genuinely limited to pages you administer yourself — use the Zapier/Make path above for a customer's page in the meantime, and switch them over once your app's review comes through.

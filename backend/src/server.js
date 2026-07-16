@@ -25,6 +25,7 @@ const sendRoutes = require("./routes/send");
 const campaignRoutes = require("./routes/campaigns");
 const teamRoutes = require("./routes/team");
 const dashboardRoutes = require("./routes/dashboard");
+const integrationsRoutes = require("./routes/integrations");
 const { startScheduler } = require("./lib/scheduler");
 const prisma = require("./db");
 
@@ -53,7 +54,17 @@ app.use(
 );
 // Bumped from 1mb: manual/sequence emails can carry base64 attachments
 // (capped at ~2MB/file, a few files) since there's no external file storage.
-app.use(express.json({ limit: "15mb" }));
+// `verify` stashes the exact raw bytes onto req.rawBody — needed by
+// lib/metaLeads.js#verifyMetaSignature, which has to HMAC the literal body
+// Meta sent, not a re-serialized version of the parsed JSON (those two byte
+// sequences aren't guaranteed to match, e.g. differing key order/whitespace).
+app.use(express.json({ limit: "15mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
+// Some WordPress webhook plugins (and a few other form tools) POST as
+// x-www-form-urlencoded rather than JSON — accept either without the
+// inbound integration setup depending on which one a given plugin defaults
+// to. Harmless alongside express.json() above: each parser only acts when
+// the request's Content-Type matches its own, so a JSON POST is untouched.
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 
 // Sessions are stored in Postgres (the same Neon DB Prisma already talks
@@ -138,6 +149,7 @@ app.use("/send", sendRoutes);
 app.use("/campaigns", campaignRoutes);
 app.use("/team", teamRoutes);
 app.use("/dashboard", dashboardRoutes);
+app.use("/integrations", integrationsRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/track", trackingRoutes); // no auth — see routes/tracking.js for why
 

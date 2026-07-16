@@ -3761,6 +3761,263 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
   );
 }
 
+// Owner-only management of inbound lead sources: generic webhook tokens
+// (WordPress form plugins, Zapier/Make, any leadgen tool with an outgoing
+// webhook) and connected Meta Lead Ads pages (direct Graph API integration —
+// see routes/integrations.js). Non-owners see a locked message, same
+// treatment as the mailbox section inside TeamView.
+function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWebhook, onRotateWebhook, onDeleteWebhook, onConnectMeta, onDisconnectMeta, recentLeads, onLoadRecentLeads }) {
+  const [newWebhookName, setNewWebhookName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [copiedId, setCopiedId] = useState("");
+  const [metaForm, setMetaForm] = useState({ pageId: "", pageName: "", pageAccessToken: "" });
+  const [showRecent, setShowRecent] = useState(false);
+
+  const webhooks = data?.webhooks || [];
+  const metaConnections = data?.metaConnections || [];
+
+  function webhookUrl(token) {
+    return `${API_URL}/integrations/inbound/${token}`;
+  }
+
+  async function copyUrl(id, token) {
+    try {
+      await navigator.clipboard.writeText(webhookUrl(token));
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(""), 1500);
+    } catch {
+      // Clipboard API can fail silently on some browsers/permissions —
+      // the URL is still visible in the row, just not auto-copied.
+    }
+  }
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    setActionError("");
+    setBusy(true);
+    try {
+      await onCreateWebhook(newWebhookName.trim());
+      setNewWebhookName("");
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRotate(id) {
+    if (!window.confirm("Η παλιά διεύθυνση θα σταματήσει να δουλεύει — θα χρειαστεί να ενημερώσεις τη φόρμα/plugin με τη νέα. Συνέχεια;")) return;
+    setActionError("");
+    try {
+      await onRotateWebhook(id);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η ανανέωση.");
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm("Διαγραφή αυτού του webhook; Η φόρμα/plugin που το χρησιμοποιεί θα σταματήσει να στέλνει leads.")) return;
+    setActionError("");
+    try {
+      await onDeleteWebhook(id);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η διαγραφή.");
+    }
+  }
+
+  async function handleConnectMeta(e) {
+    e.preventDefault();
+    if (!metaForm.pageId.trim() || !metaForm.pageAccessToken.trim()) return;
+    setActionError("");
+    setBusy(true);
+    try {
+      await onConnectMeta(metaForm);
+      setMetaForm({ pageId: "", pageName: "", pageAccessToken: "" });
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η σύνδεση.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDisconnectMeta(id) {
+    if (!window.confirm("Αποσύνδεση αυτής της σελίδας Meta; Νέα leads από αυτήν δεν θα καταγράφονται πια.")) return;
+    setActionError("");
+    try {
+      await onDisconnectMeta(id);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποσύνδεση.");
+    }
+  }
+
+  async function toggleRecent() {
+    if (!showRecent) await onLoadRecentLeads();
+    setShowRecent(!showRecent);
+  }
+
+  if (!isOwner) {
+    return (
+      <div className="h-full overflow-auto">
+        <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Integrations</h1>
+        </div>
+        <div className="px-8 py-16 flex flex-col items-center gap-2 text-sm" style={{ color: C.slate }}>
+          <ShieldCheck size={28} strokeWidth={1.5} />
+          Μόνο ο ιδιοκτήτης της εταιρείας μπορεί να διαχειριστεί τα integrations.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-auto">
+      <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Integrations</h1>
+        <p className="text-sm mt-0.5" style={{ color: C.slate }}>Αυτόματη εισαγωγή επαφών από WordPress, φόρμες leadgen και Meta Lead Ads.</p>
+      </div>
+      <div className="px-8 py-4 space-y-6 max-w-3xl">
+        <ErrorNote message={error || actionError} onRetry={error ? onReload : undefined} />
+
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-sm font-semibold" style={{ color: C.ink }}>Γενικό webhook (WordPress / φόρμες / Zapier)</div>
+          </div>
+          <p className="text-xs mb-3" style={{ color: C.slate }}>
+            Δημιούργησε μία διεύθυνση ανά φόρμα/site και βάλε την ως "webhook URL" στο plugin σου (π.χ. WP Webhooks, Gravity Forms, Fluent Forms, Zapier/Make). Κάθε POST με email δημιουργεί ή ενημερώνει μια επαφή.
+          </p>
+          {loading ? (
+            <Spinner label="Φόρτωση…" />
+          ) : (
+            <>
+              {webhooks.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {webhooks.map((w) => (
+                    <div key={w.id} className="rounded-lg px-3 py-2.5" style={{ backgroundColor: C.pale }}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{w.name || "Χωρίς όνομα"}</div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => copyUrl(w.id, w.token)} title="Αντιγραφή URL" className="rounded-md p-1.5" style={{ color: C.sky }}>
+                            <Copy size={14} />
+                          </button>
+                          <button onClick={() => handleRotate(w.id)} title="Ανανέωση token" className="rounded-md p-1.5" style={{ color: C.slate }}>
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={() => handleDelete(w.id)} title="Διαγραφή" className="rounded-md p-1.5" style={{ color: C.coral }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-xs mt-1 font-mono truncate" style={{ color: C.slate }}>{webhookUrl(w.token)}</div>
+                      {copiedId === w.id && <div className="text-xs mt-1" style={{ color: C.sky }}>Αντιγράφηκε!</div>}
+                      <div className="text-xs mt-1" style={{ color: C.slate }}>
+                        {w.receivedCount} leads {w.lastReceivedAt ? `· τελευταίο ${fmtDate(w.lastReceivedAt)}` : "· κανένα ακόμα"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <form onSubmit={handleCreate} className="flex items-center gap-2">
+                <input
+                  value={newWebhookName}
+                  onChange={(e) => setNewWebhookName(e.target.value)}
+                  placeholder="Ετικέτα (π.χ. WordPress site)"
+                  className="flex-1 rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: C.line }}
+                />
+                <button
+                  disabled={busy}
+                  type="submit"
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white shrink-0"
+                  style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}
+                >
+                  <Plus size={14} /> Νέο webhook
+                </button>
+              </form>
+            </>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <div className="text-sm font-semibold mb-1" style={{ color: C.ink }}>Meta Lead Ads</div>
+          <p className="text-xs mb-3" style={{ color: C.slate }}>
+            Απευθείας σύνδεση σελίδας Facebook/Instagram μέσω Graph API. Χρειάζεται το Page ID και ένα Page Access Token με δικαίωμα leads_retrieval — δες το SETUP.md για τα βήματα δημιουργίας Meta App.
+          </p>
+          {metaConnections.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {metaConnections.map((c) => (
+                <div key={c.id} className="flex items-center justify-between rounded-lg px-3 py-2.5" style={{ backgroundColor: C.pale }}>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{c.pageName || c.pageId}</div>
+                    <div className="text-xs" style={{ color: C.slate }}>
+                      {c.receivedCount} leads {c.lastReceivedAt ? `· τελευταίο ${fmtDate(c.lastReceivedAt)}` : "· κανένα ακόμα"}
+                    </div>
+                  </div>
+                  <button onClick={() => handleDisconnectMeta(c.id)} title="Αποσύνδεση" className="rounded-md p-1.5 shrink-0" style={{ color: C.coral }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <form onSubmit={handleConnectMeta} className="space-y-2">
+            <input
+              value={metaForm.pageId}
+              onChange={(e) => setMetaForm({ ...metaForm, pageId: e.target.value })}
+              placeholder="Page ID"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: C.line }}
+            />
+            <input
+              value={metaForm.pageName}
+              onChange={(e) => setMetaForm({ ...metaForm, pageName: e.target.value })}
+              placeholder="Όνομα σελίδας (προαιρετικό)"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: C.line }}
+            />
+            <input
+              value={metaForm.pageAccessToken}
+              onChange={(e) => setMetaForm({ ...metaForm, pageAccessToken: e.target.value })}
+              placeholder="Page Access Token"
+              type="password"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: C.line }}
+            />
+            <button
+              disabled={busy}
+              type="submit"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white"
+              style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}
+            >
+              <Plus size={14} /> Σύνδεση σελίδας
+            </button>
+          </form>
+        </Card>
+
+        <div>
+          <button onClick={toggleRecent} className="text-sm font-medium flex items-center gap-1.5" style={{ color: C.sky }}>
+            <ChevronRight size={14} style={{ transform: showRecent ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
+            Πρόσφατα leads (debug)
+          </button>
+          {showRecent && (
+            <div className="mt-2 space-y-1">
+              {(!recentLeads || recentLeads.length === 0) ? (
+                <p className="text-sm" style={{ color: C.slate }}>Δεν έχει καταγραφεί κανένα lead ακόμα.</p>
+              ) : (
+                recentLeads.map((l) => (
+                  <div key={l.id} className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.pale, color: C.ink }}>
+                    {l.summary} <span style={{ color: C.slate }}>· {fmtDate(l.createdAt)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Shown right after login/reload whenever the current account has one or
 // more pending CompanyInvites (see routes/team.js#invite-existing) — i.e.
 // someone already added them by email and is waiting on a yes/no. "Αργότερα"
@@ -3858,6 +4115,11 @@ export default function App() {
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState("");
 
+  const [integrations, setIntegrations] = useState({ webhooks: [], metaConnections: [] });
+  const [integrationsLoading, setIntegrationsLoading] = useState(false);
+  const [integrationsError, setIntegrationsError] = useState("");
+  const [recentLeads, setRecentLeads] = useState([]);
+
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templatesError, setTemplatesError] = useState("");
@@ -3950,6 +4212,51 @@ export default function App() {
       setDashboardLoading(false);
     }
   }, []);
+
+  const loadIntegrations = useCallback(async () => {
+    setIntegrationsLoading(true);
+    setIntegrationsError("");
+    try {
+      setIntegrations(await api.get("/integrations"));
+    } catch (err) {
+      setIntegrationsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα integrations.");
+    } finally {
+      setIntegrationsLoading(false);
+    }
+  }, []);
+
+  const loadRecentLeads = useCallback(async () => {
+    try {
+      setRecentLeads(await api.get("/integrations/recent-leads"));
+    } catch {
+      setRecentLeads([]);
+    }
+  }, []);
+
+  async function handleCreateWebhook(name) {
+    await api.post("/integrations", { name });
+    await loadIntegrations();
+  }
+
+  async function handleRotateWebhook(id) {
+    await api.post(`/integrations/${id}/rotate`, {});
+    await loadIntegrations();
+  }
+
+  async function handleDeleteWebhook(id) {
+    await api.del(`/integrations/${id}`);
+    await loadIntegrations();
+  }
+
+  async function handleConnectMeta({ pageId, pageName, pageAccessToken }) {
+    await api.post("/integrations/meta/connections", { pageId, pageName, pageAccessToken });
+    await loadIntegrations();
+  }
+
+  async function handleDisconnectMeta(id) {
+    await api.del(`/integrations/meta/connections/${id}`);
+    await loadIntegrations();
+  }
 
   const loadTemplates = useCallback(async () => {
     setTemplatesLoading(true);
@@ -4060,12 +4367,13 @@ export default function App() {
     if (view === "analytics") loadAnalytics();
     if (view === "inbox") loadActivity();
     if (view === "dashboard") loadDashboard();
+    if (view === "integrations") loadIntegrations();
     // Running campaigns send in the background via the scheduler, one
     // recipient at a time — reload whenever this tab is actually open so
     // progress (sent/pending counts) looks live rather than stuck at
     // whatever it was on last page load.
     if (view === "campaigns") loadCampaigns();
-  }, [view, authState, loadAnalytics, loadActivity, loadDashboard, loadCampaigns]);
+  }, [view, authState, loadAnalytics, loadActivity, loadDashboard, loadIntegrations, loadCampaigns]);
 
   useEffect(() => {
     if (authState !== "authed") return;
@@ -4448,6 +4756,7 @@ export default function App() {
           <NavItem icon={Megaphone} label="Campaigns" active={view === "campaigns"} onClick={() => { setView("campaigns"); setSidebarOpen(false); }} count={counts.campaigns} />
           <NavItem icon={BarChart3} label="Analytics" active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
           <NavItem icon={UserPlus} label="Ομάδα" active={view === "team"} onClick={() => { setView("team"); setSidebarOpen(false); }} />
+          <NavItem icon={Globe} label="Integrations" active={view === "integrations"} onClick={() => { setView("integrations"); setSidebarOpen(false); }} />
         </div>
 
         {user?.memberships?.length > 1 && (
@@ -4602,6 +4911,22 @@ export default function App() {
               onExport={handleExportTeamData}
               gmailAccounts={user?.gmailAccounts}
               onDisconnectMailbox={handleDisconnectMailbox}
+            />
+          )}
+          {view === "integrations" && (
+            <IntegrationsView
+              data={integrations}
+              loading={integrationsLoading}
+              error={integrationsError}
+              onReload={loadIntegrations}
+              isOwner={user?.role === "owner"}
+              onCreateWebhook={handleCreateWebhook}
+              onRotateWebhook={handleRotateWebhook}
+              onDeleteWebhook={handleDeleteWebhook}
+              onConnectMeta={handleConnectMeta}
+              onDisconnectMeta={handleDisconnectMeta}
+              recentLeads={recentLeads}
+              onLoadRecentLeads={loadRecentLeads}
             />
           )}
         </div>

@@ -57,6 +57,7 @@ const ERROR_MESSAGES = {
   daily_send_cap_reached: "Συμπληρώθηκε το ημερήσιο όριο αποστολών.",
   admin_only: "Απαιτούνται δικαιώματα διαχειριστή πλατφόρμας.",
   owner_only: "Απαιτούνται δικαιώματα ιδιοκτήτη εταιρείας.",
+  page_already_connected: "Αυτή η σελίδα Meta είναι ήδη συνδεδεμένη.",
 };
 
 export class ApiError extends Error {
