@@ -1,7 +1,8 @@
 const { v4: uuid } = require("uuid");
 const prisma = require("../db");
 const { sendTrackedEmail, isAuthError, flagNeedsReconnect } = require("./gmailClient");
-const { DAILY_CAP, resetDailyCounterIfNeeded } = require("./emailCap");
+const { pickSendableMailbox, mailboxUsedUpdate } = require("./emailCap");
+const { weeklyDigestTick } = require("./weeklyDigest");
 const { captureException } = require("./sentry");
 
 async function processDueEnrollments() {
@@ -106,27 +107,13 @@ async function sendNextStep(enrollment) {
     return;
   }
 
-  let gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: sequence.companyId } });
-  if (!gmailAccount) {
-    // Nobody on this company has connected Gmail yet — leave the enrollment
-    // due as-is rather than failing it; it'll send as soon as someone connects.
-    return;
-  }
-  if (gmailAccount.needsReconnect) {
-    // Already known-broken (revoked/expired refresh token) — don't hammer
-    // Gmail (or the logs) every tick. Leave due; it'll resume the moment an
-    // owner reconnects (see routes/auth.js google/callback, which clears
-    // this flag).
-    return;
-  }
-  gmailAccount = await resetDailyCounterIfNeeded(gmailAccount);
-
-  if (gmailAccount.emailsSentToday >= DAILY_CAP) {
-    // Don't send, don't advance — just leave it due so it goes out once the
-    // cap resets. Protects the connected Gmail account from being flagged
-    // for high-volume sending.
-    return;
-  }
+  // Picks whichever of this company's connected mailboxes is sendable right
+  // now (healthy + under today's cap), rotating across the pool — see
+  // lib/emailCap.js#pickSendableMailbox. Returns null for every reason a
+  // single mailbox used to fail this check (none connected, all broken, all
+  // capped) — same "leave it due, retry next tick" handling either way.
+  const gmailAccount = await pickSendableMailbox(sequence.companyId);
+  if (!gmailAccount) return;
 
   const trackingId = uuid();
   let gmailMessageId;
@@ -159,7 +146,7 @@ async function sendNextStep(enrollment) {
         trackingId,
       },
     }),
-    prisma.gmailAccount.update({ where: { id: gmailAccount.id }, data: { emailsSentToday: { increment: 1 } } }),
+    mailboxUsedUpdate(gmailAccount.id),
     prisma.contact.update({
       where: { id: contact.id },
       data: { status: contact.status === "new" ? "contacted" : contact.status, lastActivityAt: new Date() },
@@ -219,12 +206,8 @@ async function sendNextCampaignRecipient(campaign) {
     return;
   }
 
-  let gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: campaign.companyId } });
-  if (!gmailAccount) return; // not connected — recipient stays pending, retried next tick
-  if (gmailAccount.needsReconnect) return; // known-broken connection — see sendNextStep above
-
-  gmailAccount = await resetDailyCounterIfNeeded(gmailAccount);
-  if (gmailAccount.emailsSentToday >= DAILY_CAP) return; // leave pending, retry once the cap resets
+  const gmailAccount = await pickSendableMailbox(campaign.companyId);
+  if (!gmailAccount) return; // no sendable mailbox right now — recipient stays pending, retried next tick
 
   const trackingId = uuid();
   let gmailMessageId;
@@ -260,7 +243,7 @@ async function sendNextCampaignRecipient(campaign) {
         trackingId,
       },
     }),
-    prisma.gmailAccount.update({ where: { id: gmailAccount.id }, data: { emailsSentToday: { increment: 1 } } }),
+    mailboxUsedUpdate(gmailAccount.id),
     prisma.contact.update({
       where: { id: contact.id },
       data: { status: contact.status === "new" ? "contacted" : contact.status, lastActivityAt: new Date() },
@@ -324,12 +307,24 @@ async function campaignTick() {
   setTimeout(campaignTick, campaignIntervalMs);
 }
 
+// Weekly digest doesn't need backoff logic like the two ticks above — it's
+// cheap (one query to find due companies, usually zero of them on any given
+// check) and its own "due" window is already 7 days wide, so a fixed
+// several-hour cadence is simply "check a few times a day, act on whichever
+// companies cross the 7-day line since last send." No need for exact cron
+// timing (see weeklyDigest.js's getCompaniesDueForDigest comment).
+const DIGEST_INTERVAL_MS = 4 * 60 * 60 * 1000; // every 4 hours
+
 function startScheduler() {
   enrollmentTick();
   console.log(`Sequence scheduler started (every ${ENROLLMENT_BASE_MS / 60000} min, backs off to ${ENROLLMENT_MAX_MS / 60000} min when idle).`);
 
   campaignTick();
   console.log(`Campaign scheduler started (every ${CAMPAIGN_BASE_MS / 60000} min, backs off to ${CAMPAIGN_MAX_MS / 60000} min when idle).`);
+
+  weeklyDigestTick();
+  setInterval(weeklyDigestTick, DIGEST_INTERVAL_MS);
+  console.log(`Weekly digest checker started (every ${DIGEST_INTERVAL_MS / 3600000} h).`);
 }
 
 module.exports = { startScheduler, processDueEnrollments, processDueCampaigns };

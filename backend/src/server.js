@@ -24,6 +24,7 @@ const offerRoutes = require("./routes/offers");
 const sendRoutes = require("./routes/send");
 const campaignRoutes = require("./routes/campaigns");
 const teamRoutes = require("./routes/team");
+const dashboardRoutes = require("./routes/dashboard");
 const { startScheduler } = require("./lib/scheduler");
 const prisma = require("./db");
 
@@ -136,6 +137,7 @@ app.use("/offers", offerRoutes);
 app.use("/send", sendRoutes);
 app.use("/campaigns", campaignRoutes);
 app.use("/team", teamRoutes);
+app.use("/dashboard", dashboardRoutes);
 app.use("/analytics", analyticsRoutes);
 app.use("/track", trackingRoutes); // no auth — see routes/tracking.js for why
 
@@ -206,24 +208,17 @@ async function ensureCompanyAssignment() {
       prisma.emailLog.updateMany({ where: { companyId: null }, data: { companyId } }),
     ]);
 
-    // GmailAccount.companyId is unique — one shared mailbox per company.
-    // If more than one pre-existing user had separately connected their own
-    // Gmail account before this round (unlikely on this account, but
-    // possible), only the earliest connection can be attached to the legacy
-    // company; any others are left as orphaned rows (not deleted, just no
-    // longer reachable) rather than guessing which one to keep.
-    const orphanedGmailAccounts = await prisma.gmailAccount.findMany({
+    // A company can hold more than one connected mailbox now (see
+    // schema.prisma's GmailAccount + lib/emailCap.js#pickSendableMailbox),
+    // so every pre-existing orphaned connection can join the legacy
+    // company's pool — nothing has to be picked/discarded the way a single
+    // companyId slot used to force.
+    const { count: reattachedGmailAccounts } = await prisma.gmailAccount.updateMany({
       where: { companyId: null },
-      orderBy: { createdAt: "asc" },
+      data: { companyId },
     });
-    if (orphanedGmailAccounts.length > 0) {
-      await prisma.gmailAccount.update({ where: { id: orphanedGmailAccounts[0].id }, data: { companyId } });
-      if (orphanedGmailAccounts.length > 1) {
-        console.warn(
-          `ensureCompanyAssignment: ${orphanedGmailAccounts.length - 1} extra pre-existing Gmail connection(s) ` +
-            `left unattached — only one company-wide connection is supported now.`
-        );
-      }
+    if (reattachedGmailAccounts > 0) {
+      console.log(`ensureCompanyAssignment: reattached ${reattachedGmailAccounts} pre-existing Gmail connection(s) to company ${companyId}`);
     }
 
     console.log(`ensureCompanyAssignment: backfilled ${orphanedUsers.length} user(s) into company ${companyId}`);

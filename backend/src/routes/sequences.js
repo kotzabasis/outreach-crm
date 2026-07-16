@@ -192,8 +192,13 @@ router.post("/:id/steps/:stepId/test-send", async (req, res) => {
   const step = await prisma.sequenceStep.findFirst({ where: { id: req.params.stepId, sequenceId: sequence.id } });
   if (!step) return res.status(404).json({ error: "not_found" });
 
-  const gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: req.user.companyId } });
-  if (!gmailAccount) return res.status(400).json({ error: "gmail_not_connected" });
+  // Doesn't count against the daily cap or the round-robin cursor (no
+  // EmailLog created either — see comment above), so just grab any healthy
+  // connected mailbox rather than going through pickSendableMailbox's
+  // cap-aware rotation.
+  const gmailAccounts = await prisma.gmailAccount.findMany({ where: { companyId: req.user.companyId }, orderBy: { createdAt: "asc" } });
+  if (gmailAccounts.length === 0) return res.status(400).json({ error: "gmail_not_connected" });
+  const gmailAccount = gmailAccounts.find((g) => !g.needsReconnect) || gmailAccounts[0];
 
   const emailParsed = z.string().email().safeParse((req.body.testEmail || gmailAccount.email || "").trim());
   if (!emailParsed.success) return res.status(400).json({ error: "invalid_test_email" });

@@ -2849,6 +2849,94 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
   );
 }
 
+// "Due today" dashboard — the one view meant to be opened first each
+// morning. Aggregates two independent kinds of "due" (manual follow-up
+// reminders on a contact, and automatic sequence sends) into a single list,
+// each row jumping into the contact's detail drawer via onSelectContact
+// (same relay used by global search — see handleSelectFromSearch in App()).
+function DashboardView({ dashboard, loading, error, onReload, onSelectContact }) {
+  const { followUps = [], sends = [] } = dashboard;
+
+  return (
+    <div className="h-full overflow-auto">
+      <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Σήμερα</h1>
+        <p className="text-sm mt-0.5" style={{ color: C.slate }}>Ό,τι είναι εκκρεμές ή έληξε σήμερα — follow-ups και αυτόματα sequence sends.</p>
+      </div>
+      <div className="px-8 py-4 space-y-6">
+        <ErrorNote message={error} onRetry={onReload} />
+        {loading ? (
+          <Spinner label="Φόρτωση…" />
+        ) : followUps.length === 0 && sends.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
+            <CalendarClock size={28} strokeWidth={1.5} />
+            Τίποτα εκκρεμές για σήμερα.
+          </div>
+        ) : (
+          <>
+            <div>
+              <h2 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: C.ink }}>
+                <StickyNote size={14} /> Follow-ups ({followUps.length})
+              </h2>
+              {followUps.length === 0 ? (
+                <p className="text-sm" style={{ color: C.slate }}>Κανένα follow-up εκκρεμές.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {followUps.map((f) => (
+                    <button
+                      key={f.contactId}
+                      onClick={() => onSelectContact(f.contactId)}
+                      className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-left"
+                      style={{ backgroundColor: C.pale }}
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{f.contactName || f.contactEmail}</div>
+                        <div className="text-xs truncate" style={{ color: C.slate }}>{f.contactCompany || f.contactEmail}</div>
+                      </div>
+                      <span className="text-xs shrink-0 ml-3" style={{ color: f.overdue ? C.coral : C.slate }}>
+                        {f.overdue ? "εκπρόθεσμο" : "σήμερα"} · {fmtDate(f.dueAt)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h2 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: C.ink }}>
+                <Layers size={14} /> Αυτόματα sends ({sends.length})
+              </h2>
+              {sends.length === 0 ? (
+                <p className="text-sm" style={{ color: C.slate }}>Κανένα sequence send εκκρεμές.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {sends.map((s) => (
+                    <button
+                      key={s.enrollmentId}
+                      onClick={() => onSelectContact(s.contactId)}
+                      className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-left"
+                      style={{ backgroundColor: C.pale }}
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{s.contactName || s.contactEmail}</div>
+                        <div className="text-xs truncate" style={{ color: C.slate }}>
+                          {s.sequenceName}{s.stepSubject ? ` · ${s.stepSubject}` : ""}
+                        </div>
+                      </div>
+                      <span className="text-xs shrink-0 ml-3" style={{ color: s.overdue ? C.coral : C.slate }}>
+                        {s.overdue ? "εκπρόθεσμο" : "σήμερα"} · {fmtDate(s.dueAt)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContactId }) {
   const [minimized, setMinimized] = useState(false);
   const [contactId, setContactId] = useState(initialContactId || "");
@@ -3493,12 +3581,14 @@ function InviteExistingModal({ onClose, onInvite }) {
 // Visible to every teammate; only an "owner" gets invite/remove actions.
 // Deliberately no "promote to owner" here yet — one owner per company this
 // round, matching the backend (routes/team.js refuses to remove an owner).
-function TeamView({ members, loading, error, onReload, onInvite, onRemove, currentUserId, isOwner, invites, onInviteExisting, onRevokeInvite, onExport }) {
+function TeamView({ members, loading, error, onReload, onInvite, onRemove, currentUserId, isOwner, invites, onInviteExisting, onRevokeInvite, onExport, gmailAccounts, onDisconnectMailbox }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [showExisting, setShowExisting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [mailboxBusyId, setMailboxBusyId] = useState(null);
+  const [mailboxError, setMailboxError] = useState("");
 
   async function handleRemove(m) {
     if (!window.confirm(`Αφαίρεση του/της ${m.name || m.email} από την ομάδα;`)) return;
@@ -3507,6 +3597,19 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
       await onRemove(m.id);
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function handleDisconnectMailbox(acc) {
+    if (!window.confirm(`Αποσύνδεση του mailbox ${acc.email}; Οι αποστολές που το χρησιμοποιούσαν θα περάσουν στα υπόλοιπα συνδεδεμένα mailbox.`)) return;
+    setMailboxError("");
+    setMailboxBusyId(acc.id);
+    try {
+      await onDisconnectMailbox(acc.id);
+    } catch (err) {
+      setMailboxError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποσύνδεση.");
+    } finally {
+      setMailboxBusyId(null);
     }
   }
 
@@ -3563,6 +3666,48 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
                 </div>
               ))}
             </div>
+          </Card>
+        )}
+        {isOwner && (
+          <Card className="p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium" style={{ color: C.ink }}>Συνδεδεμένα mailbox</div>
+              <a
+                href={`${API_URL}/auth/google`}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
+                style={{ backgroundColor: C.sky }}
+              >
+                <Mail size={13} /> Σύνδεση mailbox
+              </a>
+            </div>
+            <p className="text-xs mb-3" style={{ color: C.slate }}>
+              Οι αποστολές μοιράζονται αυτόματα ανάμεσα σε όλα τα συνδεδεμένα mailbox — περισσότερα mailbox σημαίνουν μεγαλύτερη ημερήσια χωρητικότητα αποστολών.
+            </p>
+            <ErrorNote message={mailboxError} />
+            {(!gmailAccounts || gmailAccounts.length === 0) ? (
+              <p className="text-sm" style={{ color: C.slate }}>Δεν έχει συνδεθεί κανένα mailbox ακόμα.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {gmailAccounts.map((acc) => (
+                  <div key={acc.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                    <div className="text-sm" style={{ color: C.ink }}>
+                      {acc.email}
+                      <span className="ml-2 text-xs" style={{ color: acc.needsReconnect ? C.coral : C.slate }}>
+                        {acc.needsReconnect ? "χρειάζεται επανασύνδεση" : `${acc.sentToday}/${acc.dailyCap} σήμερα`}
+                      </span>
+                    </div>
+                    <button
+                      disabled={mailboxBusyId === acc.id}
+                      onClick={() => handleDisconnectMailbox(acc)}
+                      title="Αποσύνδεση"
+                      style={{ color: C.coral, opacity: mailboxBusyId === acc.id ? 0.6 : 1 }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         )}
         {loading ? (
@@ -3684,7 +3829,7 @@ function InviteResponseModal({ invites, onAccept, onDecline, onDismiss }) {
 export default function App() {
   const [authState, setAuthState] = useState("loading"); // loading | anon | authed
   const [user, setUser] = useState(null);
-  const [view, setView] = useState("inbox");
+  const [view, setView] = useState("dashboard");
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeContactId, setComposeContactId] = useState("");
   const [pendingOpenContactId, setPendingOpenContactId] = useState("");
@@ -3708,6 +3853,10 @@ export default function App() {
   const [activity, setActivity] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState("");
+
+  const [dashboard, setDashboard] = useState({ followUps: [], sends: [], counts: { followUps: 0, sends: 0 } });
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState("");
 
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -3790,6 +3939,18 @@ export default function App() {
     }
   }, []);
 
+  const loadDashboard = useCallback(async () => {
+    setDashboardLoading(true);
+    setDashboardError("");
+    try {
+      setDashboard(await api.get("/dashboard/due-today"));
+    } catch (err) {
+      setDashboardError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα σημερινά.");
+    } finally {
+      setDashboardLoading(false);
+    }
+  }, []);
+
   const loadTemplates = useCallback(async () => {
     setTemplatesLoading(true);
     setTemplatesError("");
@@ -3851,10 +4012,11 @@ export default function App() {
     loadSequences();
     loadAnalytics();
     loadActivity();
+    loadDashboard();
     loadTemplates();
     loadOffers();
     loadCampaigns();
-  }, [loadContacts, loadSequences, loadAnalytics, loadActivity, loadTemplates, loadOffers, loadCampaigns]);
+  }, [loadContacts, loadSequences, loadAnalytics, loadActivity, loadDashboard, loadTemplates, loadOffers, loadCampaigns]);
 
   // Session check on mount, plus handling the redirect back from Google OAuth
   // (?gmail_connected=1|0) without leaving it sitting in the address bar.
@@ -3897,12 +4059,13 @@ export default function App() {
     if (authState !== "authed") return;
     if (view === "analytics") loadAnalytics();
     if (view === "inbox") loadActivity();
+    if (view === "dashboard") loadDashboard();
     // Running campaigns send in the background via the scheduler, one
     // recipient at a time — reload whenever this tab is actually open so
     // progress (sent/pending counts) looks live rather than stuck at
     // whatever it was on last page load.
     if (view === "campaigns") loadCampaigns();
-  }, [view, authState, loadAnalytics, loadActivity, loadCampaigns]);
+  }, [view, authState, loadAnalytics, loadActivity, loadDashboard, loadCampaigns]);
 
   useEffect(() => {
     if (authState !== "authed") return;
@@ -3915,10 +4078,11 @@ export default function App() {
       if (document.hidden) return;
       loadAnalytics();
       loadActivity();
+      loadDashboard();
       loadCampaigns();
     }, 90000); // was 30s — 90s cuts request volume/egress 3x with no real loss of freshness
     return () => clearInterval(id);
-  }, [authState, loadAnalytics, loadActivity, loadCampaigns]);
+  }, [authState, loadAnalytics, loadActivity, loadDashboard, loadCampaigns]);
 
   useEffect(() => {
     if (authState !== "authed") return;
@@ -4199,6 +4363,13 @@ export default function App() {
     await api.post(`/team/invites/${id}/decline`);
     setUser((u) => (u ? { ...u, pendingInvites: (u.pendingInvites || []).filter((i) => i.id !== id) } : u));
   }
+  async function handleDisconnectMailbox(gmailAccountId) {
+    await api.post("/auth/google/disconnect", { gmailAccountId });
+    // The Gmail summary/list lives on `user`, not a separately-loaded
+    // resource — simplest to just re-fetch it rather than hand-patch the
+    // aggregate sentToday/dailyCap/needsReconnect fields on the frontend.
+    setUser(await api.get("/auth/me"));
+  }
 
   if (authState === "loading") {
     return (
@@ -4221,6 +4392,7 @@ export default function App() {
 
   const counts = {
     inbox: activity.length,
+    dueToday: (dashboard.counts?.followUps || 0) + (dashboard.counts?.sends || 0),
     contacts: contacts.length,
     sequences: sequences.filter((s) => s.active).length,
     templates: templates.length,
@@ -4267,6 +4439,7 @@ export default function App() {
         <GlobalSearch onSelectContact={handleSelectFromSearch} />
 
         <div className="px-3 space-y-0.5 flex-1">
+          <NavItem icon={CalendarClock} label="Σήμερα" active={view === "dashboard"} onClick={() => { setView("dashboard"); setSidebarOpen(false); }} count={counts.dueToday} />
           <NavItem icon={Mail} label="Απεσταλμένα" active={view === "inbox"} onClick={() => { setView("inbox"); setSidebarOpen(false); }} count={counts.inbox} />
           <NavItem icon={Users} label="Επαφές" active={view === "contacts"} onClick={() => { setView("contacts"); setSidebarOpen(false); }} count={counts.contacts} />
           <NavItem icon={Layers} label="Sequences" active={view === "sequences"} onClick={() => { setView("sequences"); setSidebarOpen(false); }} count={counts.sequences} />
@@ -4324,6 +4497,9 @@ export default function App() {
         )}
         <GmailBanner user={user} />
         <div className="flex-1 min-w-0">
+          {view === "dashboard" && (
+            <DashboardView dashboard={dashboard} loading={dashboardLoading} error={dashboardError} onReload={loadDashboard} onSelectContact={handleSelectFromSearch} />
+          )}
           {view === "inbox" && (
             <InboxView activity={activity} loading={activityLoading} error={activityError} onReload={loadActivity} setComposeOpen={setComposeOpen} />
           )}
@@ -4424,6 +4600,8 @@ export default function App() {
               onInviteExisting={handleInviteExistingTeammate}
               onRevokeInvite={handleRevokeInvite}
               onExport={handleExportTeamData}
+              gmailAccounts={user?.gmailAccounts}
+              onDisconnectMailbox={handleDisconnectMailbox}
             />
           )}
         </div>

@@ -503,14 +503,20 @@ function CompanyStatsModal({ company, onClose }) {
             </div>
 
             <div>
-              <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>Gmail</div>
-              <p className="text-sm" style={{ color: stats.gmail?.needsReconnect ? C.coral : C.ink }}>
-                {stats.gmail
-                  ? stats.gmail.needsReconnect
-                    ? `${stats.gmail.email} — η σύνδεση χρειάζεται επανασύνδεση (η αποστολή έχει σταματήσει)`
-                    : stats.gmail.email
-                  : "Δεν έχει συνδεθεί ακόμα."}
-              </p>
+              <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>
+                Gmail {stats.gmailAccounts?.length > 1 ? `(${stats.gmailAccounts.length} mailbox)` : ""}
+              </div>
+              {!stats.gmailAccounts || stats.gmailAccounts.length === 0 ? (
+                <p className="text-sm" style={{ color: C.ink }}>Δεν έχει συνδεθεί ακόμα.</p>
+              ) : (
+                <div className="space-y-1">
+                  {stats.gmailAccounts.map((g, i) => (
+                    <p key={i} className="text-sm" style={{ color: g.needsReconnect ? C.coral : C.ink }}>
+                      {g.needsReconnect ? `${g.email} — χρειάζεται επανασύνδεση` : g.email}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
 
             {Object.keys(stats.contacts.byStatus).length > 0 && (

@@ -166,6 +166,11 @@ model Company {
   address    String?
   phone      String?
   email      String?
+  // Last time the weekly performance digest (lib/weeklyDigest.js) was sent
+  // to this company's owner(s). Null means "never sent" — treated the same
+  // as "more than 7 days ago" so a brand-new company gets its first digest
+  // on the next scheduler pass rather than waiting a full week.
+  lastDigestSentAt DateTime?
 
   users        User[]
   contacts     Contact[]
@@ -175,7 +180,13 @@ model Company {
   contactNotes ContactNote[]
   emailLogs    EmailLog[]
   campaigns    Campaign[]
-  gmailAccount GmailAccount?
+  // A list now, not a single optional object — GmailAccount.companyId lost
+  // its @unique constraint this round (see that model's comment) so a
+  // company can have more than one connected mailbox. A to-one Prisma
+  // relation requires a unique foreign key on the referencing side, so this
+  // HAD to become a list in lockstep with that change, or schema validation
+  // would fail (a stale to-one relation pointing at a now-non-unique field).
+  gmailAccounts GmailAccount[]
   memberships  Membership[]
   invites      CompanyInvite[]
   auditLogs    AuditLog[]
@@ -217,9 +228,15 @@ model Template {
   updatedAt   DateTime @updatedAt
 }
 
-// A user's connected Gmail account, used only for sending. Separate from
-// User so login (email/password) and the Gmail connection can change
-// independently — e.g. reconnecting a different Gmail account later.
+// A connected Gmail mailbox used for sending. Separate from User so login
+// (email/password) and the Gmail connection can change independently — e.g.
+// reconnecting a different Gmail account later.
+//
+// A company can now have MORE THAN ONE of these (companyId is no longer
+// @unique — see lib/emailCap.js#pickSendableMailbox, which round-robins
+// across every healthy, under-cap mailbox for a company). This is purely
+// additive: a company that has only ever connected one mailbox behaves
+// exactly as before, just with a "pool" of size one.
 model GmailAccount {
   id                    String   @id @default(uuid())
   // Historical: who performed the OAuth connect — audit only now, not the
@@ -230,10 +247,13 @@ model GmailAccount {
   // can't trigger a destructive column-drop against the live table.
   userId                String?
   user                  User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  // One connected mailbox per company. Nullable only for the same migration
-  // reason as User.companyId — ensureCompanyAssignment (server.js) backfills
-  // it on boot, and every write path after that guarantees it's set.
-  companyId             String?  @unique
+  // Nullable for the same migration reason as User.companyId —
+  // ensureCompanyAssignment (server.js) backfills it on boot, and every
+  // write path after that guarantees it's set. No longer @unique (see model
+  // comment above) — was relaxed once already for a different reason
+  // (nullable), this round drops the uniqueness constraint itself so a
+  // company can connect more than one mailbox.
+  companyId             String?
   company               Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   googleId              String   @unique
   email                 String
@@ -251,6 +271,14 @@ model GmailAccount {
   // reconnects, which clears both fields (see routes/auth.js google/callback).
   needsReconnect        Boolean   @default(false)
   authErrorAt           DateTime?
+  // Round-robin cursor: whichever healthy, under-cap mailbox in the company's
+  // pool was used longest ago (or never) is picked next — see
+  // lib/emailCap.js#pickSendableMailbox. Null means "never sent from,"
+  // which naturally sorts first (a brand-new mailbox gets used immediately
+  // rather than waiting behind ones with real send history).
+  lastUsedAt            DateTime?
+
+  @@index([companyId])
 }
 
 model Contact {

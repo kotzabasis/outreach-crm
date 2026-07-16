@@ -24,30 +24,47 @@ const credentialsSchema = z.object({
   name: z.string().min(1).max(200).optional(),
 });
 
+// Read-only "as of right now" view of the same counter scheduler.js/send.js
+// actually enforce — computed here rather than written, so simply loading
+// this page never mutates the send counter. The authoritative reset+
+// increment only ever happens at actual send time (lib/emailCap.js).
+function summarizeMailbox(gmailAccount) {
+  const hoursSinceReset = (Date.now() - new Date(gmailAccount.sendCounterResetAt).getTime()) / 36e5;
+  return {
+    id: gmailAccount.id,
+    email: gmailAccount.email,
+    connectedAt: gmailAccount.createdAt,
+    sentToday: hoursSinceReset >= 24 ? 0 : gmailAccount.emailsSentToday,
+    dailyCap: DAILY_CAP,
+    needsReconnect: gmailAccount.needsReconnect,
+  };
+}
+
 // `context` is the resolved active-company info from
 // resolveMembershipContext (companyId/role/company/memberships) — always
 // pass it rather than reading company/role straight off the raw User row,
 // since a user can now belong to more than one company and this is what
 // decides which one is "active" for them right now.
-function publicUser(user, gmailAccount, context, pendingInvites = []) {
-  let gmail = null;
-  if (gmailAccount) {
-    // Read-only "as of right now" view of the same counter scheduler.js/
-    // send.js actually enforce — computed here rather than written, so
-    // simply loading this page never mutates the send counter. The
-    // authoritative reset+increment only ever happens at actual send time.
-    const hoursSinceReset = (Date.now() - new Date(gmailAccount.sendCounterResetAt).getTime()) / 36e5;
-    gmail = {
-      email: gmailAccount.email,
-      connectedAt: gmailAccount.createdAt,
-      sentToday: hoursSinceReset >= 24 ? 0 : gmailAccount.emailsSentToday,
-      dailyCap: DAILY_CAP,
-      // True once a send has failed with a Gmail auth error (revoked/expired
-      // access) — see lib/gmailClient.js#isAuthError. The scheduler stops
-      // trying to send for this account until an owner reconnects.
-      needsReconnect: gmailAccount.needsReconnect,
-    };
-  }
+//
+// `gmailAccounts` is every connected mailbox for the active company (a
+// company can have more than one now — see schema.prisma's GmailAccount).
+// `gmail` stays as a single aggregate object for backward compat with
+// GmailBanner and anything else that only cares about "can we send / are we
+// close to a limit," summed across the whole pool; `gmailAccounts` is the
+// detailed per-mailbox list the Team page's mailbox-management UI needs.
+function publicUser(user, gmailAccounts, context, pendingInvites = []) {
+  const accounts = (gmailAccounts || []).map(summarizeMailbox);
+  const gmail =
+    accounts.length === 0
+      ? null
+      : {
+          sentToday: accounts.reduce((sum, a) => sum + a.sentToday, 0),
+          dailyCap: DAILY_CAP * accounts.length,
+          // Only a company-wide "nothing can send" situation blocks things —
+          // one broken mailbox out of three just means less rotation, not a
+          // dead connection, so this is true only once EVERY mailbox is broken.
+          needsReconnect: accounts.every((a) => a.needsReconnect),
+        };
   return {
     id: user.id,
     email: user.email,
@@ -66,10 +83,10 @@ function publicUser(user, gmailAccount, context, pendingInvites = []) {
     // (see App.jsx). Not company-scoped like `memberships` above, since an
     // invite can be for a company this user has no relationship with yet.
     pendingInvites,
-    // The connected Gmail account is now shared company-wide, not per-person
-    // — every teammate sees the same "gmail" block once anyone on the team
-    // has connected it.
+    // Aggregate summary (backward-compat shape) + the detailed per-mailbox
+    // list — see the function comment above.
     gmail,
+    gmailAccounts: accounts,
   };
 }
 
@@ -139,7 +156,7 @@ router.post("/register", async (req, res) => {
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
     req.session.userId = user.id;
-    res.status(201).json(publicUser(user, null, context, pendingInvites));
+    res.status(201).json(publicUser(user, [], context, pendingInvites));
   });
 });
 
@@ -173,17 +190,18 @@ router.post("/login", async (req, res) => {
     return res.status(403).json({ error: "company_suspended" });
   }
 
-  // Shared per-company mailbox now, not per-person — every teammate logging
-  // in sees the same connected Gmail account for whichever company is active.
-  const gmailAccount = context.companyId
-    ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
-    : null;
+  // Shared per-company mailbox pool now, not per-person — every teammate
+  // logging in sees the same connected mailboxes for whichever company is
+  // active (a company can have more than one — see schema.prisma).
+  const gmailAccounts = context.companyId
+    ? await prisma.gmailAccount.findMany({ where: { companyId: context.companyId } })
+    : [];
   const pendingInvites = await pendingInvitesForEmail(user.email);
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "session_error" });
     req.session.userId = user.id;
-    res.json(publicUser(user, gmailAccount, context, pendingInvites));
+    res.json(publicUser(user, gmailAccounts, context, pendingInvites));
   });
 });
 
@@ -256,11 +274,11 @@ router.get("/me", async (req, res) => {
   if (context.company && context.company.status === "suspended") {
     return res.status(403).json({ error: "company_suspended" });
   }
-  const gmailAccount = context.companyId
-    ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
-    : null;
+  const gmailAccounts = context.companyId
+    ? await prisma.gmailAccount.findMany({ where: { companyId: context.companyId } })
+    : [];
   const pendingInvites = await pendingInvitesForEmail(user.email);
-  res.json(publicUser(user, gmailAccount, context, pendingInvites));
+  res.json(publicUser(user, gmailAccounts, context, pendingInvites));
 });
 
 // Lets a user with more than one Membership pick which company they're
@@ -281,11 +299,11 @@ router.post("/switch-company", requireAuth, async (req, res) => {
   req.session.activeCompanyId = targetCompanyId;
 
   const context = await resolveMembershipContext(prisma, req.user, req.session);
-  const gmailAccount = context.companyId
-    ? await prisma.gmailAccount.findUnique({ where: { companyId: context.companyId } })
-    : null;
+  const gmailAccounts = context.companyId
+    ? await prisma.gmailAccount.findMany({ where: { companyId: context.companyId } })
+    : [];
   const pendingInvites = await pendingInvitesForEmail(req.user.email);
-  res.json(publicUser(req.user, gmailAccount, context, pendingInvites));
+  res.json(publicUser(req.user, gmailAccounts, context, pendingInvites));
 });
 
 // --- Gmail connection (separate from app login) ---
@@ -334,32 +352,39 @@ router.get("/google/callback", async (req, res) => {
         .send("Google didn't return a refresh token. Revoke access at myaccount.google.com/permissions and try again.");
     }
 
-    await prisma.gmailAccount.upsert({
-      where: { companyId },
-      update: {
-        userId: req.session.userId, // who (re)connected it — audit only
-        googleId: profile.id,
-        email: profile.email,
-        encryptedAccessToken: encrypt(tokens.access_token),
-        encryptedRefreshToken: encrypt(tokens.refresh_token),
-        tokenExpiry: new Date(tokens.expiry_date),
-        // A fresh, successful OAuth grant means access is good again — clear
-        // any earlier auth-failure flag (see lib/gmailClient.js#isAuthError)
-        // so the scheduler resumes sending for this company.
-        needsReconnect: false,
-        authErrorAt: null,
-      },
-      create: {
-        id: uuid(),
-        companyId,
-        userId: req.session.userId,
-        googleId: profile.id,
-        email: profile.email,
-        encryptedAccessToken: encrypt(tokens.access_token),
-        encryptedRefreshToken: encrypt(tokens.refresh_token),
-        tokenExpiry: new Date(tokens.expiry_date),
-      },
-    });
+    const tokenData = {
+      userId: req.session.userId, // who (re)connected it — audit only
+      email: profile.email,
+      encryptedAccessToken: encrypt(tokens.access_token),
+      encryptedRefreshToken: encrypt(tokens.refresh_token),
+      tokenExpiry: new Date(tokens.expiry_date),
+      // A fresh, successful OAuth grant means access is good again — clear
+      // any earlier auth-failure flag (see lib/gmailClient.js#isAuthError)
+      // so sending resumes for this mailbox.
+      needsReconnect: false,
+      authErrorAt: null,
+    };
+
+    // A company can have more than one connected mailbox now (see
+    // schema.prisma's GmailAccount) — googleId, not companyId, is what
+    // identifies "is this the SAME Gmail account being reconnected, or a
+    // brand-new one being added to the pool." Matching on companyId alone
+    // (the old, one-mailbox-per-company behavior) would silently overwrite
+    // a DIFFERENT already-connected mailbox the instant a second Google
+    // account tried to connect.
+    const existing = await prisma.gmailAccount.findUnique({ where: { googleId: profile.id } });
+    if (existing && existing.companyId !== companyId) {
+      // This exact Google account is already connected to a different
+      // company — refuse rather than silently moving it out from under
+      // whoever's using it there.
+      return res.redirect(`${process.env.FRONTEND_URL}/?gmail_connected=0&reason=already_connected_elsewhere`);
+    }
+
+    if (existing) {
+      await prisma.gmailAccount.update({ where: { id: existing.id }, data: tokenData });
+    } else {
+      await prisma.gmailAccount.create({ data: { id: uuid(), companyId, googleId: profile.id, ...tokenData } });
+    }
 
     res.redirect(`${process.env.FRONTEND_URL}/?gmail_connected=1`);
   } catch (err) {
@@ -368,8 +393,14 @@ router.get("/google/callback", async (req, res) => {
   }
 });
 
+// Disconnects one specific mailbox from the pool — needs its id now that a
+// company can have more than one (see GmailAccount in schema.prisma); a bare
+// "disconnect everything for my company" would take out every other
+// connected mailbox along with the one the owner actually meant to remove.
 router.post("/google/disconnect", requireAuth, requireOwner, async (req, res) => {
-  await prisma.gmailAccount.deleteMany({ where: { companyId: req.user.companyId } });
+  const gmailAccountId = typeof req.body.gmailAccountId === "string" ? req.body.gmailAccountId : "";
+  if (!gmailAccountId) return res.status(400).json({ error: "invalid_request" });
+  await prisma.gmailAccount.deleteMany({ where: { id: gmailAccountId, companyId: req.user.companyId } });
   res.json({ ok: true });
 });
 

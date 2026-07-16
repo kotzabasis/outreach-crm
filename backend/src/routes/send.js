@@ -5,7 +5,7 @@ const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const { sendTrackedEmail, isAuthError, flagNeedsReconnect } = require("../lib/gmailClient");
 const { attachmentsSchema } = require("../lib/attachments");
-const { DAILY_CAP, resetDailyCounterIfNeeded } = require("../lib/emailCap");
+const { DAILY_CAP, pickSendableMailbox, mailboxUsedUpdate } = require("../lib/emailCap");
 const { captureException } = require("../lib/sentry");
 
 const router = express.Router();
@@ -28,23 +28,20 @@ router.post("/", async (req, res) => {
   if (!contact) return res.status(404).json({ error: "contact_not_found" });
   if (contact.unsubscribed) return res.status(400).json({ error: "contact_unsubscribed" });
 
-  let gmailAccount = await prisma.gmailAccount.findUnique({ where: { companyId: req.user.companyId } });
-  if (!gmailAccount) return res.status(400).json({ error: "gmail_not_connected" });
-  if (gmailAccount.needsReconnect) {
-    // Same known-broken-connection flag the scheduler checks (see
-    // scheduler.js) — surfaced here as a clear error instead of a generic
-    // send_failed, since the fix (reconnect) is different from a one-off
-    // send glitch.
-    return res.status(400).json({ error: "gmail_needs_reconnect" });
-  }
+  // A company can have more than one connected mailbox now (see
+  // schema.prisma's GmailAccount + lib/emailCap.js#pickSendableMailbox) — it
+  // picks whichever is healthy and under today's cap, rotating across the
+  // pool. If nothing's sendable, figure out which of the three reasons it
+  // is (never connected / every mailbox broken / every mailbox capped) so
+  // the error stays as specific as it was with a single mailbox.
+  const gmailAccounts = await prisma.gmailAccount.findMany({ where: { companyId: req.user.companyId } });
+  if (gmailAccounts.length === 0) return res.status(400).json({ error: "gmail_not_connected" });
 
-  // Manual sends used to skip this entirely — only the scheduler (sequence/
-  // campaign sends) enforced it, so someone could blow well past the daily
-  // cap via Compose alone and get the shared Gmail account flagged by
-  // Google. Same counter, same cap, all three send paths now share it (see
-  // lib/emailCap.js).
-  gmailAccount = await resetDailyCounterIfNeeded(gmailAccount);
-  if (gmailAccount.emailsSentToday >= DAILY_CAP) {
+  const gmailAccount = await pickSendableMailbox(req.user.companyId);
+  if (!gmailAccount) {
+    if (gmailAccounts.every((g) => g.needsReconnect)) {
+      return res.status(400).json({ error: "gmail_needs_reconnect" });
+    }
     return res.status(429).json({ error: "daily_send_cap_reached", limit: DAILY_CAP });
   }
 
@@ -83,7 +80,7 @@ router.post("/", async (req, res) => {
         trackingId,
       },
     }),
-    prisma.gmailAccount.update({ where: { id: gmailAccount.id }, data: { emailsSentToday: { increment: 1 } } }),
+    mailboxUsedUpdate(gmailAccount.id),
     prisma.contact.update({
       where: { id: contact.id },
       data: { status: contact.status === "new" ? "contacted" : contact.status, lastActivityAt: new Date() },
