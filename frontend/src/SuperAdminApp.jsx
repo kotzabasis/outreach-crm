@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { X, Loader2, Building2, Pencil, ShieldCheck, UserPlus, UserCheck, UserX, Trash2, LogOut } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { X, Loader2, Building2, Pencil, ShieldCheck, UserPlus, UserCheck, UserX, Trash2, LogOut, Search } from "lucide-react";
 import { api, ApiError } from "./lib/api";
 import { C, Card, Spinner, ErrorNote, StatCard, Brand, fmtMoney, fmtDate } from "./lib/ui.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
@@ -347,6 +347,19 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
   const [showNew, setShowNew] = useState(false);
   const [statsCompany, setStatsCompany] = useState(null);
   const [editCompany, setEditCompany] = useState(null);
+  const [query, setQuery] = useState("");
+
+  // Client-side filter is enough here (unlike the per-company Contacts list,
+  // which paginates server-side): `companies` is the platform's own tenant
+  // list, already loaded in full for the table above — its scale is "how
+  // many companies signed up to SDLoop", not "how many contacts one company
+  // has", so it stays comfortably small enough to filter in the browser even
+  // as it grows into the hundreds.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return companies;
+    return companies.filter((c) => (c.name || "").toLowerCase().includes(q));
+  }, [companies, query]);
 
   async function run(id, fn) {
     setBusyId(id);
@@ -364,17 +377,31 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
       {editCompany && (
         <EditCompanyModal company={editCompany} onClose={() => setEditCompany(null)} onSave={onEditCompany} />
       )}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div className="text-sm font-medium" style={{ color: C.ink }}>Εταιρείες</div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky }}>
-          <Building2 size={13} /> Νέα εταιρεία
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 rounded-lg px-3 py-1.5" style={{ backgroundColor: C.pale }}>
+            <Search size={13} style={{ color: C.slate }} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Αναζήτηση εταιρείας…"
+              className="bg-transparent outline-none text-xs w-40"
+              style={{ color: C.ink }}
+            />
+          </div>
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky }}>
+            <Building2 size={13} /> Νέα εταιρεία
+          </button>
+        </div>
       </div>
       <ErrorNote message={error} onRetry={onReload} />
       {loading ? (
         <Spinner label="Φόρτωση εταιρειών…" />
       ) : companies.length === 0 ? (
         <p className="text-sm" style={{ color: C.slate }}>Δεν υπάρχουν ακόμα εταιρείες.</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-sm" style={{ color: C.slate }}>Καμία εταιρεία δεν ταιριάζει με «{query}».</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -388,7 +415,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
               </tr>
             </thead>
             <tbody>
-              {companies.map((c) => (
+              {filtered.map((c) => (
                 <tr
                   key={c.id}
                   className="border-t cursor-pointer hover:bg-slate-50"
@@ -738,6 +765,18 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [membershipsUser, setMembershipsUser] = useState(null);
+  const [userQuery, setUserQuery] = useState("");
+
+  // Same reasoning as CompaniesPanel's search box: this is the platform-wide
+  // user list (every account across every company), already loaded in full
+  // with no pagination — client-side filtering keeps it usable as headcount
+  // grows, without needing a backend rewrite the way the per-company
+  // Contacts list did.
+  const filteredUsers = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => (u.name || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q));
+  }, [users, userQuery]);
 
   async function run(id, fn) {
     setBusyId(id);
@@ -826,8 +865,28 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
 
         <AuditLogCard companies={companies} />
 
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm font-medium" style={{ color: C.ink }}>Χρήστες</div>
+          <div className="flex items-center gap-2 rounded-lg px-3 py-1.5" style={{ backgroundColor: C.pale }}>
+            <Search size={13} style={{ color: C.slate }} />
+            <input
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
+              placeholder="Αναζήτηση ονόματος ή email…"
+              className="bg-transparent outline-none text-xs w-48"
+              style={{ color: C.ink }}
+            />
+          </div>
+        </div>
+
         {loading ? (
           <Spinner label="Φόρτωση χρηστών…" />
+        ) : filteredUsers.length === 0 ? (
+          <Card className="p-5">
+            <p className="text-sm" style={{ color: C.slate }}>
+              {users.length === 0 ? "Δεν υπάρχουν ακόμα χρήστες." : `Κανένας χρήστης δεν ταιριάζει με «${userQuery}».`}
+            </p>
+          </Card>
         ) : (
           <Card className="p-0 overflow-hidden">
             <div className="overflow-x-auto">
@@ -843,7 +902,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {filteredUsers.map((u) => (
                   <tr key={u.id} className="border-t" style={{ borderColor: C.line }}>
                     <td className="px-4 py-3">
                       <div className="font-medium" style={{ color: C.ink }}>{u.name || "—"}</div>
