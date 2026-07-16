@@ -99,38 +99,39 @@ Optional integrations (leave blank to disable — see `backend/SETUP.md`):
 3. Frontend env changes (like `VITE_API_URL`) require a Vercel redeploy to take
    effect, since they're baked in at build time.
 
-## Shipping a database (schema) change — READ THIS
+## Shipping a database (schema) change
 
-**The deploy pipeline does NOT apply schema changes.** The Render build only runs
-`npx prisma generate` (which updates the Prisma *client*), not any migration or
-push. This repo also does **not** use Prisma's migration workflow — there's no
-migration history, just a single hand-written index file. In practice schema is
-synced with `prisma db push`, run **manually**.
+**Schema changes are applied automatically on every deploy.** The Render
+**Build Command** (set in the dashboard, not in this repo) is:
 
-So after any change to `backend/prisma/schema.prisma`, you must push it to Neon:
-
-**Preferred — from Render's Shell** (where `DATABASE_URL` is already set):
-```bash
-cd backend && npm run prisma:push      # == npx prisma db push
+```
+npm install && npx prisma generate && npx prisma db push --accept-data-loss
 ```
 
-**Or locally** — you must supply the Neon URL yourself, because there's no local
-`.env` (copy it from Render → Environment → `DATABASE_URL`):
+So `prisma db push` runs against Neon as part of each build, using the
+`DATABASE_URL` Render injects at build time. Any new table/column/index in
+`backend/prisma/schema.prisma` is created the moment that commit deploys — no
+manual step. (This repo does not use Prisma's migration workflow; there's no
+migration history, just one hand-written index file. `db push` is the source of
+truth.)
+
+### ⚠️ The `--accept-data-loss` flag — know this
+That flag means **destructive** schema changes are applied automatically too,
+not blocked. If you remove or rename a column in `schema.prisma`, the next
+deploy will drop the old column (and its data) without asking. Additive changes
+(new tables/columns/indexes) are always safe; be deliberate about removals and
+renames, and take a Neon backup/branch first if a change might lose data.
+
+### Applying a schema change without a full deploy (local)
+Rarely needed, but if you want to push the schema by hand, supply the Neon URL
+yourself — there's no local `.env` (copy it from Render → Environment →
+`DATABASE_URL`):
 ```bash
 cd backend
-DATABASE_URL="postgresql://…neon…" npm run prisma:push
+DATABASE_URL="postgresql://…neon…" npm run prisma:push   # == npx prisma db push
 ```
-
-`prisma db push` is safe for **additive** changes (new tables/columns/indexes).
-It can drop data if a change is destructive (removing/renaming a column) — review
-the diff it prints before confirming.
-
-### ⚠️ Known pending drift
-Commit `4a3837b` added the `FailedWebhookDelivery` model plus three indexes to
-the schema, but they were never pushed to Neon. Until you run the command above,
-the Meta/generic lead-webhook **retry** feature is inert (it fails safely — the
-retry tick is wrapped in try/catch, so nothing else breaks). Run `prisma:push`
-once to create the table and the feature activates.
+Running a `prisma` command locally **without** `DATABASE_URL` set is what
+produces the `P1012 / Environment variable not found: DATABASE_URL` error.
 
 ## Troubleshooting
 
@@ -149,5 +150,8 @@ once to create the table and the feature activates.
   automatically; the keep-alive workflow minimizes how often this happens.
 - **`Prisma schema validation - (get-config wasm)` / "Environment variable not
   found: DATABASE_URL".** You ran a `prisma` command locally with no
-  `DATABASE_URL` set (there's no local `.env`). Run it from Render's Shell, or
-  prefix the command with the Neon `DATABASE_URL` as shown above.
+  `DATABASE_URL` set (there's no local `.env`). You usually don't need to run
+  Prisma locally at all — schema syncs automatically on deploy (see above). If
+  you do need to, prefix the command with the Neon `DATABASE_URL`. Note: the
+  free Render tier has **no Shell**, so the "run it on the server" option isn't
+  available here.
