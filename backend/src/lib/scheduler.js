@@ -8,6 +8,7 @@ const { listLeadFormResponsesSince, flattenLeadFormResponse, isAuthError: isLink
 const { mapGenericPayload, upsertLeadContact } = require("./leadIntake");
 const { logAction } = require("./auditLog");
 const { captureException } = require("./sentry");
+const { webhookRetryTick } = require("./webhookRetry");
 
 async function processDueEnrollments() {
   const due = await prisma.enrollment.findMany({
@@ -375,6 +376,16 @@ async function linkedinReconciliationTick() {
 // timing (see weeklyDigest.js's getCompaniesDueForDigest comment).
 const DIGEST_INTERVAL_MS = 4 * 60 * 60 * 1000; // every 4 hours
 const LINKEDIN_RECONCILIATION_INTERVAL_MS = 30 * 60 * 1000; // every 30 min
+const WEBHOOK_RETRY_INTERVAL_MS = 60 * 60 * 1000; // every 1 hour
+
+async function webhookRetryTickWrapper() {
+  try {
+    await webhookRetryTick();
+  } catch (err) {
+    console.error("Webhook retry tick failed:", err.message);
+    captureException(err, { scope: "scheduler.webhookRetryTick" });
+  }
+}
 
 function startScheduler() {
   enrollmentTick();
@@ -390,6 +401,10 @@ function startScheduler() {
   linkedinReconciliationTick();
   setInterval(linkedinReconciliationTick, LINKEDIN_RECONCILIATION_INTERVAL_MS);
   console.log(`LinkedIn lead reconciliation poll started (every ${LINKEDIN_RECONCILIATION_INTERVAL_MS / 60000} min).`);
+
+  webhookRetryTickWrapper();
+  setInterval(webhookRetryTickWrapper, WEBHOOK_RETRY_INTERVAL_MS);
+  console.log(`Webhook retry processor started (every ${WEBHOOK_RETRY_INTERVAL_MS / 3600000} h).`);
 }
 
 module.exports = { startScheduler, processDueEnrollments, processDueCampaigns };

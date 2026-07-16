@@ -16,6 +16,7 @@ const {
 } = require("../lib/linkedinLeads");
 const { logAction } = require("../lib/auditLog");
 const { captureException } = require("../lib/sentry");
+const { storeFailedDelivery } = require("../lib/webhookRetry");
 
 const router = express.Router();
 
@@ -135,9 +136,13 @@ router.get("/recent-leads", requireAuth, requireOwner, async (req, res) => {
 // webhook senders treat non-2xx as "delivery failed" and will retry/alert,
 // which isn't useful noise for "we got it, just couldn't find an email."
 router.post("/inbound/:token", async (req, res) => {
+  // Ack immediately so the caller knows it's received, even if processing
+  // fails — failures are retried by webhookRetryTick in scheduler.js
+  res.json({ ok: true });
+
   try {
     const integration = await prisma.integration.findUnique({ where: { token: req.params.token } });
-    if (!integration || !integration.active) return res.status(404).json({ error: "not_found" });
+    if (!integration || !integration.active) return;
 
     const mapped = mapGenericPayload(req.body);
     const result = await upsertLeadContact({
@@ -153,18 +158,19 @@ router.post("/inbound/:token", async (req, res) => {
 
     if (result.ok) {
       await logAction(
-        req,
+        { user: null },
         "lead.received",
         `Νέο lead από webhook${integration.name ? ` (${integration.name})` : ""}: ${result.contact.email}`,
         { companyId: integration.companyId }
       );
     }
-
-    res.json({ ok: result.ok, reason: result.reason });
   } catch (err) {
     console.error("Inbound webhook processing failed:", err.message);
     captureException(err, { scope: "integrations.inbound_webhook" });
-    res.status(500).json({ ok: false });
+    // Store for retry by webhookRetryTick
+    await storeFailedDelivery("generic", req.body || {}).catch((e) =>
+      console.error("Failed to store generic webhook delivery:", e.message)
+    );
   }
 });
 
@@ -205,6 +211,10 @@ router.post("/meta/webhook", async (req, res) => {
       } catch (err) {
         console.error(`Meta lead processing failed for leadgen ${leadgenId}:`, err.message);
         captureException(err, { scope: "integrations.meta_webhook", leadgenId, pageId });
+        // Store for retry by webhookRetryTick
+        await storeFailedDelivery("meta", req.body || {}).catch((e) =>
+          console.error("Failed to store Meta webhook delivery:", e.message)
+        );
       }
     }
   }

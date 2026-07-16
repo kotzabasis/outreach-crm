@@ -1594,114 +1594,181 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
         {rowsLoading ? (
           <Spinner label="Φόρτωση επαφών…" />
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left" style={{ color: C.slate }}>
-                <th className="font-medium pb-3 w-8"></th>
-                <th className="font-medium pb-3">Όνομα</th>
-                <th className="font-medium pb-3">Τηλέφωνο</th>
-                <th className="font-medium pb-3">Εταιρεία</th>
-                <th className="font-medium pb-3">Κατηγορία</th>
-                <th className="font-medium pb-3">Website</th>
-                <th className="font-medium pb-3">Sequence</th>
-                <th className="font-medium pb-3">Ετικέτες</th>
-                <th className="font-medium pb-3">Υπενθύμιση</th>
-                <th className="font-medium pb-3">Τελ. ενέργεια</th>
-                <th className="font-medium pb-3 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
-                  <td className="py-3">
-                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
-                  </td>
-                  <td className="py-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium" style={{ color: C.ink }}>{c.name}</span>
-                      {c.unsubscribed && (
-                        <span
-                          className="inline-flex items-center gap-0.5 text-[10px] font-medium rounded-md px-1 py-0.5 shrink-0"
-                          style={{ color: C.coral, backgroundColor: `${C.coral}14` }}
-                          title={c.unsubscribedAt ? `Unsubscribed · ${fmtDate(c.unsubscribedAt)}` : "Unsubscribed"}
-                        >
-                          <CircleX size={10} /> Unsub
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs" style={{ color: C.slate }}>{c.email}</div>
-                  </td>
-                  <td className="py-3" style={{ color: C.ink }}>
-                    {c.phone ? (
-                      // tel: links hand off to whatever's registered as the OS's
-                      // default handler for that scheme — a desktop VoIP softphone
-                      // (Zoiper, 3CX, Linphone, etc.), Skype, or the phone app on
-                      // mobile. SDLoop has no calling integration of its own, so
-                      // this is the low-effort way to get one-click dialing.
-                      <a href={`tel:${c.phone}`} onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 hover:underline" style={{ color: C.ink }} title="Κλήση">
-                        <Phone size={13} style={{ color: C.slate }} />
-                        {c.phone}
-                      </a>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <Phone size={13} style={{ color: C.slate }} />
-                        —
+          <>
+            {/* Desktop table view */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left" style={{ color: C.slate }}>
+                    <th className="font-medium pb-3 w-8"></th>
+                    <th className="font-medium pb-3">Όνομα</th>
+                    <th className="font-medium pb-3">Τηλέφωνο</th>
+                    <th className="font-medium pb-3">Εταιρεία</th>
+                    <th className="font-medium pb-3">Κατηγορία</th>
+                    <th className="font-medium pb-3">Website</th>
+                    <th className="font-medium pb-3">Sequence</th>
+                    <th className="font-medium pb-3">Ετικέτες</th>
+                    <th className="font-medium pb-3">Υπενθύμιση</th>
+                    <th className="font-medium pb-3">Τελ. ενέργεια</th>
+                    <th className="font-medium pb-3 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((c) => (
+                    <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
+                      <td className="py-3">
+                        <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
+                      </td>
+                      <td className="py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium" style={{ color: C.ink }}>{c.name}</span>
+                          {c.unsubscribed && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[10px] font-medium rounded-md px-1 py-0.5 shrink-0"
+                              style={{ color: C.coral, backgroundColor: `${C.coral}14` }}
+                              title={c.unsubscribedAt ? `Unsubscribed · ${fmtDate(c.unsubscribedAt)}` : "Unsubscribed"}
+                            >
+                              <CircleX size={10} /> Unsub
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs" style={{ color: C.slate }}>{c.email}</div>
+                      </td>
+                      <td className="py-3" style={{ color: C.ink }}>
+                        {c.phone ? (
+                          <a href={`tel:${c.phone}`} onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1.5 hover:underline" style={{ color: C.ink }} title="Κλήση">
+                            <Phone size={13} style={{ color: C.slate }} />
+                            {c.phone}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <Phone size={13} style={{ color: C.slate }} />
+                            —
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3" style={{ color: C.ink }}>
+                        <div className="flex items-center gap-1.5">
+                          <Building2 size={13} style={{ color: C.slate }} />
+                          {c.company || "—"}
+                        </div>
+                      </td>
+                      <td className="py-3"><CategoryChip>{c.category}</CategoryChip></td>
+                      <td className="py-3">
+                        {c.website ? (
+                          <a href={normalizeLinkUrl(c.website)} target="_blank" rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1.5 hover:underline max-w-[160px] truncate" style={{ color: C.sky }} title={c.website}>
+                            <Globe size={13} className="shrink-0" style={{ color: C.slate }} />
+                            <span className="truncate">{c.website}</span>
+                          </a>
+                        ) : (
+                          <span style={{ color: C.slate }}>—</span>
+                        )}
+                      </td>
+                      <td className="py-3" style={{ color: C.ink }}>
+                        {c.currentSequence ? `${c.currentSequence} · βήμα ${c.currentStep}` : "—"}
+                      </td>
+                      <td className="py-3">
+                        <div className="flex gap-1 flex-wrap">
+                          {(c.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
+                        </div>
+                      </td>
+                      <td className="py-3">
+                        {c.nextFollowUpAt ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-1.5 py-0.5"
+                            style={{ color: isFollowUpDue(c.nextFollowUpAt) ? C.coral : C.slate, backgroundColor: isFollowUpDue(c.nextFollowUpAt) ? `${C.coral}14` : "transparent" }}
+                          >
+                            <CalendarClock size={12} /> {fmtDate(c.nextFollowUpAt)}
+                          </span>
+                        ) : "—"}
+                      </td>
+                      <td className="py-3 text-xs" style={{ color: C.slate }}>{fmtDate(c.lastActivityAt)}</td>
+                      <td className="py-3">
+                        <button onClick={() => setDetailContactId(c.id)} style={{ color: C.slate }} title="Στοιχεία επαφής">
+                          <Eye size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {rows.length === 0 && (
+                    <tr><td colSpan={11} className="py-10 text-center text-sm" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile card view */}
+            <div className="md:hidden space-y-3">
+              {rows.length === 0 ? (
+                <div className="text-center py-10 text-sm" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</div>
+              ) : (
+                rows.map((c) => (
+                  <div key={c.id} className="rounded-lg border p-4" style={{ borderColor: C.line }}>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
+                          <span className="font-medium truncate" style={{ color: C.ink }}>{c.name}</span>
+                          {c.unsubscribed && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[10px] font-medium rounded-md px-1 py-0.5 shrink-0"
+                              style={{ color: C.coral, backgroundColor: `${C.coral}14` }}
+                              title={c.unsubscribedAt ? `Unsubscribed · ${fmtDate(c.unsubscribedAt)}` : "Unsubscribed"}
+                            >
+                              <CircleX size={10} /> Unsub
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs truncate" style={{ color: C.slate }}>{c.email}</div>
                       </div>
-                    )}
-                  </td>
-                  <td className="py-3" style={{ color: C.ink }}>
-                    <div className="flex items-center gap-1.5">
-                      <Building2 size={13} style={{ color: C.slate }} />
-                      {c.company || "—"}
+                      <button onClick={() => setDetailContactId(c.id)} style={{ color: C.slate }} title="Στοιχεία επαφής">
+                        <Eye size={15} className="shrink-0" />
+                      </button>
                     </div>
-                  </td>
-                  <td className="py-3"><CategoryChip>{c.category}</CategoryChip></td>
-                  <td className="py-3">
-                    {c.website ? (
-                      <a href={normalizeLinkUrl(c.website)} target="_blank" rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 hover:underline max-w-[160px] truncate" style={{ color: C.sky }} title={c.website}>
-                        <Globe size={13} className="shrink-0" style={{ color: C.slate }} />
-                        <span className="truncate">{c.website}</span>
-                      </a>
-                    ) : (
-                      <span style={{ color: C.slate }}>—</span>
-                    )}
-                  </td>
-                  <td className="py-3" style={{ color: C.ink }}>
-                    {c.currentSequence ? `${c.currentSequence} · βήμα ${c.currentStep}` : "—"}
-                  </td>
-                  <td className="py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {(c.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
+
+                    <div className="space-y-2 text-xs">
+                      {c.phone && (
+                        <div className="flex items-center gap-2">
+                          <Phone size={13} style={{ color: C.slate }} className="shrink-0" />
+                          <a href={`tel:${c.phone}`} onClick={(e) => e.stopPropagation()} style={{ color: C.ink }} className="hover:underline">
+                            {c.phone}
+                          </a>
+                        </div>
+                      )}
+                      {c.company && (
+                        <div className="flex items-center gap-2">
+                          <Building2 size={13} style={{ color: C.slate }} className="shrink-0" />
+                          <span style={{ color: C.ink }}>{c.company}</span>
+                        </div>
+                      )}
+                      {c.category && (
+                        <div className="flex items-center gap-2">
+                          <CategoryChip>{c.category}</CategoryChip>
+                        </div>
+                      )}
+                      {(c.tags || "").split(",").filter(Boolean).length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {(c.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
+                        </div>
+                      )}
+                      {c.nextFollowUpAt && (
+                        <div className="flex items-center gap-2">
+                          <CalendarClock size={13} style={{ color: C.slate }} className="shrink-0" />
+                          <span style={{ color: isFollowUpDue(c.nextFollowUpAt) ? C.coral : C.slate }}>
+                            Υπενθύμιση: {fmtDate(c.nextFollowUpAt)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="text-xs" style={{ color: C.slate }}>Τελ. ενέργεια: {fmtDate(c.lastActivityAt)}</div>
                     </div>
-                  </td>
-                  <td className="py-3">
-                    {c.nextFollowUpAt ? (
-                      <span
-                        className="inline-flex items-center gap-1 text-xs font-medium rounded-md px-1.5 py-0.5"
-                        style={{ color: isFollowUpDue(c.nextFollowUpAt) ? C.coral : C.slate, backgroundColor: isFollowUpDue(c.nextFollowUpAt) ? `${C.coral}14` : "transparent" }}
-                      >
-                        <CalendarClock size={12} /> {fmtDate(c.nextFollowUpAt)}
-                      </span>
-                    ) : "—"}
-                  </td>
-                  <td className="py-3 text-xs" style={{ color: C.slate }}>{fmtDate(c.lastActivityAt)}</td>
-                  <td className="py-3">
-                    <button onClick={() => setDetailContactId(c.id)} style={{ color: C.slate }} title="Στοιχεία επαφής">
-                      <Eye size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={11} className="py-10 text-center text-sm" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</td></tr>
+                  </div>
+                ))
               )}
-            </tbody>
-          </table>
-          </div>
+            </div>
+          </>
         )}
 
         {!rowsLoading && pageCount > 1 && (
@@ -3281,45 +3348,87 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
             Δεν έχεις δημιουργήσει campaign ακόμα.
           </div>
         ) : (
-          <Card className="p-0 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
-                    <th className="font-medium px-4 py-2.5">Όνομα</th>
-                    <th className="font-medium px-4 py-2.5">Κατάσταση</th>
-                    <th className="font-medium px-4 py-2.5">Πρόοδος</th>
-                    <th className="font-medium px-4 py-2.5">Δημιουργήθηκε</th>
-                    <th className="font-medium px-4 py-2.5"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {campaigns.map((c) => (
-                    <tr key={c.id} className="border-t cursor-pointer hover:bg-slate-50" style={{ borderColor: C.line }} onClick={() => setDetailId(c.id)}>
-                      <td className="px-4 py-3 font-medium" style={{ color: C.ink }}>{c.name}</td>
-                      <td className="px-4 py-3"><CampaignStatusBadge status={c.status} /></td>
-                      <td className="px-4 py-3" style={{ color: C.ink }}>{c.counts.sent} / {c.counts.total}</td>
-                      <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(c.createdAt)}</td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-2">
-                          {(c.status === "draft" || c.status === "paused") && (
-                            <button onClick={() => run(c.id, onStart)} disabled={busyId === c.id} title="Εκκίνηση" style={{ color: C.mint }}>
-                              <Play size={15} />
-                            </button>
-                          )}
-                          {c.status === "running" && (
-                            <button onClick={() => run(c.id, onPause)} disabled={busyId === c.id} title="Παύση" style={{ color: C.amber }}>
-                              <Pause size={15} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <>
+            {/* Desktop table view */}
+            <div className="hidden md:block">
+              <Card className="p-0 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
+                        <th className="font-medium px-4 py-2.5">Όνομα</th>
+                        <th className="font-medium px-4 py-2.5">Κατάσταση</th>
+                        <th className="font-medium px-4 py-2.5">Πρόοδος</th>
+                        <th className="font-medium px-4 py-2.5">Δημιουργήθηκε</th>
+                        <th className="font-medium px-4 py-2.5"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {campaigns.map((c) => (
+                        <tr key={c.id} className="border-t cursor-pointer hover:bg-slate-50" style={{ borderColor: C.line }} onClick={() => setDetailId(c.id)}>
+                          <td className="px-4 py-3 font-medium" style={{ color: C.ink }}>{c.name}</td>
+                          <td className="px-4 py-3"><CampaignStatusBadge status={c.status} /></td>
+                          <td className="px-4 py-3" style={{ color: C.ink }}>{c.counts.sent} / {c.counts.total}</td>
+                          <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(c.createdAt)}</td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-2">
+                              {(c.status === "draft" || c.status === "paused") && (
+                                <button onClick={() => run(c.id, onStart)} disabled={busyId === c.id} title="Εκκίνηση" style={{ color: C.mint }}>
+                                  <Play size={15} />
+                                </button>
+                              )}
+                              {c.status === "running" && (
+                                <button onClick={() => run(c.id, onPause)} disabled={busyId === c.id} title="Παύση" style={{ color: C.amber }}>
+                                  <Pause size={15} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
             </div>
-          </Card>
+
+            {/* Mobile card view */}
+            <div className="md:hidden space-y-3">
+              {campaigns.map((c) => (
+                <Card key={c.id} className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => setDetailId(c.id)}>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium truncate mb-1" style={{ color: C.ink }}>{c.name}</h3>
+                      <CampaignStatusBadge status={c.status} />
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {(c.status === "draft" || c.status === "paused") && (
+                        <button onClick={() => run(c.id, onStart)} disabled={busyId === c.id} title="Εκκίνηση" style={{ color: C.mint }}>
+                          <Play size={15} />
+                        </button>
+                      )}
+                      {c.status === "running" && (
+                        <button onClick={() => run(c.id, onPause)} disabled={busyId === c.id} title="Παύση" style={{ color: C.amber }}>
+                          <Pause size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span style={{ color: C.slate }}>Πρόοδος:</span>
+                      <span style={{ color: C.ink }}>{c.counts.sent} / {c.counts.total}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: C.slate }}>Δημιουργήθηκε:</span>
+                      <span style={{ color: C.ink, fontSize: "0.875rem" }}>{fmtDate(c.createdAt)}</span>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

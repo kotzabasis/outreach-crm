@@ -470,6 +470,7 @@ model Contact {
   @@index([companyId, email])
   @@index([companyId, category])
   @@index([companyId, nextFollowUpAt])
+  @@index([companyId, unsubscribed])
 }
 
 // A lightweight deal/pipeline tracker — separate from Sequence/EmailLog
@@ -567,6 +568,7 @@ model Enrollment {
   emailLogs EmailLog[]
 
   @@index([status, nextSendAt])
+  @@index([contactId])
 }
 
 model EmailLog {
@@ -602,6 +604,7 @@ model EmailLog {
   @@index([userId, sentAt])
   @@index([companyId, sentAt])
   @@index([contactId])
+  @@index([campaignId])
 }
 
 // A one-shot blast of a single subject/body (usually copied in from a
@@ -679,4 +682,25 @@ model TrackingEvent {
   // use before this, meaning both went through a full scan as this table
   // grows (one row per open/click, so it grows fast).
   @@index([emailLogId])
+}
+
+// Failed webhook deliveries from Meta Lead Ads, generic webhooks, etc. —
+// persisted so we can retry on transient failures (DB hiccup, network timeout)
+// and provide visibility into what was attempted. LinkedIn webhooks don't need
+// this because the reconciliation poll in scheduler.js is the belt-and-
+// suspenders backstop. Failed deliveries are retried hourly (see scheduler.js's
+// webhookRetryTick) up to 3 times; after that they move to "retry_exhausted"
+// and require manual investigation.
+model FailedWebhookDelivery {
+  id          String   @id @default(cuid())
+  type        String   // "meta" | "generic" | "linkedin"
+  payload     String   // raw JSON string of original webhook body
+  status      String   @default("pending") // "pending" | "failed" | "retry_exhausted"
+  retryCount  Int      @default(0)
+  lastError   String?  // error message from most recent retry attempt
+  nextRetryAt DateTime? // when to retry next (null = not yet scheduled)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, nextRetryAt])
 }

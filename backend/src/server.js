@@ -51,6 +51,13 @@ app.use(
   cors({
     origin: process.env.FRONTEND_URL,
     credentials: true, // required so the session cookie is sent cross-origin
+    // Cross-origin JS can only read a small default set of response headers.
+    // The CSRF token is delivered via the X-CSRF-Token response header (see
+    // lib/csrf.js) and read by the frontend (lib/api.js) — without exposing it
+    // here, res.headers.get("X-CSRF-Token") is null on the Vercel→Render split,
+    // the frontend never sends a token, and every POST/PATCH/DELETE fails with
+    // 403 csrf_token_invalid.
+    exposedHeaders: ["X-CSRF-Token"],
   })
 );
 // Bumped from 1mb: manual/sequence emails can carry base64 attachments

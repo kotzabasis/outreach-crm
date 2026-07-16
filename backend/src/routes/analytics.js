@@ -18,43 +18,83 @@ router.use(requireAuth);
 router.get("/overview", async (req, res) => {
   const companyId = req.user.companyId;
 
-  const [sent, opened, clicked, replied, sequences, campaigns] = await Promise.all([
-    prisma.emailLog.count({ where: { companyId } }),
-    prisma.emailLog.count({ where: { companyId, events: { some: { type: "open", isBot: false } } } }),
-    prisma.emailLog.count({ where: { companyId, events: { some: { type: "click" } } } }),
-    prisma.contact.count({ where: { companyId, status: "replied", emailLogs: { some: {} } } }),
-    prisma.sequence.findMany({ where: { companyId }, select: { id: true, name: true } }),
-    prisma.campaign.findMany({ where: { companyId }, select: { id: true, name: true, status: true } }),
+  // Three aggregation queries (instead of 6 + 4N + 4M): totals, per-sequence, per-campaign.
+  // Using raw SQL to aggregate in one pass per group, avoiding N+1 problem.
+  const [totalStats, perSequence, perCampaign] = await Promise.all([
+    // Company totals: sent, opened, clicked, and contacts with replied status who have been emailed
+    prisma.$queryRaw`
+      SELECT
+        COUNT(DISTINCT el.id) as sent,
+        COUNT(DISTINCT CASE WHEN te.type = 'open' AND te."isBot" = false THEN el.id END) as opened,
+        COUNT(DISTINCT CASE WHEN te.type = 'click' THEN el.id END) as clicked,
+        COUNT(DISTINCT c.id) as replied
+      FROM "EmailLog" el
+      LEFT JOIN "TrackingEvent" te ON el.id = te."emailLogId"
+      LEFT JOIN "Contact" c ON el."contactId" = c.id AND c.status = 'replied'
+      WHERE el."companyId" = ${companyId}
+    `.then((rows) => ({
+      sent: Number(rows[0]?.sent || 0),
+      opened: Number(rows[0]?.opened || 0),
+      clicked: Number(rows[0]?.clicked || 0),
+      replied: Number(rows[0]?.replied || 0),
+    })),
+    // Per-sequence stats: aggregate all EmailLogs and events per sequence in one query
+    prisma.$queryRaw`
+      SELECT
+        s.id,
+        s.name,
+        COUNT(DISTINCT el.id) as sent,
+        COUNT(DISTINCT CASE WHEN te.type = 'open' AND te."isBot" = false THEN el.id END) as opened,
+        COUNT(DISTINCT CASE WHEN te.type = 'click' THEN el.id END) as clicked,
+        COUNT(DISTINCT CASE WHEN e.status = 'replied' THEN e.id END) as replied
+      FROM "Sequence" s
+      LEFT JOIN "Enrollment" e ON s.id = e."sequenceId"
+      LEFT JOIN "EmailLog" el ON e.id = el."enrollmentId"
+      LEFT JOIN "TrackingEvent" te ON el.id = te."emailLogId"
+      WHERE s."companyId" = ${companyId}
+      GROUP BY s.id, s.name
+      ORDER BY s.name
+    `.then((rows) =>
+      rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        sent: Number(row.sent || 0),
+        opened: Number(row.opened || 0),
+        clicked: Number(row.clicked || 0),
+        replied: Number(row.replied || 0),
+      }))
+    ),
+    // Per-campaign stats: aggregate all EmailLogs and events per campaign in one query
+    prisma.$queryRaw`
+      SELECT
+        c.id,
+        c.name,
+        c.status,
+        COUNT(DISTINCT el.id) as sent,
+        COUNT(DISTINCT CASE WHEN te.type = 'open' AND te."isBot" = false THEN el.id END) as opened,
+        COUNT(DISTINCT CASE WHEN te.type = 'click' THEN el.id END) as clicked,
+        COUNT(DISTINCT CASE WHEN ct.status = 'replied' AND el.id IS NOT NULL THEN ct.id END) as replied
+      FROM "Campaign" c
+      LEFT JOIN "EmailLog" el ON c.id = el."campaignId"
+      LEFT JOIN "TrackingEvent" te ON el.id = te."emailLogId"
+      LEFT JOIN "Contact" ct ON el."contactId" = ct.id AND ct.status = 'replied'
+      WHERE c."companyId" = ${companyId}
+      GROUP BY c.id, c.name, c.status
+      ORDER BY c.name
+    `.then((rows) =>
+      rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        sent: Number(row.sent || 0),
+        opened: Number(row.opened || 0),
+        clicked: Number(row.clicked || 0),
+        replied: Number(row.replied || 0),
+      }))
+    ),
   ]);
 
-  const perSequence = await Promise.all(
-    sequences.map(async (seq) => {
-      const [seqSent, seqOpened, seqClicked, seqReplied] = await Promise.all([
-        prisma.emailLog.count({ where: { companyId, enrollment: { sequenceId: seq.id } } }),
-        prisma.emailLog.count({ where: { companyId, enrollment: { sequenceId: seq.id }, events: { some: { type: "open", isBot: false } } } }),
-        prisma.emailLog.count({ where: { companyId, enrollment: { sequenceId: seq.id }, events: { some: { type: "click" } } } }),
-        prisma.enrollment.count({ where: { sequenceId: seq.id, status: "replied" } }),
-      ]);
-      return { id: seq.id, name: seq.name, sent: seqSent, opened: seqOpened, clicked: seqClicked, replied: seqReplied };
-    })
-  );
-
-  // Campaign reporting, same shape as perSequence — lets the frontend filter
-  // Analytics down to "just this campaign" the same way it already does for
-  // sequences.
-  const perCampaign = await Promise.all(
-    campaigns.map(async (camp) => {
-      const [campSent, campOpened, campClicked, campReplied] = await Promise.all([
-        prisma.emailLog.count({ where: { companyId, campaignId: camp.id } }),
-        prisma.emailLog.count({ where: { companyId, campaignId: camp.id, events: { some: { type: "open", isBot: false } } } }),
-        prisma.emailLog.count({ where: { companyId, campaignId: camp.id, events: { some: { type: "click" } } } }),
-        prisma.contact.count({ where: { companyId, status: "replied", emailLogs: { some: { campaignId: camp.id } } } }),
-      ]);
-      return { id: camp.id, name: camp.name, status: camp.status, sent: campSent, opened: campOpened, clicked: campClicked, replied: campReplied };
-    })
-  );
-
-  res.json({ totals: { sent, opened, clicked, replied }, perSequence, perCampaign });
+  res.json({ totals: totalStats, perSequence, perCampaign });
 });
 
 // Recent sends — manual and sequence-driven alike — for the "Sent" / inbox
