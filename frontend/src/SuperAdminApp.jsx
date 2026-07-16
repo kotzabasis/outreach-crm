@@ -1007,7 +1007,12 @@ export function SuperAdminApp() {
     setAdminLoading(true);
     setAdminError("");
     try {
-      setAdminUsers(await api.get("/admin/users"));
+      // /admin/users returns a paginated object ({ users, total, ... }), not a
+      // bare array — extract the rows (the admin view calls .filter/.map on
+      // this). Max page size so the counts/search over all users aren't
+      // truncated. (Defensive: also accept a bare array.)
+      const res = await api.get("/admin/users?pageSize=200");
+      setAdminUsers(Array.isArray(res) ? res : res.users || []);
     } catch (err) {
       setAdminError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι χρήστες.");
     } finally {
