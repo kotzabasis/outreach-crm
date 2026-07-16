@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import {
   Mail, Send, Users, BarChart3, Layers, Search, Upload, Plus, X,
   Clock, Tag, ChevronRight, Trash2, Pencil, MoreVertical, Paperclip,
@@ -11,14 +11,16 @@ import {
   AlignLeft, AlignCenter, AlignRight, Info, Megaphone, Play, Pause, Globe,
   Facebook, Instagram, MapPin, Star
 } from "lucide-react";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Funnel, FunnelChart, LabelList
-} from "recharts";
 import { api, API_URL, ApiError } from "./lib/api";
-import { C, Card, Spinner, ErrorNote, StatCard, Brand, fmtMoney, fmtDate } from "./lib/ui.jsx";
+import { C, Card, Spinner, ErrorNote, StatCard, Brand, fmtMoney, fmtDate, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
 import DOMPurify from "dompurify";
+
+// recharts (and everything that depends on it) now lives entirely in
+// AnalyticsView.jsx, loaded as its own chunk only when a user actually opens
+// the Analytics tab — previously it shipped in every visitor's initial
+// bundle regardless of whether they ever looked at that tab.
+const AnalyticsView = lazy(() => import("./AnalyticsView.jsx"));
 
 // Cold-outreach best-practice cadence: immediate, then 3/7/14/21/30 days —
 // gives ~3-5 touches, which is the sweet spot most sales/outreach guides
@@ -103,13 +105,6 @@ const statusMeta = {
   bounced:     { label: "Bounce",     color: C.coral, Icon: CircleX },
   unsubscribed:{ label: "Unsubscribed", color: C.slate, Icon: CircleX },
 };
-
-const OFFER_STATUSES = [
-  { key: "draft", label: "Πρόχειρο", color: C.slate },
-  { key: "sent", label: "Στάλθηκε", color: C.sky },
-  { key: "accepted", label: "Έγινε δεκτό", color: C.mint },
-  { key: "declined", label: "Απορρίφθηκε", color: C.coral },
-];
 
 function isFollowUpDue(value) {
   if (!value) return false;
@@ -255,9 +250,13 @@ function GlobalSearch({ onSelectContact }) {
     let cancelled = false;
     debounceRef.current = setTimeout(async () => {
       try {
-        const data = await api.get(`/contacts?q=${encodeURIComponent(query.trim())}`);
+        // GET /contacts now returns a { contacts, total, ... } envelope
+        // (paginated server-side) rather than a bare array — see
+        // routes/contacts.js. pageSize=8 avoids fetching more rows than this
+        // dropdown will ever show.
+        const data = await api.get(`/contacts?q=${encodeURIComponent(query.trim())}&pageSize=8`);
         if (cancelled) return; // a newer query/clear already superseded this response
-        setResults(data.slice(0, 8));
+        setResults(data.contacts.slice(0, 8));
       } catch {
         if (!cancelled) setResults([]);
       } finally {
@@ -1189,14 +1188,17 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   );
 }
 
-function ContactsView({ contacts, loading, error, onReload, sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, onUpdateContact, onUpdateInternalNotes, openContactId, onOpenContactHandled }) {
+function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, onAddNote, onDeleteNote, onSetFollowUp, onBulkUpdate, onBulkDelete, onExport, onCompose, onMarkReplied, onToggleUnsubscribed, onUpdateComments, onUpdateContact, onUpdateInternalNotes, openContactId, onOpenContactHandled }) {
+  const PAGE_SIZE = 50;
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
   const [onlyDue, setOnlyDue] = useState(false);
   const [hideUnsubscribed, setHideUnsubscribed] = useState(false);
   const [hasWebsiteOnly, setHasWebsiteOnly] = useState(false);
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(() => new Set());
   const [enrollSeqId, setEnrollSeqId] = useState("");
   const [bulkCategory, setBulkCategory] = useState("");
@@ -1209,6 +1211,18 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
   const [detailContactId, setDetailContactId] = useState(null);
   const fileRef = useRef(null);
 
+  // The list is now fetched server-side — search/filters/pagination all
+  // happen in the GET /contacts query (see routes/contacts.js) instead of
+  // loading the company's entire contact list into the browser and
+  // filtering it on every keystroke, which didn't scale as the list grew.
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [dueCount, setDueCount] = useState(0);
+  const [rowsLoading, setRowsLoading] = useState(true);
+  const [rowsError, setRowsError] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [allTags, setAllTags] = useState([]);
+
   // Lets the global search box (in the sidebar) jump straight into a
   // contact's detail drawer from any view, without lifting detailContactId
   // itself up to App — App just hands us the id once and we take it from there.
@@ -1219,45 +1233,62 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
     }
   }, [openContactId, onOpenContactHandled]);
 
-  const categories = useMemo(() => {
-    const set = new Set(contacts.map((c) => (c.category || "").trim()).filter(Boolean));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [contacts]);
+  // Debounced the same way GlobalSearch is — typing doesn't hit the network
+  // on every keystroke, only 350ms after the user stops.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 350);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const allTags = useMemo(() => {
-    const set = new Set();
-    contacts.forEach((c) =>
-      (c.tags || "").split(",").map((t) => t.trim()).filter(Boolean).forEach((t) => set.add(t))
-    );
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [contacts]);
+  // Any filter change (besides paging itself) jumps back to page 1 —
+  // otherwise staying on, say, page 4 of a now much smaller filtered result
+  // would just show an empty page.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, statusFilter, categoryFilter, tagFilter, onlyDue, hideUnsubscribed, hasWebsiteOnly]);
 
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase();
-    return contacts.filter((c) => {
-      // Search across every text field a contact has, not just
-      // name/email/company/phone — first/last name, website, category,
-      // tags, and both comment fields (internal notes included: it's the
-      // user's own private data, not something being sent anywhere).
-      const haystack = [
-        c.name, c.firstName, c.lastName, c.email, c.company, c.phone,
-        c.website, c.gmb, c.facebook, c.instagram, c.googleReviews,
-        c.category, c.tags, c.comments, c.internalNotes,
-      ].filter(Boolean).join(" ").toLowerCase();
-      const matchesQuery = !q || haystack.includes(q);
-      const matchesStatus = statusFilter === "all" || c.status === statusFilter;
-      const matchesCategory = categoryFilter === "all" || (c.category || "").trim() === categoryFilter;
-      const matchesTag =
-        tagFilter === "all" ||
-        (c.tags || "").split(",").map((t) => t.trim()).includes(tagFilter);
-      const matchesDue = !onlyDue || isFollowUpDue(c.nextFollowUpAt);
-      const matchesUnsub = !hideUnsubscribed || !c.unsubscribed;
-      const matchesWebsite = !hasWebsiteOnly || !!(c.website || "").trim();
-      return matchesQuery && matchesStatus && matchesCategory && matchesTag && matchesDue && matchesUnsub && matchesWebsite;
-    });
-  }, [contacts, query, statusFilter, categoryFilter, tagFilter, onlyDue, hideUnsubscribed, hasWebsiteOnly]);
+  const fetchPage = useCallback(async () => {
+    setRowsLoading(true);
+    setRowsError("");
+    try {
+      const params = new URLSearchParams();
+      if (debouncedQuery) params.set("q", debouncedQuery);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (categoryFilter !== "all") params.set("category", categoryFilter);
+      if (tagFilter !== "all") params.set("tag", tagFilter);
+      if (onlyDue) params.set("dueOnly", "true");
+      if (hideUnsubscribed) params.set("unsubscribed", "false");
+      if (hasWebsiteOnly) params.set("hasWebsite", "true");
+      params.set("page", String(page));
+      params.set("pageSize", String(PAGE_SIZE));
+      const data = await api.get(`/contacts?${params.toString()}`);
+      setRows(data.contacts);
+      setTotal(data.total);
+      setDueCount(data.dueCount);
+    } catch (err) {
+      setRowsError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η φόρτωση επαφών.");
+    } finally {
+      setRowsLoading(false);
+    }
+  }, [debouncedQuery, statusFilter, categoryFilter, tagFilter, onlyDue, hideUnsubscribed, hasWebsiteOnly, page]);
 
-  const dueCount = useMemo(() => contacts.filter((c) => isFollowUpDue(c.nextFollowUpAt)).length, [contacts]);
+  useEffect(() => { fetchPage(); }, [fetchPage]);
+
+  // Distinct category/tag values for the filter dropdowns, sourced from
+  // their own lightweight endpoint rather than derived from whatever page of
+  // contacts happens to be loaded (which, now that the list is paginated,
+  // would only ever surface categories/tags present on the CURRENT page).
+  const fetchFacets = useCallback(async () => {
+    try {
+      const data = await api.get("/contacts/facets");
+      setCategories(data.categories);
+      setAllTags(data.tags);
+    } catch {
+      // Non-critical — the filter dropdowns just keep whatever they had.
+    }
+  }, []);
+
+  useEffect(() => { fetchFacets(); }, [fetchFacets]);
 
   function toggleSelected(id) {
     setSelected((prev) => {
@@ -1266,6 +1297,11 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
       else next.add(id);
       return next;
     });
+  }
+
+  async function handleCreate(data) {
+    await onCreate(data);
+    await Promise.all([fetchPage(), fetchFacets()]);
   }
 
   async function handleUpload(e) {
@@ -1277,6 +1313,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
     try {
       const result = await onUpload(file);
       setUploadNote(`Προστέθηκαν ${result.created}, αγνοήθηκαν ${result.skipped}.`);
+      await Promise.all([fetchPage(), fetchFacets()]);
     } catch (err) {
       setUploadNote(err instanceof ApiError ? err.message : "Το ανέβασμα απέτυχε.");
     } finally {
@@ -1290,6 +1327,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
       await onEnroll(Array.from(selected), enrollSeqId);
       setSelected(new Set());
       setEnrollSeqId("");
+      await fetchPage();
     } catch (err) {
       setUploadNote(err instanceof ApiError ? err.message : "Η εγγραφή απέτυχε.");
     }
@@ -1301,6 +1339,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
     try {
       await onBulkUpdate(Array.from(selected), { category: bulkCategory });
       setBulkCategory("");
+      await Promise.all([fetchPage(), fetchFacets()]);
     } catch (err) {
       setUploadNote(err instanceof ApiError ? err.message : "Η μαζική ενέργεια απέτυχε.");
     } finally {
@@ -1314,6 +1353,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
     try {
       await onBulkUpdate(Array.from(selected), {}, bulkTag.trim());
       setBulkTag("");
+      await Promise.all([fetchPage(), fetchFacets()]);
     } catch (err) {
       setUploadNote(err instanceof ApiError ? err.message : "Η μαζική ενέργεια απέτυχε.");
     } finally {
@@ -1327,6 +1367,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
     try {
       await onBulkDelete(Array.from(selected));
       setSelected(new Set());
+      await fetchPage();
     } catch (err) {
       setUploadNote(err instanceof ApiError ? err.message : "Η διαγραφή απέτυχε.");
     } finally {
@@ -1345,9 +1386,36 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
     }
   }
 
+  // Wrapped so the currently-loaded page of rows (name badge, follow-up
+  // date, unsubscribed status, category/tags shown in the table) stays in
+  // sync after an edit made from inside the detail drawer — the drawer only
+  // ever reloads its own detail view, it has no way to know this list exists.
+  async function handleDrawerSetFollowUp(contactId, date) {
+    await onSetFollowUp(contactId, date);
+    await fetchPage();
+  }
+  async function handleDrawerMarkReplied(contactId) {
+    await onMarkReplied(contactId);
+    await fetchPage();
+  }
+  async function handleDrawerToggleUnsubscribed(contactId, next) {
+    await onToggleUnsubscribed(contactId, next);
+    await fetchPage();
+  }
+  async function handleDrawerUpdateContact(contactId, data) {
+    await onUpdateContact(contactId, data);
+    await Promise.all([fetchPage(), fetchFacets()]);
+  }
+
+  const hasActiveFilters =
+    statusFilter !== "all" || categoryFilter !== "all" || tagFilter !== "all" ||
+    onlyDue || hideUnsubscribed || hasWebsiteOnly || query;
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   return (
     <div className="flex flex-col h-full">
-      {showNew && <NewContactModal onClose={() => setShowNew(false)} onCreate={onCreate} />}
+      {showNew && <NewContactModal onClose={() => setShowNew(false)} onCreate={handleCreate} />}
       {detailContactId && (
         <ContactDetailDrawer
           contactId={detailContactId}
@@ -1355,12 +1423,12 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           onLoad={onLoadDetail}
           onAddNote={onAddNote}
           onDeleteNote={onDeleteNote}
-          onSetFollowUp={onSetFollowUp}
+          onSetFollowUp={handleDrawerSetFollowUp}
           onCompose={() => { onCompose(detailContactId); setDetailContactId(null); }}
-          onMarkReplied={onMarkReplied}
-          onToggleUnsubscribed={onToggleUnsubscribed}
+          onMarkReplied={handleDrawerMarkReplied}
+          onToggleUnsubscribed={handleDrawerToggleUnsubscribed}
           onUpdateComments={onUpdateComments}
-          onUpdateContact={onUpdateContact}
+          onUpdateContact={handleDrawerUpdateContact}
           onUpdateInternalNotes={onUpdateInternalNotes}
         />
       )}
@@ -1368,9 +1436,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Επαφές</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-            {filtered.length === contacts.length
-              ? `${contacts.length} επαφές συνολικά`
-              : `${filtered.length} από ${contacts.length} επαφές`}
+            {hasActiveFilters ? `${total} επαφές (φιλτραρισμένο)` : `${total} επαφές συνολικά`}
             {dueCount > 0 ? ` · ${dueCount} με εκκρεμή υπενθύμιση` : ""}
           </p>
         </div>
@@ -1466,7 +1532,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
           Μόνο με website
         </label>
 
-        {(statusFilter !== "all" || categoryFilter !== "all" || tagFilter !== "all" || onlyDue || hideUnsubscribed || hasWebsiteOnly || query) && (
+        {hasActiveFilters && (
           <button
             type="button"
             onClick={() => { setQuery(""); setStatusFilter("all"); setCategoryFilter("all"); setTagFilter("all"); setOnlyDue(false); setHideUnsubscribed(false); setHasWebsiteOnly(false); }}
@@ -1524,8 +1590,8 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
       </div>
 
       <div className="flex-1 overflow-auto px-6 py-4">
-        <ErrorNote message={error} onRetry={onReload} />
-        {loading ? (
+        <ErrorNote message={rowsError} onRetry={fetchPage} />
+        {rowsLoading ? (
           <Spinner label="Φόρτωση επαφών…" />
         ) : (
           <div className="overflow-x-auto">
@@ -1546,7 +1612,7 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
+              {rows.map((c) => (
                 <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
                   <td className="py-3">
                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
@@ -1630,11 +1696,33 @@ function ContactsView({ contacts, loading, error, onReload, sequences, onUpload,
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {rows.length === 0 && (
                 <tr><td colSpan={11} className="py-10 text-center text-sm" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</td></tr>
               )}
             </tbody>
           </table>
+          </div>
+        )}
+
+        {!rowsLoading && pageCount > 1 && (
+          <div className="flex items-center justify-center gap-3 pt-5 pb-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium border"
+              style={{ borderColor: C.line, color: C.ink, opacity: page <= 1 ? 0.5 : 1 }}
+            >
+              Προηγούμενη
+            </button>
+            <span className="text-xs font-medium" style={{ color: C.slate }}>Σελίδα {page} από {pageCount}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={page >= pageCount}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium border"
+              style={{ borderColor: C.line, color: C.ink, opacity: page >= pageCount ? 0.5 : 1 }}
+            >
+              Επόμενη
+            </button>
           </div>
         )}
       </div>
@@ -2572,217 +2660,6 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
   );
 }
 
-function pct(numerator, denominator) {
-  if (!denominator) return "0%";
-  return `${Math.round((numerator / denominator) * 100)}%`;
-}
-
-function CrmReportingSection({ crm }) {
-  if (!crm) return null;
-  const OFFER_STATUS_LABELS = { draft: "Πρόχειρες", sent: "Στάλθηκαν", accepted: "Έγιναν δεκτές", declined: "Απορρίφθηκαν" };
-  const pipelineData = ["draft", "sent", "accepted", "declined"].map((key) => ({
-    name: OFFER_STATUS_LABELS[key],
-    value: crm.offersByStatus?.[key] ?? 0,
-    fill: OFFER_STATUSES.find((s) => s.key === key)?.color || C.slate,
-  }));
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-4">
-        <StatCard label="Επικοινωνήθηκαν" value={crm.contactsContacted} sub={`από ${crm.contactsTotal} επαφές`} color={C.sky} />
-        <StatCard label="Προσφορές" value={crm.offersTotal} sub="σύνολο" color={C.navy} />
-        <StatCard label="Win rate" value={crm.winRate == null ? "—" : `${Math.round(crm.winRate * 100)}%`} sub="αποδεκτές / αποφασισμένες" color={C.mint} />
-        <StatCard label="Αξία σε εξέλιξη" value={fmtMoney((crm.valueByStatus?.sent || 0) + (crm.valueByStatus?.draft || 0))} sub="draft + sent" color={C.amber} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="p-5">
-          <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Pipeline προσφορών</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={pipelineData} layout="vertical" margin={{ left: 20 }}>
-              <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: C.ink }} axisLine={false} tickLine={false} width={100} />
-              <Tooltip />
-              <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                {pipelineData.map((d, i) => <React.Fragment key={i} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-
-        <Card className="p-5">
-          <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Αξία ανά κατάσταση</div>
-          <div className="space-y-2.5">
-            {["draft", "sent", "accepted", "declined"].map((key) => (
-              <div key={key} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
-                <span className="text-xs font-medium" style={{ color: C.ink }}>{OFFER_STATUS_LABELS[key]}</span>
-                <span className="text-xs" style={{ color: C.slate }}>{fmtMoney(crm.valueByStatus?.[key] || 0)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      <Card className="p-5">
-        <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Συχνότερες αιτίες αποδοχής/απόρριψης</div>
-        {(!crm.declineReasons || crm.declineReasons.length === 0) ? (
-          <p className="text-sm py-6 text-center" style={{ color: C.slate }}>Δεν έχουν καταχωρηθεί αιτίες ακόμα.</p>
-        ) : (
-          <div className="space-y-2">
-            {crm.declineReasons.map((r, i) => (
-              <div key={i} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
-                <span className="text-xs" style={{ color: C.ink }}>“{r.reason}”</span>
-                <span className="text-xs font-medium shrink-0 ml-3" style={{ color: C.slate }}>×{r.count}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function AnalyticsView({ overview, timeline, crmOverview, loading, error, onReload }) {
-  const [tab, setTab] = useState("email"); // email | crm
-  const totals = overview?.totals || { sent: 0, opened: 0, clicked: 0, replied: 0 };
-  const funnelData = [
-    { name: "Στάλθηκαν", value: totals.sent, fill: C.navy },
-    { name: "Ανοίχτηκαν", value: totals.opened, fill: C.sky },
-    { name: "Κλικ", value: totals.clicked, fill: C.amber },
-    { name: "Απαντήσεις", value: totals.replied, fill: C.mint },
-  ];
-
-  return (
-    <div className="h-full overflow-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
-        <div>
-          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-            {tab === "email" ? "Απόδοση όλων των αποστολών — sequences και χειροκίνητα emails" : "CRM reporting — pipeline & αποτελέσματα"}
-          </p>
-        </div>
-        <div className="flex rounded-lg p-0.5" style={{ backgroundColor: C.pale }}>
-          {[["email", "Email"], ["crm", "Business (CRM)"]].map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setTab(key)}
-              className="rounded-md px-3 py-1.5 text-xs font-medium"
-              style={{ backgroundColor: tab === key ? C.sky : "transparent", color: tab === key ? "#fff" : C.slate }}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-8 py-6 space-y-6">
-        <ErrorNote message={error} onRetry={onReload} />
-        {loading ? (
-          <Spinner label="Φόρτωση analytics…" />
-        ) : tab === "crm" ? (
-          <CrmReportingSection crm={crmOverview} />
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-4">
-              <StatCard label="Open rate" value={pct(totals.opened, totals.sent)} sub={`${totals.sent} αποστολές`} color={C.mint} />
-              <StatCard label="Click rate" value={pct(totals.clicked, totals.sent)} sub="σε σχέση με αποστολές" color={C.mint} />
-              <StatCard label="Reply rate" value={pct(totals.replied, totals.sent)} sub="σε σχέση με αποστολές" color={C.coral} />
-              <StatCard label="Sequences" value={overview?.perSequence?.length ?? 0} sub="ενεργά + ανενεργά" color={C.slate} />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="p-5">
-                <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Τάση εμπλοκής</div>
-                {timeline.length === 0 ? (
-                  <p className="text-sm py-16 text-center" style={{ color: C.slate }}>Δεν υπάρχουν ακόμα events.</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={timeline}>
-                      <CartesianGrid stroke={C.line} vertical={false} />
-                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: C.slate }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: C.slate }} axisLine={false} tickLine={false} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="opens" stroke={C.sky} strokeWidth={2} dot={false} name="Ανοίγματα" />
-                      <Line type="monotone" dataKey="clicks" stroke={C.amber} strokeWidth={2} dot={false} name="Κλικ" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
-              </Card>
-
-              <Card className="p-5">
-                <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Funnel αποστολών</div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={funnelData} layout="vertical" margin={{ left: 20 }}>
-                    <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: C.ink }} axisLine={false} tickLine={false} width={100} />
-                    <Tooltip />
-                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                      {funnelData.map((d, i) => <React.Fragment key={i} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </Card>
-            </div>
-
-            <Card className="p-5">
-              <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Απόδοση ανά sequence</div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left" style={{ color: C.slate }}>
-                    <th className="font-medium pb-2">Sequence</th>
-                    <th className="font-medium pb-2">Στάλθηκαν</th>
-                    <th className="font-medium pb-2">Open rate</th>
-                    <th className="font-medium pb-2">Reply rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(overview?.perSequence || []).map((s) => (
-                    <tr key={s.id} className="border-t" style={{ borderColor: C.line }}>
-                      <td className="py-2.5 font-medium" style={{ color: C.ink }}>{s.name}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{s.sent}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{pct(s.opened, s.sent)}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{pct(s.replied, s.sent)}</td>
-                    </tr>
-                  ))}
-                  {(!overview?.perSequence || overview.perSequence.length === 0) && (
-                    <tr><td colSpan={4} className="py-6 text-center text-sm" style={{ color: C.slate }}>Καμία δραστηριότητα ακόμα.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </Card>
-
-            <Card className="p-5">
-              <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Απόδοση ανά campaign</div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left" style={{ color: C.slate }}>
-                    <th className="font-medium pb-2">Campaign</th>
-                    <th className="font-medium pb-2">Κατάσταση</th>
-                    <th className="font-medium pb-2">Στάλθηκαν</th>
-                    <th className="font-medium pb-2">Open rate</th>
-                    <th className="font-medium pb-2">Reply rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(overview?.perCampaign || []).map((c) => (
-                    <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
-                      <td className="py-2.5 font-medium" style={{ color: C.ink }}>{c.name}</td>
-                      <td className="py-2.5"><CampaignStatusBadge status={c.status} /></td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{c.sent}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{pct(c.opened, c.sent)}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{pct(c.replied, c.sent)}</td>
-                    </tr>
-                  ))}
-                  {(!overview?.perCampaign || overview.perCampaign.length === 0) && (
-                    <tr><td colSpan={5} className="py-6 text-center text-sm" style={{ color: C.slate }}>Κανένα campaign ακόμα.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </Card>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
   const [expandedId, setExpandedId] = useState(null);
 
@@ -3034,22 +2911,6 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
 // A campaign is one message sent to many contacts, one-by-one with spacing
 // between sends (see scheduler.js's campaign tick) — distinct from a
 // Sequence, which is a multi-step nurture with day-scale delays per contact.
-const CAMPAIGN_STATUS_META = {
-  draft:     { label: "Πρόχειρο", color: C.slate },
-  running:   { label: "Σε εξέλιξη", color: C.mint },
-  paused:    { label: "Σε παύση", color: C.amber },
-  completed: { label: "Ολοκληρώθηκε", color: C.sky },
-};
-
-function CampaignStatusBadge({ status }) {
-  const meta = CAMPAIGN_STATUS_META[status] || CAMPAIGN_STATUS_META.draft;
-  return (
-    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" style={{ backgroundColor: `${meta.color}1A`, color: meta.color }}>
-      {meta.label}
-    </span>
-  );
-}
-
 function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
@@ -4495,6 +4356,12 @@ export default function App() {
     if (view === "campaigns") loadCampaigns();
   }, [view, authState, loadAnalytics, loadActivity, loadDashboard, loadIntegrations, loadCampaigns]);
 
+  // Gated on whichever tab is actually open — this used to unconditionally
+  // refresh analytics/activity/dashboard/campaigns every tick regardless of
+  // which view the user was looking at, so e.g. someone sitting on Contacts
+  // all day still triggered a full Analytics reload every 90s for nobody.
+  // Same per-view conditions as the "view changed" effect above, just also
+  // applied on a timer and on tab refocus.
   useEffect(() => {
     if (authState !== "authed") return;
     const id = setInterval(() => {
@@ -4504,26 +4371,26 @@ export default function App() {
       // nothing. Whatever's stale gets refreshed as soon as the tab is
       // focused again via the visibilitychange listener below.
       if (document.hidden) return;
-      loadAnalytics();
-      loadActivity();
-      loadDashboard();
-      loadCampaigns();
+      if (view === "analytics") loadAnalytics();
+      if (view === "inbox") loadActivity();
+      if (view === "dashboard") loadDashboard();
+      if (view === "campaigns") loadCampaigns();
     }, 90000); // was 30s — 90s cuts request volume/egress 3x with no real loss of freshness
     return () => clearInterval(id);
-  }, [authState, loadAnalytics, loadActivity, loadDashboard, loadCampaigns]);
+  }, [authState, view, loadAnalytics, loadActivity, loadDashboard, loadCampaigns]);
 
   useEffect(() => {
     if (authState !== "authed") return;
     function handleVisibilityChange() {
-      if (!document.hidden) {
-        loadAnalytics();
-        loadActivity();
-        loadCampaigns();
-      }
+      if (document.hidden) return;
+      if (view === "analytics") loadAnalytics();
+      if (view === "inbox") loadActivity();
+      if (view === "dashboard") loadDashboard();
+      if (view === "campaigns") loadCampaigns();
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [authState, loadAnalytics, loadActivity, loadCampaigns]);
+  }, [authState, view, loadAnalytics, loadActivity, loadDashboard, loadCampaigns]);
 
   async function handleLogout() {
     try {
@@ -4940,10 +4807,6 @@ export default function App() {
           )}
           {view === "contacts" && (
             <ContactsView
-              contacts={contacts}
-              loading={contactsLoading}
-              error={contactsError}
-              onReload={loadContacts}
               sequences={sequences}
               onUpload={handleUploadCsv}
               onCreate={handleCreateContact}
@@ -5019,7 +4882,9 @@ export default function App() {
             />
           )}
           {view === "analytics" && (
-            <AnalyticsView overview={overview} timeline={timeline} crmOverview={crmOverview} loading={analyticsLoading} error={analyticsError} onReload={loadAnalytics} />
+            <Suspense fallback={<Spinner label="Φόρτωση analytics…" />}>
+              <AnalyticsView overview={overview} timeline={timeline} crmOverview={crmOverview} loading={analyticsLoading} error={analyticsError} onReload={loadAnalytics} />
+            </Suspense>
           )}
           {view === "team" && (
             <TeamView

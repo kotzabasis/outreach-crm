@@ -61,52 +61,74 @@ const contactSchema = z.object({
   internalNotes: z.string().max(4000).optional().default(""),
 });
 
+// Paginated + server-side filtered, backing both the main Contacts table and
+// GlobalSearch's quick-search. Response is an envelope (not a bare array) so
+// `total`/`dueCount`/`page`/`pageSize` can travel alongside the page of rows
+// without a second round-trip. dueCount is intentionally computed from a
+// separate company-wide query — it mirrors the "X with a pending reminder"
+// header badge that today is company-wide regardless of whatever other
+// filters are active, and pagination must not change that semantic.
 router.get("/", async (req, res) => {
-  const { status, q, category, tag, unsubscribed, hasFollowUp } = req.query;
-  const contacts = await prisma.contact.findMany({
-    where: {
-      companyId: req.user.companyId,
-      ...(status && status !== "all" ? { status: String(status) } : {}),
-      ...(category && category !== "all" ? { category: String(category) } : {}),
-      // tags is a comma-separated string column — "contains" is good enough
-      // filtering at this scale without a separate join table.
-      ...(tag && tag !== "all" ? { tags: { contains: String(tag) } } : {}),
-      ...(unsubscribed === "true" ? { unsubscribed: true } : {}),
-      ...(unsubscribed === "false" ? { unsubscribed: false } : {}),
-      ...(hasFollowUp === "true" ? { nextFollowUpAt: { not: null } } : {}),
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: String(q) } },
-              { firstName: { contains: String(q) } },
-              { lastName: { contains: String(q) } },
-              { email: { contains: String(q) } },
-              { company: { contains: String(q) } },
-              { phone: { contains: String(q) } },
-              { tags: { contains: String(q) } },
-              { category: { contains: String(q) } },
-              { website: { contains: String(q) } },
-              { gmb: { contains: String(q) } },
-              { facebook: { contains: String(q) } },
-              { instagram: { contains: String(q) } },
-              { googleReviews: { contains: String(q) } },
-              { comments: { contains: String(q) } },
-              { internalNotes: { contains: String(q) } },
-            ],
-          }
-        : {}),
-    },
-    include: {
-      // Only the most recent enrollment, just to show "which sequence /
-      // which step" in the contacts table — full history isn't needed here.
-      enrollments: {
-        include: { sequence: { select: { name: true } } },
-        orderBy: { createdAt: "desc" },
-        take: 1,
+  const { status, q, category, tag, unsubscribed, hasFollowUp, dueOnly, hasWebsite } = req.query;
+  const companyId = req.user.companyId;
+
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(Math.max(1, Number(req.query.pageSize) || 50), 200);
+
+  const where = {
+    companyId,
+    ...(status && status !== "all" ? { status: String(status) } : {}),
+    ...(category && category !== "all" ? { category: String(category) } : {}),
+    // tags is a comma-separated string column — "contains" is good enough
+    // filtering at this scale without a separate join table.
+    ...(tag && tag !== "all" ? { tags: { contains: String(tag) } } : {}),
+    ...(unsubscribed === "true" ? { unsubscribed: true } : {}),
+    ...(unsubscribed === "false" ? { unsubscribed: false } : {}),
+    ...(hasFollowUp === "true" ? { nextFollowUpAt: { not: null } } : {}),
+    ...(dueOnly === "true" ? { nextFollowUpAt: { not: null, lte: new Date() } } : {}),
+    ...(hasWebsite === "true" ? { website: { not: null }, NOT: { website: "" } } : {}),
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: String(q) } },
+            { firstName: { contains: String(q) } },
+            { lastName: { contains: String(q) } },
+            { email: { contains: String(q) } },
+            { company: { contains: String(q) } },
+            { phone: { contains: String(q) } },
+            { tags: { contains: String(q) } },
+            { category: { contains: String(q) } },
+            { website: { contains: String(q) } },
+            { gmb: { contains: String(q) } },
+            { facebook: { contains: String(q) } },
+            { instagram: { contains: String(q) } },
+            { googleReviews: { contains: String(q) } },
+            { comments: { contains: String(q) } },
+            { internalNotes: { contains: String(q) } },
+          ],
+        }
+      : {}),
+  };
+
+  const [contacts, total, dueCount] = await Promise.all([
+    prisma.contact.findMany({
+      where,
+      include: {
+        // Only the most recent enrollment, just to show "which sequence /
+        // which step" in the contacts table — full history isn't needed here.
+        enrollments: {
+          include: { sequence: { select: { name: true } } },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.contact.count({ where }),
+    prisma.contact.count({ where: { companyId, nextFollowUpAt: { not: null, lte: new Date() } } }),
+  ]);
 
   const withEnrollment = contacts.map(({ enrollments, ...c }) => ({
     ...c,
@@ -114,11 +136,33 @@ router.get("/", async (req, res) => {
     currentStep: enrollments[0] ? enrollments[0].currentStep : null,
   }));
 
-  res.json(withEnrollment);
+  res.json({ contacts: withEnrollment, total, dueCount, page, pageSize });
 });
 
+// Lightweight distinct-value lists for the Contacts filter dropdowns —
+// select-only (no full rows), so this stays cheap even as the contacts table
+// grows well past what's practical to derive client-side now that the list
+// itself is paginated server-side.
+//
 // Literal GET paths must be registered before GET "/:id" so Express doesn't
 // swallow them as an :id lookup.
+router.get("/facets", async (req, res) => {
+  const rows = await prisma.contact.findMany({
+    where: { companyId: req.user.companyId },
+    select: { category: true, tags: true },
+  });
+
+  const categories = new Set();
+  const tags = new Set();
+  for (const r of rows) {
+    if (r.category) categories.add(r.category);
+    if (r.tags) {
+      for (const t of r.tags.split(",").map((t) => t.trim()).filter(Boolean)) tags.add(t);
+    }
+  }
+
+  res.json({ categories: Array.from(categories).sort(), tags: Array.from(tags).sort() });
+});
 router.get("/export", async (req, res) => {
   const contacts = await prisma.contact.findMany({ where: { companyId: req.user.companyId }, orderBy: { createdAt: "desc" } });
   const header = [

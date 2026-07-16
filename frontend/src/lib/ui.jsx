@@ -110,3 +110,30 @@ export function Brand({ size = 34, textSize = "text-lg" }) {
     </div>
   );
 }
+
+// Shared status metadata/badges — used by App.jsx's Offers/Contacts/
+// Campaigns/Analytics views alike, so they live here rather than in App.jsx
+// itself (which would defeat lazy-loading AnalyticsView.jsx, since that file
+// needs these too without pulling in the whole App.jsx module).
+export const OFFER_STATUSES = [
+  { key: "draft", label: "Πρόχειρο", color: C.slate },
+  { key: "sent", label: "Στάλθηκε", color: C.sky },
+  { key: "accepted", label: "Έγινε δεκτό", color: C.mint },
+  { key: "declined", label: "Απορρίφθηκε", color: C.coral },
+];
+
+export const CAMPAIGN_STATUS_META = {
+  draft:     { label: "Πρόχειρο", color: C.slate },
+  running:   { label: "Σε εξέλιξη", color: C.mint },
+  paused:    { label: "Σε παύση", color: C.amber },
+  completed: { label: "Ολοκληρώθηκε", color: C.sky },
+};
+
+export function CampaignStatusBadge({ status }) {
+  const meta = CAMPAIGN_STATUS_META[status] || CAMPAIGN_STATUS_META.draft;
+  return (
+    <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" style={{ backgroundColor: `${meta.color}1A`, color: meta.color }}>
+      {meta.label}
+    </span>
+  );
+}

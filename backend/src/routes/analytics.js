@@ -5,65 +5,52 @@ const requireAuth = require("../lib/requireAuth");
 const router = express.Router();
 router.use(requireAuth);
 
+// Rewritten to aggregate in Postgres (count()/relation-filter EXISTS
+// queries) instead of loading every EmailLog + TrackingEvent for the whole
+// company into JS and counting there — the old version got linearly slower
+// and heavier as email history grew, with no bound at all, and this endpoint
+// is hit on every Analytics-tab open plus the background poll. Same pattern
+// admin.js's company-stats endpoint already used well; this brings
+// analytics in line with it. Semantics are preserved exactly: "opened" means
+// distinct EmailLogs with at least one non-bot open event (not a raw event
+// count — one email can be opened multiple times), and "replied" means
+// contacts marked replied who have actually been emailed at least once.
 router.get("/overview", async (req, res) => {
-  const sequences = await prisma.sequence.findMany({
-    where: { companyId: req.user.companyId },
-    include: {
-      enrollments: {
-        include: { emailLogs: { include: { events: true } } },
-      },
-    },
-  });
+  const companyId = req.user.companyId;
 
-  const perSequence = sequences.map((seq) => {
-    const logs = seq.enrollments.flatMap((e) => e.emailLogs);
-    const sent = logs.length;
-    const opened = logs.filter((l) => l.events.some((e) => e.type === "open" && !e.isBot)).length;
-    const clicked = logs.filter((l) => l.events.some((e) => e.type === "click")).length;
-    const replied = seq.enrollments.filter((e) => e.status === "replied").length;
-    return { id: seq.id, name: seq.name, sent, opened, clicked, replied };
-  });
+  const [sent, opened, clicked, replied, sequences, campaigns] = await Promise.all([
+    prisma.emailLog.count({ where: { companyId } }),
+    prisma.emailLog.count({ where: { companyId, events: { some: { type: "open", isBot: false } } } }),
+    prisma.emailLog.count({ where: { companyId, events: { some: { type: "click" } } } }),
+    prisma.contact.count({ where: { companyId, status: "replied", emailLogs: { some: {} } } }),
+    prisma.sequence.findMany({ where: { companyId }, select: { id: true, name: true } }),
+    prisma.campaign.findMany({ where: { companyId }, select: { id: true, name: true, status: true } }),
+  ]);
 
-  // Totals used to be just the sum of perSequence, which silently dropped
-  // every manual/one-off send (ComposeModal) — those don't belong to any
-  // enrollment, so they never appeared in a sequence's emailLogs at all.
-  // Anyone testing or doing outreach manually would see a near-empty top-line
-  // Analytics board even though sends were actually happening. Compute
-  // totals from every EmailLog for this user instead — sequence AND manual
-  // alike, same denormalized-EmailLog pattern used everywhere else in the app.
-  const allLogs = await prisma.emailLog.findMany({
-    where: { companyId: req.user.companyId },
-    include: { events: true },
-  });
-  const sent = allLogs.length;
-  const opened = allLogs.filter((l) => l.events.some((e) => e.type === "open" && !e.isBot)).length;
-  const clicked = allLogs.filter((l) => l.events.some((e) => e.type === "click")).length;
-  // "Replied" has no per-email flag (see mark-replied route) — it's tracked
-  // on the contact. Count contacts we've actually emailed at least once who
-  // are now marked replied, so the rate still means "of the people we
-  // contacted, how many replied" regardless of whether that reply came from
-  // a sequence step or a manual email.
-  const emailedContactIds = [...new Set(allLogs.map((l) => l.contactId))];
-  const replied = await prisma.contact.count({
-    where: { companyId: req.user.companyId, status: "replied", id: { in: emailedContactIds } },
-  });
+  const perSequence = await Promise.all(
+    sequences.map(async (seq) => {
+      const [seqSent, seqOpened, seqClicked, seqReplied] = await Promise.all([
+        prisma.emailLog.count({ where: { companyId, enrollment: { sequenceId: seq.id } } }),
+        prisma.emailLog.count({ where: { companyId, enrollment: { sequenceId: seq.id }, events: { some: { type: "open", isBot: false } } } }),
+        prisma.emailLog.count({ where: { companyId, enrollment: { sequenceId: seq.id }, events: { some: { type: "click" } } } }),
+        prisma.enrollment.count({ where: { sequenceId: seq.id, status: "replied" } }),
+      ]);
+      return { id: seq.id, name: seq.name, sent: seqSent, opened: seqOpened, clicked: seqClicked, replied: seqReplied };
+    })
+  );
 
   // Campaign reporting, same shape as perSequence — lets the frontend filter
   // Analytics down to "just this campaign" the same way it already does for
-  // sequences. Reuses allLogs (already fetched above) instead of a fresh
-  // query per campaign.
-  const campaigns = await prisma.campaign.findMany({ where: { companyId: req.user.companyId }, select: { id: true, name: true, status: true } });
+  // sequences.
   const perCampaign = await Promise.all(
     campaigns.map(async (camp) => {
-      const logs = allLogs.filter((l) => l.campaignId === camp.id);
-      const sent = logs.length;
-      const opened = logs.filter((l) => l.events.some((e) => e.type === "open" && !e.isBot)).length;
-      const clicked = logs.filter((l) => l.events.some((e) => e.type === "click")).length;
-      const contactIds = [...new Set(logs.map((l) => l.contactId))];
-      const replied = contactIds.length
-        ? await prisma.contact.count({ where: { companyId: req.user.companyId, status: "replied", id: { in: contactIds } } })
-        : 0;
-      return { id: camp.id, name: camp.name, status: camp.status, sent, opened, clicked, replied };
+      const [campSent, campOpened, campClicked, campReplied] = await Promise.all([
+        prisma.emailLog.count({ where: { companyId, campaignId: camp.id } }),
+        prisma.emailLog.count({ where: { companyId, campaignId: camp.id, events: { some: { type: "open", isBot: false } } } }),
+        prisma.emailLog.count({ where: { companyId, campaignId: camp.id, events: { some: { type: "click" } } } }),
+        prisma.contact.count({ where: { companyId, status: "replied", emailLogs: { some: { campaignId: camp.id } } } }),
+      ]);
+      return { id: camp.id, name: camp.name, status: camp.status, sent: campSent, opened: campOpened, clicked: campClicked, replied: campReplied };
     })
   );
 
