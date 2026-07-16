@@ -1,6 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://outreach-crm-a22j.onrender.com/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

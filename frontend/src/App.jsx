@@ -4173,6 +4173,12 @@ export default function App() {
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState("");
 
+  // Exact sidebar-badge counts from cheap COUNT queries (GET /dashboard/summary),
+  // so the badges are accurate (not capped by list page size) and show up
+  // immediately instead of waiting on every full list to load. `counts` below
+  // reads this first and falls back to list lengths until it arrives.
+  const [summary, setSummary] = useState(null);
+
   const [integrations, setIntegrations] = useState({ webhooks: [], metaConnections: [], linkedinConnections: [] });
   const [integrationsLoading, setIntegrationsLoading] = useState(false);
   const [integrationsError, setIntegrationsError] = useState("");
@@ -4276,6 +4282,17 @@ export default function App() {
       setDashboardError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα σημερινά.");
     } finally {
       setDashboardLoading(false);
+    }
+  }, []);
+
+  // Cheap counts for the sidebar badges — fetched on its own so the badges can
+  // render before the heavy lists do. Silent on failure (badges just fall back
+  // to list lengths).
+  const loadSummary = useCallback(async () => {
+    try {
+      setSummary(await api.get("/dashboard/summary"));
+    } catch {
+      /* non-critical — counts fall back to list lengths */
     }
   }, []);
 
@@ -4399,6 +4416,7 @@ export default function App() {
   }, []);
 
   const refreshAll = useCallback(() => {
+    loadSummary();
     loadContacts();
     loadSequences();
     loadAnalytics();
@@ -4407,7 +4425,7 @@ export default function App() {
     loadTemplates();
     loadOffers();
     loadCampaigns();
-  }, [loadContacts, loadSequences, loadAnalytics, loadActivity, loadDashboard, loadTemplates, loadOffers, loadCampaigns]);
+  }, [loadSummary, loadContacts, loadSequences, loadAnalytics, loadActivity, loadDashboard, loadTemplates, loadOffers, loadCampaigns]);
 
   // Session check on mount, plus handling the redirect back from Google OAuth
   // (?gmail_connected=1|0) without leaving it sitting in the address bar.
@@ -4807,14 +4825,17 @@ export default function App() {
     );
   }
 
+  // Prefer the exact counts from /dashboard/summary; fall back to the loaded
+  // lists' lengths until it arrives (or if it failed). Using `?? ` so a real 0
+  // from the summary isn't overridden by a stale/empty list length.
   const counts = {
-    inbox: activity.length,
-    dueToday: (dashboard.counts?.followUps || 0) + (dashboard.counts?.sends || 0),
-    contacts: contacts.length,
-    sequences: sequences.filter((s) => s.active).length,
-    templates: templates.length,
-    offers: offers.length,
-    campaigns: campaigns.filter((c) => c.status === "running").length,
+    inbox: summary?.inbox ?? activity.length,
+    dueToday: summary?.dueToday ?? ((dashboard.counts?.followUps || 0) + (dashboard.counts?.sends || 0)),
+    contacts: summary?.contacts ?? contacts.length,
+    sequences: summary?.activeSequences ?? sequences.filter((s) => s.active).length,
+    templates: summary?.templates ?? templates.length,
+    offers: summary?.offers ?? offers.length,
+    campaigns: summary?.runningCampaigns ?? campaigns.filter((c) => c.status === "running").length,
   };
 
   return (

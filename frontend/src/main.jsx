@@ -22,6 +22,22 @@ const App = lazy(() => import("./App.jsx"));
 const SuperAdminApp = lazy(() => import("./SuperAdminApp.jsx"));
 const ResetPasswordPage = lazy(() => import("./ResetPasswordPage.jsx"));
 
+// After a new deploy, a tab that's been open on the old build still references
+// the previous hashed chunk filenames; the next lazy import (navigating to a
+// code-split screen/view) then 404s with a ChunkLoadError, which React surfaces
+// as the ErrorBoundary's "Κάτι πήγε στραβά" screen. Almost always the fix is
+// simply to reload and fetch the current build — so do it automatically, once,
+// guarded against a reload loop if the failure is something other than a stale
+// chunk. Vite fires `vite:preloadError` for exactly this case.
+window.addEventListener("vite:preloadError", () => {
+  if (sessionStorage.getItem("chunkReloaded")) return; // already tried — don't loop
+  sessionStorage.setItem("chunkReloaded", "1");
+  window.location.reload();
+});
+// A clean load means we're on the current build — clear the guard so a future
+// deploy can auto-recover again.
+window.addEventListener("load", () => sessionStorage.removeItem("chunkReloaded"));
+
 const path = window.location.pathname;
 const Screen = path.startsWith("/superadmin")
   ? SuperAdminApp

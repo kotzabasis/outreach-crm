@@ -85,4 +85,29 @@ router.get("/due-today", async (req, res) => {
   });
 });
 
+// Lightweight counts for the sidebar badges. Previously the frontend derived
+// these from the full contacts/sequences/offers/campaigns lists it loaded on
+// login — which meant the badges were only as accurate as those lists (capped
+// at a page size) and couldn't show until every big list finished loading.
+// These are cheap COUNT queries (all backed by companyId indexes) returned in
+// one round trip, so the badges are exact and appear immediately.
+router.get("/summary", async (req, res) => {
+  const companyId = req.user.companyId;
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+
+  const [contacts, activeSequences, templates, offers, runningCampaigns, inbox, followUps, sends] = await Promise.all([
+    prisma.contact.count({ where: { companyId } }),
+    prisma.sequence.count({ where: { companyId, active: true } }),
+    prisma.template.count({ where: { companyId } }),
+    prisma.offer.count({ where: { companyId } }),
+    prisma.campaign.count({ where: { companyId, status: "running" } }),
+    prisma.emailLog.count({ where: { companyId } }),
+    prisma.contact.count({ where: { companyId, unsubscribed: false, nextFollowUpAt: { not: null, lte: endOfToday } } }),
+    prisma.enrollment.count({ where: { status: "active", nextSendAt: { lte: endOfToday }, contact: { companyId, unsubscribed: false } } }),
+  ]);
+
+  res.json({ contacts, activeSequences, templates, offers, runningCampaigns, inbox, dueToday: followUps + sends });
+});
+
 module.exports = router;
