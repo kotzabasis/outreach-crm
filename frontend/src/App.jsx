@@ -4208,7 +4208,13 @@ export default function App() {
     setContactsLoading(true);
     setContactsError("");
     try {
-      setContacts(await api.get("/contacts"));
+      // /contacts returns a paginated object ({ contacts, total, dueCount, ... }),
+      // not a bare array — extract the rows. Request the max page so the
+      // recipient pickers / category+tag facets built from this list aren't
+      // truncated to the default page size. (Defensive: also accept a bare
+      // array in case the endpoint shape changes back.)
+      const res = await api.get("/contacts?pageSize=200");
+      setContacts(Array.isArray(res) ? res : res.contacts || []);
     } catch (err) {
       setContactsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι επαφές.");
     } finally {
@@ -4365,7 +4371,10 @@ export default function App() {
     setOffersLoading(true);
     setOffersError("");
     try {
-      setOffers(await api.get("/offers"));
+      // /offers returns a paginated object ({ offers, total, ... }), not a bare
+      // array — extract the rows (the offers board calls .filter/.map on this).
+      const res = await api.get("/offers?pageSize=200");
+      setOffers(Array.isArray(res) ? res : res.offers || []);
     } catch (err) {
       setOffersError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι προσφορές.");
     } finally {
@@ -4377,7 +4386,11 @@ export default function App() {
     setCampaignsLoading(true);
     setCampaignsError("");
     try {
-      setCampaigns(await api.get("/campaigns"));
+      // /campaigns returns a paginated object ({ campaigns, total, ... }), not
+      // a bare array — extract the rows (dashboard stats + list render call
+      // .filter/.map on this). Max page size so counts aren't truncated.
+      const res = await api.get("/campaigns?pageSize=200");
+      setCampaigns(Array.isArray(res) ? res : res.campaigns || []);
     } catch (err) {
       setCampaignsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα campaigns.");
     } finally {
