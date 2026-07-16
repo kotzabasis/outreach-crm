@@ -1,4 +1,5 @@
 const express = require("express");
+const { Prisma } = require("@prisma/client");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 
@@ -204,6 +205,86 @@ router.get("/crm-overview", async (req, res) => {
     valueByStatus,
     winRate,
     declineReasons,
+  });
+});
+
+// A/B subject-test results. For every sequence step and campaign that has
+// subject variants configured, reports each subject line's open rate. "opened"
+// is distinct EmailLogs with a non-bot open event — the same definition used by
+// /overview — grouped by EmailLog.subject, which is the exact line that went
+// out (see scheduler.js pickSubject). Variants that haven't been sent yet show
+// as 0/0 so the full test is always visible, not just the lines with data.
+router.get("/ab-tests", async (req, res) => {
+  const companyId = req.user.companyId;
+
+  const asArr = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === "string" && s.trim()) : []);
+
+  // Only the steps/campaigns that actually have a test configured. Json array
+  // emptiness isn't cleanly filterable in Prisma, so fetch the (small) set and
+  // filter in JS.
+  const [allSteps, allCampaigns] = await Promise.all([
+    prisma.sequenceStep.findMany({
+      where: { sequence: { companyId } },
+      select: { id: true, order: true, subject: true, subjectVariants: true, sequence: { select: { id: true, name: true } } },
+    }),
+    prisma.campaign.findMany({
+      where: { companyId },
+      select: { id: true, name: true, subject: true, subjectVariants: true },
+    }),
+  ]);
+
+  const steps = allSteps.filter((s) => asArr(s.subjectVariants).length > 0);
+  const campaigns = allCampaigns.filter((c) => asArr(c.subjectVariants).length > 0);
+
+  // One grouped query per scope: sent + non-bot-opened counts per (owner, subject).
+  async function countsBySubject(column, ids) {
+    if (ids.length === 0) return new Map();
+    const rows = await prisma.$queryRaw`
+      SELECT el.${Prisma.raw(`"${column}"`)} AS owner, el.subject AS subject,
+        COUNT(DISTINCT el.id)::int AS sent,
+        COUNT(DISTINCT CASE WHEN te.type = 'open' AND te."isBot" = false THEN el.id END)::int AS opened
+      FROM "EmailLog" el
+      LEFT JOIN "TrackingEvent" te ON te."emailLogId" = el.id
+      WHERE el.${Prisma.raw(`"${column}"`)} IN (${Prisma.join(ids)})
+      GROUP BY el.${Prisma.raw(`"${column}"`)}, el.subject`;
+    const map = new Map(); // owner -> { subject -> {sent, opened} }
+    for (const r of rows) {
+      if (!map.has(r.owner)) map.set(r.owner, {});
+      map.get(r.owner)[r.subject] = { sent: r.sent, opened: r.opened };
+    }
+    return map;
+  }
+
+  const [stepCounts, campaignCounts] = await Promise.all([
+    countsBySubject("stepId", steps.map((s) => s.id)),
+    countsBySubject("campaignId", campaigns.map((c) => c.id)),
+  ]);
+
+  const buildVariants = (primary, variants, bySubject) =>
+    [primary, ...asArr(variants)].map((subject, i) => {
+      const c = (bySubject && bySubject[subject]) || { sent: 0, opened: 0 };
+      return {
+        subject,
+        isPrimary: i === 0,
+        sent: c.sent,
+        opened: c.opened,
+        openRate: c.sent > 0 ? Math.round((c.opened / c.sent) * 1000) / 10 : 0, // %, 1 decimal
+      };
+    });
+
+  res.json({
+    sequences: steps.map((s) => ({
+      sequenceId: s.sequence.id,
+      sequenceName: s.sequence.name,
+      stepId: s.id,
+      stepOrder: s.order,
+      variants: buildVariants(s.subject, s.subjectVariants, stepCounts.get(s.id)),
+    })),
+    campaigns: campaigns.map((c) => ({
+      campaignId: c.id,
+      name: c.name,
+      variants: buildVariants(c.subject, c.subjectVariants, campaignCounts.get(c.id)),
+    })),
   });
 });
 

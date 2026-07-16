@@ -2361,7 +2361,9 @@ function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown,
 function StepFields({
   mode, setMode, templateId, setTemplateId, subject, setSubject, body, setBody,
   attachments, setAttachments, conditions, setConditions, templates,
+  subjectVariants, setSubjectVariants,
 }) {
+  const variants = Array.isArray(subjectVariants) ? subjectVariants : [];
   const tagsText = (conditions.requireTags || []).join(", ");
   function setTagsText(text) {
     setConditions({
@@ -2396,6 +2398,38 @@ function StepFields({
           <input required placeholder="Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})" value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
+
+          {/* A/B subject test: optional extra subject lines. Each send picks one
+              at random; results show under Analytics → A/B. */}
+          {typeof setSubjectVariants === "function" && (
+            <div className="rounded-lg border px-3 py-2 space-y-2" style={{ borderColor: C.line }}>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium" style={{ color: C.slate }}>
+                  A/B θέματος{variants.length > 0 ? ` · ${variants.length + 1} παραλλαγές` : ""}
+                </span>
+                {variants.length < 4 && (
+                  <button type="button" onClick={() => setSubjectVariants([...variants, ""])}
+                    className="text-[11px] font-medium flex items-center gap-1" style={{ color: C.sky }}>
+                    <Plus size={11} /> Παραλλαγή θέματος
+                  </button>
+                )}
+              </div>
+              {variants.map((v, vi) => (
+                <div key={vi} className="flex items-center gap-2">
+                  <input placeholder={`Εναλλακτικό θέμα ${vi + 2}`} value={v}
+                    onChange={(e) => setSubjectVariants(variants.map((x, idx) => (idx === vi ? e.target.value : x)))}
+                    className="flex-1 rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
+                  <button type="button" onClick={() => setSubjectVariants(variants.filter((_, idx) => idx !== vi))} style={{ color: C.coral }}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+              {variants.length > 0 && (
+                <p className="text-[10px]" style={{ color: C.slate }}>Κάθε αποστολή διαλέγει τυχαία ένα θέμα. Αποτελέσματα: Analytics → A/B.</p>
+              )}
+            </div>
+          )}
+
           <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={90} />
           {!hasUnsubscribeLink(body) && body.length > 0 && (
             <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής.</TipBanner>
@@ -2430,6 +2464,7 @@ function emptyStep(index) {
     mode: "inline",
     templateId: "",
     subject: "",
+    subjectVariants: [],
     body: DEFAULT_DISCLAIMER_HTML,
     delayDays: SUGGESTED_DELAYS[index] ?? 7,
     conditions: { requireEvent: null, requireTags: [] },
@@ -2460,8 +2495,8 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
     try {
       const payloadSteps = steps.map((s) =>
         s.mode === "template" && s.templateId
-          ? { templateId: s.templateId, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
-          : { subject: s.subject, body: s.body, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
+          ? { templateId: s.templateId, subjectVariants: s.subjectVariants || [], delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
+          : { subject: s.subject, subjectVariants: s.subjectVariants || [], body: s.body, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
       );
       await onCreate({ name, steps: payloadSteps });
       onClose();
@@ -2514,6 +2549,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
                 mode={step.mode} setMode={(m) => updateStep(i, { mode: m })}
                 templateId={step.templateId} setTemplateId={(v) => updateStep(i, { templateId: v })}
                 subject={step.subject} setSubject={(v) => updateStep(i, { subject: v })}
+                subjectVariants={step.subjectVariants} setSubjectVariants={(v) => updateStep(i, { subjectVariants: v })}
                 body={step.body} setBody={(v) => updateStep(i, { body: v })}
                 attachments={step.attachments} setAttachments={(v) => updateStep(i, { attachments: v })}
                 conditions={step.conditions} setConditions={(v) => updateStep(i, { conditions: v })}
@@ -2542,6 +2578,7 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
   const [mode, setMode] = useState("inline");
   const [templateId, setTemplateId] = useState("");
   const [subject, setSubject] = useState("");
+  const [subjectVariants, setSubjectVariants] = useState([]);
   const [body, setBody] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [conditions, setConditions] = useState({ requireEvent: null, requireTags: [] });
@@ -2556,8 +2593,8 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
     try {
       const payload =
         mode === "template"
-          ? { templateId, delayDays: Number(delayDays) || 0, conditions, attachments }
-          : { subject, body, delayDays: Number(delayDays) || 0, conditions, attachments };
+          ? { templateId, subjectVariants, delayDays: Number(delayDays) || 0, conditions, attachments }
+          : { subject, subjectVariants, body, delayDays: Number(delayDays) || 0, conditions, attachments };
       await onAdd(payload);
       onClose();
     } catch (err) {
@@ -2579,6 +2616,7 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
             mode={mode} setMode={setMode}
             templateId={templateId} setTemplateId={setTemplateId}
             subject={subject} setSubject={setSubject}
+            subjectVariants={subjectVariants} setSubjectVariants={setSubjectVariants}
             body={body} setBody={setBody}
             attachments={attachments} setAttachments={setAttachments}
             conditions={conditions} setConditions={setConditions}
@@ -2981,6 +3019,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
 function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
+  const [subjectVariants, setSubjectVariants] = useState([]);
   const [body, setBody] = useState(DEFAULT_DISCLAIMER_HTML);
   const [attachments, setAttachments] = useState([]);
   const [intervalMinutes, setIntervalMinutes] = useState(2);
@@ -3053,6 +3092,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
       await onCreate({
         name,
         subject,
+        subjectVariants,
         body,
         attachments,
         contactIds: [...selectedIds],
@@ -3088,6 +3128,32 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
 
             <input required placeholder="Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})" value={subject} onChange={(e) => setSubject(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+
+            {/* A/B subject test — each recipient gets one of these at random;
+                results under Analytics → A/B. */}
+            <div className="rounded-lg border px-3 py-2 space-y-2" style={{ borderColor: C.line }}>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium" style={{ color: C.slate }}>
+                  A/B θέματος{subjectVariants.length > 0 ? ` · ${subjectVariants.length + 1} παραλλαγές` : ""}
+                </span>
+                {subjectVariants.length < 4 && (
+                  <button type="button" onClick={() => setSubjectVariants([...subjectVariants, ""])}
+                    className="text-[11px] font-medium flex items-center gap-1" style={{ color: C.sky }}>
+                    <Plus size={11} /> Παραλλαγή θέματος
+                  </button>
+                )}
+              </div>
+              {subjectVariants.map((v, vi) => (
+                <div key={vi} className="flex items-center gap-2">
+                  <input placeholder={`Εναλλακτικό θέμα ${vi + 2}`} value={v}
+                    onChange={(e) => setSubjectVariants(subjectVariants.map((x, idx) => (idx === vi ? e.target.value : x)))}
+                    className="flex-1 rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+                  <button type="button" onClick={() => setSubjectVariants(subjectVariants.filter((_, idx) => idx !== vi))} style={{ color: C.coral }}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
 
             <div className="flex gap-1.5 flex-wrap">
               <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>

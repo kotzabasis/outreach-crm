@@ -23,10 +23,21 @@ const conditionsSchema = z
 // template (templateId) — the template's subject/body are copied in at
 // creation time, not linked live, so editing the template later never
 // changes steps that already exist (important once contacts are enrolled).
+// A/B subject variants: up to 4 extra subject lines tested against the primary
+// `subject`. Trimmed, empties dropped — so a blank variant input never becomes
+// a real (empty) subject line in the random pool.
+const subjectVariantsSchema = z
+  .array(z.string().max(300))
+  .max(4)
+  .optional()
+  .default([])
+  .transform((arr) => arr.map((s) => s.trim()).filter(Boolean));
+
 const stepSchema = z
   .object({
     templateId: z.string().uuid().optional(),
     subject: z.string().min(1).max(300).optional(),
+    subjectVariants: subjectVariantsSchema,
     body: z.string().min(1).max(20000).optional(),
     delayDays: z.number().int().min(0).max(60),
     conditions: conditionsSchema,
@@ -53,6 +64,7 @@ async function resolveSteps(steps, companyId) {
       if (!template) throw new Error(`template_not_found:${step.templateId}`);
       resolved.push({
         subject: template.subject,
+        subjectVariants: step.subjectVariants || [],
         body: template.body,
         delayDays: step.delayDays,
         sourceTemplateId: template.id,
@@ -62,6 +74,7 @@ async function resolveSteps(steps, companyId) {
     } else {
       resolved.push({
         subject: step.subject,
+        subjectVariants: step.subjectVariants || [],
         body: step.body,
         delayDays: step.delayDays,
         sourceTemplateId: null,
@@ -170,6 +183,7 @@ router.patch("/:id/steps/:stepId", async (req, res) => {
   const parsed = z
     .object({
       subject: z.string().min(1).max(300).optional(),
+      subjectVariants: subjectVariantsSchema.optional(),
       body: z.string().min(1).max(20000).optional(),
       delayDays: z.number().int().min(0).max(60).optional(),
       conditions: conditionsSchema.optional(),

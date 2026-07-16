@@ -537,6 +537,12 @@ model SequenceStep {
   sequence         Sequence  @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
   order            Int
   subject          String
+  // A/B subject testing: additional subject lines. When non-empty, each send
+  // picks uniformly at random from [subject, ...subjectVariants], and the one
+  // actually used is recorded in EmailLog.subject — so open-rate-by-subject
+  // (see /analytics/ab-tests) tells you which line wins. Empty = no test, the
+  // single `subject` above is always used. Shape: string[].
+  subjectVariants  Json     @default("[]")
   body             String   // HTML, may contain {{name}}, {{company}}, {{email}} placeholders
   delayDays        Int      @default(0) // days after previous step (0 for the first step)
   sourceTemplateId String?  // informational only — which template this was copied from, if any
@@ -623,6 +629,11 @@ model Campaign {
   company         Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name            String
   subject         String
+  // A/B subject testing — same mechanism as SequenceStep.subjectVariants:
+  // when non-empty, each recipient's send picks at random from
+  // [subject, ...subjectVariants] and the chosen line is stored in
+  // EmailLog.subject for per-variant open-rate reporting. Shape: string[].
+  subjectVariants Json      @default("[]")
   body            String
   attachments     Json      @default("[]")
   status          String    @default("draft") // draft | running | paused | completed

@@ -24,6 +24,17 @@ function sendJitterMs() {
   return SEND_JITTER_MIN_MS + Math.floor(Math.random() * (span + 1));
 }
 
+// A/B subject testing: choose which subject line this particular send uses.
+// The pool is the primary `subject` plus any `subjectVariants`; an empty/absent
+// variants list just yields the primary. The caller stores the returned line in
+// EmailLog.subject so open rates can be attributed per variant (see
+// /analytics/ab-tests). Uniform random assignment keeps the split unbiased.
+function pickSubject(primary, variants) {
+  const extra = Array.isArray(variants) ? variants.filter((v) => typeof v === "string" && v.trim()) : [];
+  const pool = [primary, ...extra];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 async function processDueEnrollments() {
   const due = await prisma.enrollment.findMany({
     where: {
@@ -139,13 +150,16 @@ async function sendNextStep(enrollment) {
   const gmailAccount = await pickSendableMailbox(sequence.companyId);
   if (!gmailAccount) return false;
 
+  // A/B: pick the subject line for this send; the same chosen line is both
+  // sent and logged, so per-variant open rates line up.
+  const chosenSubject = pickSubject(step.subject, step.subjectVariants);
   const trackingId = uuid();
   let gmailMessageId;
   try {
     gmailMessageId = await sendTrackedEmail({
       gmailAccount,
       contact,
-      subject: step.subject,
+      subject: chosenSubject,
       body: step.body,
       trackingId,
       attachments: Array.isArray(step.attachments) ? step.attachments : [],
@@ -164,7 +178,7 @@ async function sendNextStep(enrollment) {
         contactId: contact.id,
         userId: sequence.userId,
         companyId: sequence.companyId,
-        subject: step.subject,
+        subject: chosenSubject,
         source: "sequence",
         gmailMessageId,
         trackingId,
@@ -234,13 +248,14 @@ async function sendNextCampaignRecipient(campaign) {
   const gmailAccount = await pickSendableMailbox(campaign.companyId);
   if (!gmailAccount) return; // no sendable mailbox right now — recipient stays pending, retried next tick
 
+  const chosenSubject = pickSubject(campaign.subject, campaign.subjectVariants);
   const trackingId = uuid();
   let gmailMessageId;
   try {
     gmailMessageId = await sendTrackedEmail({
       gmailAccount,
       contact,
-      subject: campaign.subject,
+      subject: chosenSubject,
       body: campaign.body,
       trackingId,
       attachments: Array.isArray(campaign.attachments) ? campaign.attachments : [],
@@ -262,7 +277,7 @@ async function sendNextCampaignRecipient(campaign) {
         contactId: contact.id,
         userId: campaign.userId,
         companyId: campaign.companyId,
-        subject: campaign.subject,
+        subject: chosenSubject,
         source: "campaign",
         gmailMessageId,
         trackingId,

@@ -3,16 +3,53 @@
 // the Analytics tab, instead of bloating every visitor's initial bundle —
 // see App.jsx's `const AnalyticsView = lazy(() => import("./AnalyticsView.jsx"))`.
 // Default export is required for React.lazy's dynamic import().
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar,
 } from "recharts";
 import { C, Card, Spinner, ErrorNote, StatCard, fmtMoney, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
+import { api } from "./lib/api";
 
 function pct(numerator, denominator) {
   if (!denominator) return "0%";
   return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+// A/B subject-test results. Each card is one step/campaign that has variants;
+// the winning line (highest open rate among those actually sent) is highlighted.
+function AbTestCard({ title, subtitle, variants }) {
+  const contended = variants.filter((v) => v.sent > 0);
+  const bestRate = contended.length ? Math.max(...contended.map((v) => v.openRate)) : null;
+  return (
+    <Card className="p-5">
+      <div className="text-sm font-medium" style={{ color: C.ink }}>{title}</div>
+      {subtitle && <div className="text-xs mb-3" style={{ color: C.slate }}>{subtitle}</div>}
+      <div className="space-y-1.5 mt-2">
+        {variants.map((v, i) => {
+          const isWinner = bestRate != null && v.sent > 0 && v.openRate === bestRate;
+          return (
+            <div key={i} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
+              style={{ backgroundColor: isWinner ? `${C.mint}1f` : C.pale }}>
+              <div className="min-w-0 flex items-center gap-2">
+                <span className="text-[10px] font-semibold shrink-0 rounded px-1.5 py-0.5"
+                  style={{ backgroundColor: v.isPrimary ? `${C.navy}14` : `${C.slate}14`, color: v.isPrimary ? C.navy : C.slate }}>
+                  {v.isPrimary ? "A" : String.fromCharCode(65 + i)}
+                </span>
+                <span className="text-xs truncate" style={{ color: C.ink }} title={v.subject}>{v.subject || "—"}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-[11px]" style={{ color: C.slate }}>{v.opened}/{v.sent}</span>
+                <span className="text-xs font-semibold tabular-nums" style={{ color: isWinner ? C.mint : C.slate }}>
+                  {v.sent > 0 ? `${v.openRate}%` : "—"}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
 }
 
 function CrmReportingSection({ crm }) {
@@ -80,8 +117,46 @@ function CrmReportingSection({ crm }) {
   );
 }
 
+function AbTestsResults({ data, loading }) {
+  const seqs = data?.sequences || [];
+  const camps = data?.campaigns || [];
+  if (loading && !data) return <Spinner label="Φόρτωση A/B…" />;
+  if (seqs.length === 0 && camps.length === 0) {
+    return (
+      <p className="text-sm py-16 text-center" style={{ color: C.slate }}>
+        Δεν υπάρχουν ακόμα A/B tests. Πρόσθεσε εναλλακτικά θέματα σε ένα βήμα sequence ή σε ένα campaign για να ξεκινήσεις.
+      </p>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {seqs.map((t) => (
+        <AbTestCard key={t.stepId} title={t.sequenceName} subtitle={`Sequence · Βήμα ${t.stepOrder + 1}`} variants={t.variants} />
+      ))}
+      {camps.map((t) => (
+        <AbTestCard key={t.campaignId} title={t.name} subtitle="Campaign" variants={t.variants} />
+      ))}
+    </div>
+  );
+}
+
 function AnalyticsView({ overview, timeline, crmOverview, loading, error, onReload }) {
-  const [tab, setTab] = useState("email"); // email | crm
+  const [tab, setTab] = useState("email"); // email | crm | abtests
+  const [abTests, setAbTests] = useState(null);
+  const [abLoading, setAbLoading] = useState(false);
+
+  // A/B results are their own endpoint, fetched only when that tab is opened.
+  useEffect(() => {
+    if (tab !== "abtests") return;
+    let cancelled = false;
+    setAbLoading(true);
+    api
+      .get("/analytics/ab-tests")
+      .then((d) => { if (!cancelled) setAbTests(d); })
+      .catch(() => { if (!cancelled) setAbTests({ sequences: [], campaigns: [] }); })
+      .finally(() => { if (!cancelled) setAbLoading(false); });
+    return () => { cancelled = true; };
+  }, [tab]);
   const totals = overview?.totals || { sent: 0, opened: 0, clicked: 0, replied: 0 };
   const funnelData = [
     { name: "Στάλθηκαν", value: totals.sent, fill: C.navy },
@@ -96,11 +171,15 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-            {tab === "email" ? "Απόδοση όλων των αποστολών — sequences και χειροκίνητα emails" : "CRM reporting — pipeline & αποτελέσματα"}
+            {tab === "email"
+              ? "Απόδοση όλων των αποστολών — sequences και χειροκίνητα emails"
+              : tab === "crm"
+              ? "CRM reporting — pipeline & αποτελέσματα"
+              : "A/B θεμάτων — ποια γραμμή θέματος ανοίγεται περισσότερο"}
           </p>
         </div>
         <div className="flex rounded-lg p-0.5" style={{ backgroundColor: C.pale }}>
-          {[["email", "Email"], ["crm", "Business (CRM)"]].map(([key, label]) => (
+          {[["email", "Email"], ["crm", "Business (CRM)"], ["abtests", "A/B"]].map(([key, label]) => (
             <button key={key} type="button" onClick={() => setTab(key)}
               className="rounded-md px-3 py-1.5 text-xs font-medium"
               style={{ backgroundColor: tab === key ? C.sky : "transparent", color: tab === key ? "#fff" : C.slate }}>
@@ -112,7 +191,9 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
 
       <div className="px-8 py-6 space-y-6">
         <ErrorNote message={error} onRetry={onReload} />
-        {loading ? (
+        {tab === "abtests" ? (
+          <AbTestsResults data={abTests} loading={abLoading} />
+        ) : loading ? (
           <Spinner label="Φόρτωση analytics…" />
         ) : tab === "crm" ? (
           <CrmReportingSection crm={crmOverview} />

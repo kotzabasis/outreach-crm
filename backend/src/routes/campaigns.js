@@ -9,10 +9,20 @@ router.use(requireAuth);
 // Either templateId (subject/body/attachments copied in server-side, same
 // "snapshot at creation time" rule as sequence steps — see sequences.js
 // resolveSteps) or a direct subject+body for an inline-authored campaign.
+// A/B subject variants — up to 4 extra subject lines tested against `subject`.
+// Trimmed, empties dropped (same rule as sequence steps, see sequences.js).
+const subjectVariantsSchema = z
+  .array(z.string().max(300))
+  .max(4)
+  .optional()
+  .default([])
+  .transform((arr) => arr.map((s) => s.trim()).filter(Boolean));
+
 const createCampaignSchema = z.object({
   name: z.string().min(1).max(200),
   templateId: z.string().optional(),
   subject: z.string().max(300).optional(),
+  subjectVariants: subjectVariantsSchema,
   body: z.string().optional(),
   attachments: z.array(z.any()).optional().default([]),
   contactIds: z.array(z.string()).min(1).max(2000),
@@ -79,6 +89,10 @@ router.post("/", async (req, res) => {
       companyId: req.user.companyId,
       name,
       subject,
+      // Templates carry no variants, so these come straight from the request
+      // either way (empty for a template-based campaign unless variants were
+      // also entered in the composer).
+      subjectVariants: parsed.data.subjectVariants || [],
       body,
       attachments,
       intervalMinutes,
