@@ -73,8 +73,38 @@ function ErrorFallback() {
   );
 }
 
+// Discreet "the server is waking up" banner, driven by the api.js event bus
+// (see emitApi there). Lives outside the ErrorBoundary/Suspense so it shows
+// even on the login screen and during the very first cold-start request.
+function WakingIndicator() {
+  const [waking, setWaking] = React.useState(false);
+  React.useEffect(() => {
+    const on = () => setWaking(true);
+    const off = () => setWaking(false);
+    window.addEventListener("api:waking", on);
+    window.addEventListener("api:awake", off);
+    return () => {
+      window.removeEventListener("api:waking", on);
+      window.removeEventListener("api:awake", off);
+    };
+  }, []);
+  if (!waking) return null;
+  return (
+    <div style={{
+      position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 9999,
+      background: "#10192B", color: "#fff", padding: "8px 14px", borderRadius: 10,
+      fontSize: 13, fontFamily: "Inter, sans-serif", boxShadow: "0 6px 20px rgba(16,25,43,0.25)",
+      display: "flex", alignItems: "center", gap: 8,
+    }}>
+      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#F5A524", display: "inline-block" }} />
+      Ο server ξυπνά, λίγα δευτερόλεπτα…
+    </div>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
+    <WakingIndicator />
     <Sentry.ErrorBoundary fallback={<ErrorFallback />} showDialog={false}>
       <Suspense fallback={null}>
         <Screen />

@@ -4,6 +4,7 @@ const { parse } = require("csv-parse/sync");
 const { z } = require("zod");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
+const { revalidatable } = require("../lib/httpCache");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -47,6 +48,7 @@ const contactSchema = z.object({
   company: z.string().max(200).optional().default(""),
   category: z.string().max(100).optional().default(""),
   tags: z.string().max(300).optional().default(""),
+  timezone: z.string().max(64).optional().default(""), // IANA tz for per-contact send windows
   website: z.string().max(300).optional().default("").transform(sanitizeUrlField),
   reportLink: z.string().max(500).optional().default("").transform(sanitizeUrlField),
   gmb: z.string().max(500).optional().default("").transform(sanitizeUrlField),
@@ -68,7 +70,7 @@ const contactSchema = z.object({
 // separate company-wide query — it mirrors the "X with a pending reminder"
 // header badge that today is company-wide regardless of whatever other
 // filters are active, and pagination must not change that semantic.
-router.get("/", async (req, res) => {
+router.get("/", revalidatable, async (req, res) => {
   const { status, q, category, tag, unsubscribed, hasFollowUp, dueOnly, hasWebsite } = req.query;
   const companyId = req.user.companyId;
 
@@ -146,7 +148,7 @@ router.get("/", async (req, res) => {
 //
 // Literal GET paths must be registered before GET "/:id" so Express doesn't
 // swallow them as an :id lookup.
-router.get("/facets", async (req, res) => {
+router.get("/facets", revalidatable, async (req, res) => {
   const rows = await prisma.contact.findMany({
     where: { companyId: req.user.companyId },
     select: { category: true, tags: true },
@@ -269,6 +271,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       company: row.company || row.Company || "",
       category: row.category || row.Category || "",
       tags: row.tags || row.Tags || "",
+      timezone: row.timezone || row.Timezone || row["Time Zone"] || "",
       website: row.website || row.Website || "",
       gmb: row.gmb || row.GMB || row["Google My Business"] || "",
       facebook: row.facebook || row.Facebook || "",
@@ -344,7 +347,7 @@ router.patch("/:id", async (req, res) => {
   if (!contact) return res.status(404).json({ error: "not_found" });
 
   const allowed = [
-    "name", "firstName", "lastName", "phone", "company", "category", "tags",
+    "name", "firstName", "lastName", "phone", "company", "category", "tags", "timezone",
     "website", "gmb", "facebook", "instagram", "googleReviews", "reportLink",
     "comments", "internalNotes", "status", "unsubscribed",
   ];

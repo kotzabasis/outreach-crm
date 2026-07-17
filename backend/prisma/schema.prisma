@@ -464,6 +464,12 @@ model Contact {
   // emails) precisely so a stray personal note about a contact can never
   // accidentally end up in an outgoing message.
   internalNotes  String?  @default("")
+  // Optional IANA timezone for this contact (e.g. "Europe/London"). When set,
+  // the company's send window (hours/days) is evaluated in THIS contact's local
+  // time instead of the company default — so a step scheduled for "business
+  // hours" actually lands in the recipient's business hours. Empty/unknown
+  // falls back to the company timezone. See lib/sendWindow.js.
+  timezone       String?  @default("")
   status         String   @default("new") // new | contacted | opened | replied | bounced | unsubscribed
   unsubscribed   Boolean  @default(false)
   unsubscribedAt DateTime? // when unsubscribed flipped true — via the email footer link, or manually in-app

@@ -1,9 +1,12 @@
 const express = require("express");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
+const { revalidatable } = require("../lib/httpCache");
 
 const router = express.Router();
 router.use(requireAuth);
+// Both endpoints (due-today, summary) are polled — allow 304 revalidation.
+router.use(revalidatable);
 
 // "Due today" aggregation: the one view a rep opens each morning. Combines
 // two independent kinds of "due" that otherwise live in separate places —

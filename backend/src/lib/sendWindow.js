@@ -29,11 +29,13 @@ function allowedDays(company) {
 }
 
 // True if `now` falls inside the company's configured send window — or if the
-// company has no window enabled (unrestricted). Invalid config fails open
-// (sends allowed) rather than silently halting all sending.
-function withinSendWindow(company, now = new Date()) {
+// company has no window enabled (unrestricted). `overrideTz` lets a per-contact
+// timezone (Contact.timezone) take precedence over the company default, so the
+// window's hours/days are evaluated in the recipient's local time. Invalid
+// config fails open (sends allowed) rather than silently halting all sending.
+function withinSendWindow(company, now = new Date(), overrideTz = null) {
   if (!company || !company.sendWindowEnabled) return true;
-  const tz = company.sendTimezone || "UTC";
+  const tz = (overrideTz && String(overrideTz).trim()) || company.sendTimezone || "UTC";
   let hour, weekday;
   try {
     ({ hour, weekday } = localHourAndWeekday(now, tz));
@@ -53,12 +55,12 @@ function withinSendWindow(company, now = new Date()) {
 // in 15-minute increments (cheap — only runs when a send is actually being
 // deferred) and is timezone/DST-correct because each probe goes back through
 // withinSendWindow. Caps the search at 8 days as a safety net.
-function nextSendWindowOpen(company, from = new Date()) {
-  if (withinSendWindow(company, from)) return from;
+function nextSendWindowOpen(company, from = new Date(), overrideTz = null) {
+  if (withinSendWindow(company, from, overrideTz)) return from;
   const STEP_MS = 15 * 60 * 1000;
   const limit = from.getTime() + 8 * 24 * 60 * 60 * 1000;
   for (let t = from.getTime() + STEP_MS; t <= limit; t += STEP_MS) {
-    if (withinSendWindow(company, new Date(t))) return new Date(t);
+    if (withinSendWindow(company, new Date(t), overrideTz)) return new Date(t);
   }
   return new Date(from.getTime() + 60 * 60 * 1000); // fallback: try again in an hour
 }

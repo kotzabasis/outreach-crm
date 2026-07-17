@@ -163,10 +163,10 @@ async function sendNextStep(enrollment) {
   // when the window opens, rather than going out at, say, 3am. Deferring
   // (vs. just skipping the tick) also lets the scheduler's idle backoff kick
   // in overnight instead of re-checking every 5 minutes.
-  if (!withinSendWindow(sequence.company)) {
+  if (!withinSendWindow(sequence.company, new Date(), contact.timezone)) {
     await prisma.enrollment.update({
       where: { id: enrollment.id },
-      data: { nextSendAt: nextSendWindowOpen(sequence.company) },
+      data: { nextSendAt: nextSendWindowOpen(sequence.company, new Date(), contact.timezone) },
     });
     return false;
   }
@@ -183,6 +183,15 @@ async function sendNextStep(enrollment) {
   // sent and logged, so per-variant open rates line up.
   const chosenSubject = pickSubject(step.subject, step.subjectVariants);
   const trackingId = uuid();
+
+  // Claim before the Gmail call: advance the enrollment NOW, so that if the
+  // process crashes between the send succeeding and the DB write below, the
+  // next tick can't re-select this same step and send a duplicate. Deliberately
+  // at-most-once — a rare transient failure after this point skips the step
+  // rather than risking a second copy in the recipient's inbox, which is far
+  // worse for a cold-outreach sender's reputation than an occasional miss.
+  await advanceEnrollment(enrollment, sequence);
+
   let gmailMessageId;
   try {
     gmailMessageId = await sendTrackedEmail({
@@ -199,6 +208,7 @@ async function sendNextStep(enrollment) {
     throw err;
   }
 
+  // Only a confirmed send gets an EmailLog — keeps "sent" analytics honest.
   await prisma.$transaction([
     prisma.emailLog.create({
       data: {
@@ -220,7 +230,6 @@ async function sendNextStep(enrollment) {
     }),
   ]);
 
-  await advanceEnrollment(enrollment, sequence);
   return true;
 }
 
@@ -247,11 +256,6 @@ async function processDueCampaigns() {
 }
 
 async function sendNextCampaignRecipient(campaign) {
-  // Outside the company's send window? Skip this tick entirely — the campaign
-  // stays "running" and simply resumes sending when the window reopens. No
-  // lastSentAt/spacing bookkeeping, since nothing was sent.
-  if (!withinSendWindow(campaign.company)) return;
-
   const intervalMs = campaign.intervalMinutes * 60 * 1000;
   if (campaign.lastSentAt && Date.now() - new Date(campaign.lastSentAt).getTime() < intervalMs) {
     return; // not due yet — this is the actual spacing mechanism
@@ -270,6 +274,13 @@ async function sendNextCampaignRecipient(campaign) {
 
   const { contact } = nextRecipient;
 
+  // Respect the send window, evaluated in THIS recipient's timezone (falling
+  // back to the company timezone). Outside it → skip this tick; the recipient
+  // stays pending and goes out when the window reopens. Nothing is touched, so
+  // spacing/bookkeeping is unaffected. Checked here (not at the top) because a
+  // per-contact timezone means the answer can differ recipient to recipient.
+  if (!withinSendWindow(campaign.company, new Date(), contact.timezone)) return;
+
   if (contact.unsubscribed) {
     // Skip immediately, don't touch lastSentAt/spacing for a skip — only a
     // genuine send should eat into the interval budget between real sends.
@@ -285,6 +296,17 @@ async function sendNextCampaignRecipient(campaign) {
 
   const chosenSubject = pickSubject(campaign.subject, campaign.subjectVariants);
   const trackingId = uuid();
+
+  // Claim before the Gmail call: mark this recipient sent and advance the
+  // campaign's spacing clock now, so a crash between the send and the DB write
+  // can't re-pick this recipient and double-send (at-most-once — see
+  // sendNextStep). A send failure flips it to "failed" below; either way it's
+  // no longer "pending", so it won't be selected again.
+  await prisma.$transaction([
+    prisma.campaignRecipient.update({ where: { id: nextRecipient.id }, data: { status: "sent", sentAt: new Date() } }),
+    prisma.campaign.update({ where: { id: campaign.id }, data: { lastSentAt: new Date() } }),
+  ]);
+
   let gmailMessageId;
   try {
     gmailMessageId = await sendTrackedEmail({
@@ -298,10 +320,9 @@ async function sendNextCampaignRecipient(campaign) {
   } catch (err) {
     if (isAuthError(err)) await flagNeedsReconnect(gmailAccount.id);
     captureException(err, { scope: "scheduler.sendNextCampaignRecipient", campaignId: campaign.id });
-    await prisma.campaignRecipient.update({
-      where: { id: nextRecipient.id },
-      data: { status: "failed", note: String(err.message || err).slice(0, 300) },
-    });
+    await prisma.campaignRecipient
+      .update({ where: { id: nextRecipient.id }, data: { status: "failed", note: String(err.message || err).slice(0, 300) } })
+      .catch(() => {});
     throw err;
   }
 
@@ -323,8 +344,6 @@ async function sendNextCampaignRecipient(campaign) {
       where: { id: contact.id },
       data: { status: contact.status === "new" ? "contacted" : contact.status, lastActivityAt: new Date() },
     }),
-    prisma.campaignRecipient.update({ where: { id: nextRecipient.id }, data: { status: "sent", sentAt: new Date() } }),
-    prisma.campaign.update({ where: { id: campaign.id }, data: { lastSentAt: new Date() } }),
   ]);
 }
 

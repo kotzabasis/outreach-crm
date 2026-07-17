@@ -21,6 +21,16 @@ export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 // and include it in the same header on all subsequent state-changing requests.
 let csrfToken = null;
 
+// Tiny event bus for the cold-start indicator: the backend on Render's free
+// tier spins down after ~15 min idle and takes 30-40s to wake, during which
+// the first request(s) get retried below. We fire "api:waking" when a retry is
+// in flight and "api:awake" once things resolve, so a small UI banner (see
+// main.jsx) can reassure the user instead of leaving them staring at a blank
+// wait. No-ops outside the browser.
+function emitApi(name) {
+  try { window.dispatchEvent(new Event(name)); } catch { /* non-browser */ }
+}
+
 // The backend returns error codes as raw snake_case strings (e.g.
 // { error: "email_already_registered" }) — without this, ApiError.message
 // WAS that raw code, shown verbatim in the UI wherever a catch block falls
@@ -106,9 +116,11 @@ async function request(path, { method = "GET", body, isForm = false, _retried = 
     // on the next request — give it one silent retry before surfacing an
     // error, since the very next attempt a moment later usually succeeds.
     if (!_retried) {
+      emitApi("api:waking");
       await new Promise((r) => setTimeout(r, 4000));
       return request(path, { method, body, isForm, _retried: true });
     }
+    emitApi("api:awake");
     throw new ApiError(0, { error: "Δεν ήταν δυνατή η επικοινωνία με τον server. Δοκίμασε ξανά σε λίγο." });
   }
 
@@ -139,11 +151,14 @@ async function request(path, { method = "GET", body, isForm = false, _retried = 
     // this never masks an actual application error.
     const looksLikeColdStart = [404, 502, 503].includes(res.status) && (data === null || typeof data === "string");
     if (looksLikeColdStart && !_retried) {
+      emitApi("api:waking");
       await new Promise((r) => setTimeout(r, 4000));
       return request(path, { method, body, isForm, _retried: true });
     }
+    emitApi("api:awake");
     throw new ApiError(res.status, data);
   }
+  emitApi("api:awake");
   return data;
 }
 

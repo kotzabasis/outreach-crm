@@ -64,6 +64,12 @@ function publicUser(user, gmailAccounts, context, pendingInvites = []) {
           // one broken mailbox out of three just means less rotation, not a
           // dead connection, so this is true only once EVERY mailbox is broken.
           needsReconnect: accounts.every((a) => a.needsReconnect),
+          // Partial breakage: at least one (but not all) mailbox is down. Not
+          // "nothing is sending", but capacity is silently reduced — the
+          // frontend shows a softer warning so it doesn't go unnoticed.
+          someNeedReconnect: accounts.some((a) => a.needsReconnect),
+          brokenCount: accounts.filter((a) => a.needsReconnect).length,
+          mailboxCount: accounts.length,
         };
   return {
     id: user.id,

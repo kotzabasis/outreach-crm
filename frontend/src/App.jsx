@@ -568,6 +568,27 @@ function GmailBanner({ user }) {
     );
   }
 
+  // Partial breakage: some (but not all) mailboxes are down. Sending continues
+  // on the healthy ones, so this is a softer amber warning rather than the red
+  // "stopped" one above — but still surfaced so a silently-lost mailbox (and
+  // its capacity) doesn't go unnoticed.
+  if (user.gmail.someNeedReconnect) {
+    return (
+      <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
+        <span>
+          {isOwner
+            ? `${user.gmail.brokenCount} από τα ${user.gmail.mailboxCount} mailbox χρειάζονται επανασύνδεση — η αποστολή συνεχίζει με μειωμένη χωρητικότητα.`
+            : "Ένα mailbox του workspace χρειάζεται επανασύνδεση — ζήτησε από τον ιδιοκτήτη να το φτιάξει."}
+        </span>
+        {isOwner && (
+          <a href={`${API_URL}/auth/google`} className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0" style={{ backgroundColor: C.amber }}>
+            Επανασύνδεση
+          </a>
+        )}
+      </div>
+    );
+  }
+
   // Same daily cap the backend enforces on every send path (see
   // lib/emailCap.js) — only worth interrupting people with once it's
   // actually close, not on every normal day of sending.
@@ -594,7 +615,7 @@ function GmailBanner({ user }) {
 function NewContactModal({ onClose, onCreate }) {
   const [form, setForm] = useState({
     name: "", firstName: "", lastName: "", email: "", phone: "", company: "",
-    category: "", tags: "", website: "", gmb: "", facebook: "", instagram: "",
+    category: "", tags: "", timezone: "", website: "", gmb: "", facebook: "", instagram: "",
     googleReviews: "", reportLink: "", comments: "", internalNotes: "",
   });
   const [busy, setBusy] = useState(false);
@@ -644,6 +665,8 @@ function NewContactModal({ onClose, onCreate }) {
             <input placeholder="Ετικέτες (χωρισμένες με κόμμα)" value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
+          <input placeholder="Ζώνη ώρας (προαιρετικό, π.χ. Europe/London — για send window στην ώρα του παραλήπτη)" value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <input placeholder="Website (προαιρετικό — {{website}} σε emails)" value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div className="grid grid-cols-2 gap-2">
@@ -706,7 +729,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [editingContact, setEditingContact] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: "", firstName: "", lastName: "", phone: "", company: "",
-    category: "", tags: "", website: "", gmb: "", facebook: "", instagram: "",
+    category: "", tags: "", timezone: "", website: "", gmb: "", facebook: "", instagram: "",
     googleReviews: "", reportLink: "",
   });
   const [savingContact, setSavingContact] = useState(false);
@@ -748,6 +771,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
         company: data.company || "",
         category: data.category || "",
         tags: data.tags || "",
+        timezone: data.timezone || "",
         website: data.website || "",
         gmb: data.gmb || "",
         facebook: data.facebook || "",
@@ -834,6 +858,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       company: detail.company || "",
       category: detail.category || "",
       tags: detail.tags || "",
+      timezone: detail.timezone || "",
       website: detail.website || "",
       gmb: detail.gmb || "",
       facebook: detail.facebook || "",
@@ -902,6 +927,9 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                       placeholder="Ετικέτες (χωρισμένες με κόμμα)"
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   </div>
+                  <input value={contactForm.timezone} onChange={(e) => setContactForm((f) => ({ ...f, timezone: e.target.value }))}
+                    placeholder="Ζώνη ώρας (π.χ. Europe/London — για send window στην ώρα του παραλήπτη)"
+                    className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   <div className="grid grid-cols-2 gap-2">
                     <input value={contactForm.website} onChange={(e) => setContactForm((f) => ({ ...f, website: e.target.value }))}
                       placeholder="Website"
@@ -2246,8 +2274,9 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
 }
 
 // ---------- Sequences ----------
-function TestSendModal({ defaultEmail, onClose, onSend }) {
+function TestSendModal({ defaultEmail, onClose, onSend, subjects = [] }) {
   const [email, setEmail] = useState(defaultEmail || "");
+  const [subject, setSubject] = useState(subjects[0] || "");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(""); // "" | "sent" | error message
 
@@ -2256,7 +2285,7 @@ function TestSendModal({ defaultEmail, onClose, onSend }) {
     setBusy(true);
     setResult("");
     try {
-      await onSend(email);
+      await onSend(email, subject);
       setResult("sent");
     } catch (err) {
       setResult(err instanceof ApiError ? err.message : "Η δοκιμαστική αποστολή απέτυχε.");
@@ -2273,6 +2302,14 @@ function TestSendModal({ defaultEmail, onClose, onSend }) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
+          {subjects.length > 1 && (
+            <select value={subject} onChange={(e) => setSubject(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+              {subjects.map((s, i) => (
+                <option key={i} value={s}>{i === 0 ? "A (κύριο)" : `Παραλλαγή ${String.fromCharCode(65 + i)}`} — {s}</option>
+              ))}
+            </select>
+          )}
           <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             placeholder="email για δοκιμή"
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
@@ -2295,7 +2332,12 @@ function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown,
   return (
     <div className="flex gap-4">
       {showTestSend && (
-        <TestSendModal defaultEmail={defaultTestEmail} onClose={() => setShowTestSend(false)} onSend={onTestSend} />
+        <TestSendModal
+          defaultEmail={defaultTestEmail}
+          subjects={[step.subject, ...(Array.isArray(step.subjectVariants) ? step.subjectVariants : [])].filter(Boolean)}
+          onClose={() => setShowTestSend(false)}
+          onSend={onTestSend}
+        />
       )}
       <div className="flex flex-col items-center">
         <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white" style={{ backgroundColor: C.navy }}>
@@ -2364,6 +2406,14 @@ function StepFields({
   subjectVariants, setSubjectVariants,
 }) {
   const variants = Array.isArray(subjectVariants) ? subjectVariants : [];
+  // Same spam-word check the template editor uses — surfaced here so a spammy
+  // subject/body in a sequence step gets flagged before it ever sends.
+  const spamWords = [
+    ...new Set([
+      ...findSpamWords(subject || ""),
+      ...findSpamWords((body || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ")),
+    ]),
+  ];
   const tagsText = (conditions.requireTags || []).join(", ");
   function setTagsText(text) {
     setConditions({
@@ -2433,6 +2483,11 @@ function StepFields({
           <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={90} />
           {!hasUnsubscribeLink(body) && body.length > 0 && (
             <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής.</TipBanner>
+          )}
+          {spamWords.length > 0 && (
+            <p className="text-[11px] rounded-lg px-2.5 py-1.5" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
+              ⚠ Πιθανές spam λέξεις: {spamWords.join(", ")}
+            </p>
           )}
           <AutoTrackingPixelNote />
         </div>
@@ -2751,7 +2806,7 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
                   onMoveUp={() => handleMove(step.id, "up")}
                   onMoveDown={() => handleMove(step.id, "down")}
                   onDelete={() => handleDeleteStep(step.id)}
-                  onTestSend={(testEmail) => onTestSend(active.id, step.id, testEmail)}
+                  onTestSend={(testEmail, subject) => onTestSend(active.id, step.id, testEmail, subject)}
                   defaultTestEmail={userEmail}
                 />
               ))}
@@ -4841,8 +4896,8 @@ export default function App() {
     await loadSequences();
   }
 
-  async function handleTestSendStep(sequenceId, stepId, testEmail) {
-    await api.post(`/sequences/${sequenceId}/steps/${stepId}/test-send`, { testEmail });
+  async function handleTestSendStep(sequenceId, stepId, testEmail, subject) {
+    await api.post(`/sequences/${sequenceId}/steps/${stepId}/test-send`, { testEmail, subject });
   }
 
   async function handleCreateTemplate(data) {

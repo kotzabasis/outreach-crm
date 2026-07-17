@@ -2,9 +2,12 @@ const express = require("express");
 const { Prisma } = require("@prisma/client");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
+const { revalidatable } = require("../lib/httpCache");
 
 const router = express.Router();
 router.use(requireAuth);
+// Every analytics endpoint is a pollable read — let unchanged polls 304.
+router.use(revalidatable);
 
 // Rewritten to aggregate in Postgres (count()/relation-filter EXISTS
 // queries) instead of loading every EmailLog + TrackingEvent for the whole

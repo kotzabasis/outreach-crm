@@ -191,25 +191,73 @@ function unsubscribeHeaders(listUnsubscribeUrl) {
   ];
 }
 
+// A readable plain-text rendering of the HTML body, used as the text/plain
+// alternative (below). Not a full HTML parser — just enough to turn the
+// rich-text editor's output into sensible text: block tags become line breaks,
+// list items get a bullet, tags are stripped, and the common entities are
+// decoded. The tracking pixel (<img>) and wrapped links collapse to nothing /
+// their visible text, which is exactly what a text fallback should show.
+function htmlToText(html) {
+  return String(html || "")
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li|tr|table)>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;/gi, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// A multipart/alternative block (text/plain + text/html). Returned as a line
+// array so it can be used standalone (no attachments) or nested as the first
+// sub-part inside a multipart/mixed (with attachments). Sending both parts —
+// with text first, html second (clients prefer the last supported) — is a mild
+// but real deliverability win: an HTML-only email is a weak spam signal.
+function alternativePart(text, html) {
+  const b = `alt_${crypto.randomBytes(9).toString("hex")}`;
+  return [
+    `Content-Type: multipart/alternative; boundary="${b}"`,
+    "",
+    `--${b}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    text,
+    "",
+    `--${b}`,
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    html,
+    "",
+    `--${b}--`,
+  ];
+}
+
 // attachments: [{filename, mimeType, contentBase64}] — plain (unwrapped)
 // base64, size-validated upstream by lib/attachments.js.
-function buildRawMessage({ from, to, subject, html, attachments = [], listUnsubscribeUrl = null }) {
+function buildRawMessage({ from, to, subject, html, text, attachments = [], listUnsubscribeUrl = null }) {
   const encodedSubject = encodeSubject(subject);
   const unsubHeaders = unsubscribeHeaders(listUnsubscribeUrl);
+  const plain = text && text.trim() ? text : htmlToText(html);
+  const altLines = alternativePart(plain, html);
 
   if (!attachments.length) {
-    const messageParts = [
+    const parts = [
       `From: ${from}`,
       `To: ${to}`,
-      "Content-Type: text/html; charset=utf-8",
-      "Content-Transfer-Encoding: 8bit",
       "MIME-Version: 1.0",
       `Subject: ${encodedSubject}`,
       ...unsubHeaders,
-      "",
-      html,
+      ...altLines, // top-level content type is the multipart/alternative
     ];
-    return toBase64Url(messageParts.join("\r\n"));
+    return toBase64Url(parts.join("\r\n"));
   }
 
   const boundary = `bnd_${crypto.randomBytes(12).toString("hex")}`;
@@ -222,10 +270,7 @@ function buildRawMessage({ from, to, subject, html, attachments = [], listUnsubs
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     "",
     `--${boundary}`,
-    "Content-Type: text/html; charset=utf-8",
-    "Content-Transfer-Encoding: 8bit",
-    "",
-    html,
+    ...altLines, // the text+html alternative as the first mixed sub-part
     "",
   ];
   for (const att of attachments) {
@@ -250,12 +295,16 @@ async function sendTrackedEmail({ gmailAccount, contact, subject, body, tracking
   const renderedSubject = renderTemplate(subject, contact, { asHtml: false });
   const renderedBodyHtml = renderTemplate(body, contact);
   const htmlWithTracking = injectTracking(renderedBodyHtml, trackingId);
+  // Plain-text alternative from the body BEFORE tracking injection — so it has
+  // the real link text and no 1x1 pixel.
+  const textAlternative = htmlToText(renderedBodyHtml);
 
   const raw = buildRawMessage({
     from: gmailAccount.email,
     to: contact.email,
     subject: renderedSubject,
     html: htmlWithTracking,
+    text: textAlternative,
     attachments,
     // Same URL the {{unsubscribe_link}} body token resolves to — surfaced in
     // the headers too so one-click unsubscribe works even if the sender edited

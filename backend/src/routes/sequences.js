@@ -220,11 +220,19 @@ router.post("/:id/steps/:stepId/test-send", async (req, res) => {
   const sampleContact = { name: "Δοκιμαστική Επαφή", company: "Η Εταιρεία Σου", email: emailParsed.data };
   const trackingId = uuid();
 
+  // Optionally test a specific A/B subject variant instead of the primary —
+  // the frontend passes the chosen line. Falls back to the step's primary
+  // subject. Length-capped like any subject.
+  const subjectToTest =
+    typeof req.body.subject === "string" && req.body.subject.trim()
+      ? req.body.subject.trim().slice(0, 300)
+      : step.subject;
+
   try {
     await sendTrackedEmail({
       gmailAccount,
       contact: sampleContact,
-      subject: `[TEST] ${step.subject}`,
+      subject: `[TEST] ${subjectToTest}`,
       body: step.body,
       trackingId,
       attachments: Array.isArray(step.attachments) ? step.attachments : [],
