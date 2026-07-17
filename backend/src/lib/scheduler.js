@@ -9,6 +9,17 @@ const { mapGenericPayload, upsertLeadContact } = require("./leadIntake");
 const { logAction } = require("./auditLog");
 const { captureException } = require("./sentry");
 const { webhookRetryTick } = require("./webhookRetry");
+const { withinSendWindow, nextSendWindowOpen } = require("./sendWindow");
+
+// The company columns the send-window check needs — kept in one place so both
+// the sequence and campaign queries select exactly these.
+const SEND_WINDOW_SELECT = {
+  sendWindowEnabled: true,
+  sendWindowStart: true,
+  sendWindowEnd: true,
+  sendDays: true,
+  sendTimezone: true,
+};
 
 // Space real sends apart by a randomized delay instead of firing a whole due
 // batch back-to-back. Sending N emails from one mailbox in the same instant is
@@ -51,7 +62,12 @@ async function processDueEnrollments() {
     },
     include: {
       contact: true,
-      sequence: { include: { steps: { orderBy: { order: "asc" } } } },
+      sequence: {
+        include: {
+          steps: { orderBy: { order: "asc" } },
+          company: { select: SEND_WINDOW_SELECT },
+        },
+      },
     },
     take: 100, // bounded batch per tick — avoids one huge run hammering the Gmail API
   });
@@ -142,6 +158,19 @@ async function sendNextStep(enrollment) {
     return false;
   }
 
+  // Respect the company's send window: if we're outside allowed hours/days,
+  // push this step to the next open time and leave it — it sends unchanged
+  // when the window opens, rather than going out at, say, 3am. Deferring
+  // (vs. just skipping the tick) also lets the scheduler's idle backoff kick
+  // in overnight instead of re-checking every 5 minutes.
+  if (!withinSendWindow(sequence.company)) {
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { nextSendAt: nextSendWindowOpen(sequence.company) },
+    });
+    return false;
+  }
+
   // Picks whichever of this company's connected mailboxes is sendable right
   // now (healthy + under today's cap), rotating across the pool — see
   // lib/emailCap.js#pickSendableMailbox. Returns null for every reason a
@@ -206,6 +235,7 @@ async function processDueCampaigns() {
   // to its (locked-out) users.
   const campaigns = await prisma.campaign.findMany({
     where: { status: "running", OR: [{ companyId: null }, { company: { status: "active" } }] },
+    include: { company: { select: SEND_WINDOW_SELECT } },
   });
   for (const campaign of campaigns) {
     try {
@@ -217,6 +247,11 @@ async function processDueCampaigns() {
 }
 
 async function sendNextCampaignRecipient(campaign) {
+  // Outside the company's send window? Skip this tick entirely — the campaign
+  // stays "running" and simply resumes sending when the window reopens. No
+  // lastSentAt/spacing bookkeeping, since nothing was sent.
+  if (!withinSendWindow(campaign.company)) return;
+
   const intervalMs = campaign.intervalMinutes * 60 * 1000;
   if (campaign.lastSentAt && Date.now() - new Date(campaign.lastSentAt).getTime() < intervalMs) {
     return; // not due yet — this is the actual spacing mechanism

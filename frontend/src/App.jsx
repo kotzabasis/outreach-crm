@@ -3617,6 +3617,112 @@ function InviteExistingModal({ onClose, onInvite }) {
 // Visible to every teammate; only an "owner" gets invite/remove actions.
 // Deliberately no "promote to owner" here yet — one owner per company this
 // round, matching the backend (routes/team.js refuses to remove an owner).
+// Timezone-aware send-window settings (see backend lib/sendWindow.js). Fetches
+// and saves its own /company/settings, so it drops into the Team view without
+// threading state through App. Read-only for non-owners.
+function SendWindowCard({ isOwner }) {
+  const [s, setS] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/company/settings")
+      .then((d) => { if (!cancelled) setS(d); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading || !s) return null;
+
+  const DAYS = [[1, "Δε"], [2, "Τρ"], [3, "Τε"], [4, "Πε"], [5, "Πα"], [6, "Σα"], [0, "Κυ"]];
+  const days = Array.isArray(s.sendDays) ? s.sendDays : [1, 2, 3, 4, 5];
+  const update = (patch) => setS((prev) => ({ ...prev, ...patch }));
+  const toggleDay = (d) => update({ sendDays: days.includes(d) ? days.filter((x) => x !== d) : [...days, d] });
+  const startOpts = Array.from({ length: 24 }, (_, h) => h); // 0-23
+  const endOpts = Array.from({ length: 24 }, (_, h) => h + 1); // 1-24 (exclusive end)
+
+  async function save() {
+    setSaving(true);
+    setMsg("");
+    try {
+      const saved = await api.patch("/company/settings", {
+        sendWindowEnabled: !!s.sendWindowEnabled,
+        sendWindowStart: Number(s.sendWindowStart),
+        sendWindowEnd: Number(s.sendWindowEnd),
+        sendDays: days,
+        sendTimezone: s.sendTimezone,
+      });
+      setS(saved);
+      setMsg("Αποθηκεύτηκε.");
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.message : "Δεν αποθηκεύτηκε.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="p-4 mb-4">
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-sm font-medium" style={{ color: C.ink }}>Παράθυρο αποστολής</div>
+        <label className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
+          <input type="checkbox" disabled={!isOwner} checked={!!s.sendWindowEnabled}
+            onChange={(e) => update({ sendWindowEnabled: e.target.checked })} />
+          Ενεργό
+        </label>
+      </div>
+      <p className="text-xs mb-3" style={{ color: C.slate }}>
+        Τα αυτόματα emails (sequences & campaigns) φεύγουν μόνο μέσα σε αυτές τις ώρες/ημέρες. Ό,τι πέφτει εκτός, μετατίθεται για το επόμενο άνοιγμα.
+      </p>
+
+      <div className={`space-y-3 ${s.sendWindowEnabled ? "" : "opacity-50 pointer-events-none"}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>Ημέρες</span>
+          {DAYS.map(([d, label]) => (
+            <button key={d} type="button" disabled={!isOwner} onClick={() => toggleDay(d)}
+              className="rounded-md px-2 py-1 text-[11px] font-medium border"
+              style={{ borderColor: C.line, backgroundColor: days.includes(d) ? C.sky : "#fff", color: days.includes(d) ? "#fff" : C.slate }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>Ώρες</span>
+          <select disabled={!isOwner} value={s.sendWindowStart} onChange={(e) => update({ sendWindowStart: Number(e.target.value) })}
+            className="rounded-md px-2 py-1 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }}>
+            {startOpts.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+          </select>
+          <span className="text-xs" style={{ color: C.slate }}>έως</span>
+          <select disabled={!isOwner} value={s.sendWindowEnd} onChange={(e) => update({ sendWindowEnd: Number(e.target.value) })}
+            className="rounded-md px-2 py-1 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }}>
+            {endOpts.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+          </select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>Ζώνη ώρας</span>
+          <input disabled={!isOwner} value={s.sendTimezone || ""} onChange={(e) => update({ sendTimezone: e.target.value })}
+            placeholder="Europe/Athens"
+            className="rounded-md px-2 py-1 text-xs border bg-white flex-1 min-w-[160px]" style={{ borderColor: C.line, color: C.ink }} />
+        </div>
+      </div>
+
+      {isOwner && (
+        <div className="flex items-center gap-3 mt-3">
+          <button onClick={save} disabled={saving}
+            className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold text-white"
+            style={{ backgroundColor: C.sky, opacity: saving ? 0.7 : 1 }}>
+            {saving && <Loader2 size={13} className="animate-spin" />} Αποθήκευση
+          </button>
+          {msg && <span className="text-xs" style={{ color: C.slate }}>{msg}</span>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function TeamView({ members, loading, error, onReload, onInvite, onRemove, currentUserId, isOwner, invites, onInviteExisting, onRevokeInvite, onExport, gmailAccounts, onDisconnectMailbox }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -3687,6 +3793,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
       <div className="px-8 py-6">
         <ErrorNote message={exportError} />
         <ErrorNote message={error} onRetry={onReload} />
+        <SendWindowCard isOwner={isOwner} />
         {isOwner && invites?.length > 0 && (
           <Card className="p-4 mb-4">
             <div className="text-sm font-medium mb-3" style={{ color: C.ink }}>Εκκρεμείς προσκλήσεις</div>

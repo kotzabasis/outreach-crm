@@ -172,6 +172,19 @@ model Company {
   // on the next scheduler pass rather than waiting a full week.
   lastDigestSentAt DateTime?
 
+  // Timezone-aware send window. When enabled, the scheduler only sends
+  // sequence steps and campaign emails during these hours/days in
+  // sendTimezone, deferring anything that falls outside — so cold outreach
+  // lands during the target market's business hours instead of at 3am.
+  // Disabled by default so existing companies keep sending 24/7 until an
+  // owner turns it on. Hours are local to sendTimezone: [start, end), 0-23.
+  // sendDays is the allowed weekdays as ints, 0=Sunday..6=Saturday.
+  sendWindowEnabled Boolean @default(false)
+  sendWindowStart   Int     @default(9)
+  sendWindowEnd     Int     @default(17)
+  sendDays          Json    @default("[1,2,3,4,5]")
+  sendTimezone      String  @default("Europe/Athens")
+
   users        User[]
   contacts     Contact[]
   sequences    Sequence[]
