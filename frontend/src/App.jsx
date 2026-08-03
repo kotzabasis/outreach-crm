@@ -723,9 +723,27 @@ function LinkedInContactPanel({ contact, onChanged }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [inmailOpen, setInmailOpen] = useState(false);
+  const [inmailSubject, setInmailSubject] = useState("");
+  const [inmailText, setInmailText] = useState("");
   const status = contact.linkedinConnectionStatus || "";
   const pending = status === "pending";
   const connected = status === "accepted" || status === "connected";
+
+  async function sendInmail() {
+    setBusy("inmail"); setMsg(""); setErr("");
+    try {
+      await api.post(`/linkedin/contacts/${contact.id}/inmail`, { subject: inmailSubject || undefined, text: inmailText });
+      setMsg("Το InMail στάλθηκε ✓");
+      setInmailSubject(""); setInmailText(""); setInmailOpen(false);
+      onChanged && onChanged();
+    } catch (e) {
+      const code = e instanceof ApiError && e.data && e.data.error;
+      setErr(code === "daily_inmail_cap_reached" ? "Συμπληρώθηκε το ημερήσιο όριο InMail." : (e instanceof ApiError ? e.message : "Η αποστολή απέτυχε."));
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function act(kind, fn) {
     setBusy(kind); setMsg(""); setErr("");
@@ -777,6 +795,30 @@ function LinkedInContactPanel({ contact, onChanged }) {
           {busy === "withdraw" ? "Ανάκληση…" : "Ανάκληση αιτήματος"}
         </button>
       )}
+
+      {/* InMail — premium-only, works χωρίς σύνδεση */}
+      <div className="mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
+        <button type="button" onClick={() => setInmailOpen((o) => !o)}
+          className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.sky }}>
+          <Send size={12} /> {inmailOpen ? "Απόκρυψη InMail" : "Αποστολή InMail (premium)"}
+        </button>
+        {inmailOpen && (
+          <div className="mt-2 space-y-2">
+            <input value={inmailSubject} onChange={(e) => setInmailSubject(e.target.value)} maxLength={200}
+              placeholder="Θέμα InMail"
+              className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            <textarea value={inmailText} onChange={(e) => setInmailText(e.target.value)} rows={3} maxLength={8000}
+              placeholder="Μήνυμα InMail… (υποστηρίζει {{first_name}} κ.λπ.)"
+              className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
+            <button type="button" disabled={!!busy || !inmailText.trim()} onClick={sendInmail}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: C.sky, opacity: (busy || !inmailText.trim()) ? 0.6 : 1 }}>
+              {busy === "inmail" ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Αποστολή InMail
+            </button>
+            <p className="text-[11px]" style={{ color: C.slate }}>Χρειάζεται premium LinkedIn (Sales Navigator/Recruiter) και καταναλώνει InMail credit.</p>
+          </div>
+        )}
+      </div>
+
       {msg && <div className="text-xs mt-2" style={{ color: C.mint }}>{msg}</div>}
       {err && <div className="text-xs mt-2" style={{ color: C.coral }}>{err}</div>}
     </div>
@@ -2631,6 +2673,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const isLinkedin = channel === "linkedin";
+  const isInmail = channel === "linkedin_inmail";
 
   function updateStep(i, patch) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -2682,7 +2725,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
           <div>
             <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>Κανάλι</label>
             <div className="flex gap-2">
-              {[["email", "Email", Mail], ["linkedin", "LinkedIn", Linkedin]].map(([val, label, Icon]) => (
+              {[["email", "Email", Mail], ["linkedin", "LinkedIn", Linkedin], ["linkedin_inmail", "InMail", Send]].map(([val, label, Icon]) => (
                 <button key={val} type="button" onClick={() => setChannel(val)}
                   className="flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border"
                   style={channel === val ? { borderColor: C.sky, color: C.sky, backgroundColor: `${C.sky}0F` } : { borderColor: C.line, color: C.slate }}>
@@ -2704,6 +2747,11 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
                   className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
               </div>
             </>
+          )}
+          {isInmail && (
+            <TipBanner tone="info">
+              InMail sequence: κάθε βήμα στέλνει ένα InMail (με θέμα + μήνυμα) απευθείας, ακόμη και σε μη-συνδέσεις — δεν χρειάζεται αίτημα σύνδεσης. Απαιτεί premium LinkedIn και καταναλώνει InMail credits. Κάθε βήμα χρειάζεται θέμα και μήνυμα. Μόνο επαφές με LinkedIn URL θα εγγραφούν.
+            </TipBanner>
           )}
 
           {steps.map((step, i) => (
@@ -3912,6 +3960,7 @@ function UnipileSettingsCard({ onSaved }) {
   const [state, setState] = useState(null);
   const [dsn, setDsn] = useState("");
   const [token, setToken] = useState("");
+  const [inmailApi, setInmailApi] = useState("classic");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -3924,6 +3973,7 @@ function UnipileSettingsCard({ onSaved }) {
       const s = await api.get("/linkedin/config");
       setState(s);
       setDsn(s.unipileDsn || "");
+      setInmailApi(s.inmailApi || "classic");
       setOpen(!s.unipileConfigured); // auto-expand if not set up yet
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Δεν φορτώθηκε.");
@@ -3937,7 +3987,7 @@ function UnipileSettingsCard({ onSaved }) {
     e.preventDefault();
     setBusy(true); setSaved(false); setErr("");
     try {
-      await api.patch("/linkedin/config", { unipileDsn: dsn.trim(), unipileAccessToken: token || undefined });
+      await api.patch("/linkedin/config", { unipileDsn: dsn.trim(), unipileAccessToken: token || undefined, inmailApi });
       setToken("");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -3987,6 +4037,15 @@ function UnipileSettingsCard({ onSaved }) {
               <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off"
                 placeholder={state?.unipileAccessTokenSet ? "••••••••  (άφησε κενό για να μη το αλλάξεις)" : "X-API-KEY access token"}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>InMail API tier <span style={{ fontWeight: 400 }}>— ανάλογα με το premium seat σου</span></label>
+              <select value={inmailApi} onChange={(e) => setInmailApi(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
+                <option value="classic">Classic (Premium / Sales Navigator)</option>
+                <option value="sales_navigator">Sales Navigator</option>
+                <option value="recruiter">Recruiter</option>
+              </select>
             </div>
             {err && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{err}</p>}
             <div className="flex items-center gap-3">
@@ -4087,7 +4146,7 @@ function LinkedInAccountCard({ refreshKey }) {
               <span className="font-medium" style={{ color: statusColor }}>{statusLabel}</span>
               {acc.paused && <span className="ml-2 text-xs" style={{ color: C.amber }}>· σε παύση</span>}
               <span className="ml-2 text-xs" style={{ color: C.slate }}>
-                {acc.connectionsSentToday}/{acc.maxConnectionsPerDay} αιτήματα · {acc.messagesSentToday}/{acc.maxMessagesPerDay} μηνύματα σήμερα
+                {acc.connectionsSentToday}/{acc.maxConnectionsPerDay} αιτήματα · {acc.messagesSentToday}/{acc.maxMessagesPerDay} μηνύματα · {acc.inmailsSentToday ?? 0}/{acc.maxInmailsPerDay ?? 0} InMail σήμερα
               </span>
             </div>
           </div>

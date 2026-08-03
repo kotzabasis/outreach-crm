@@ -85,8 +85,10 @@ function publicAccount(acc) {
     paused: acc.paused,
     connectionsSentToday: acc.connectionsSentToday,
     messagesSentToday: acc.messagesSentToday,
+    inmailsSentToday: acc.inmailsSentToday,
     maxConnectionsPerDay: outreach.MAX_CONNECTIONS_PER_DAY,
     maxMessagesPerDay: outreach.MAX_MESSAGES_PER_DAY,
+    maxInmailsPerDay: outreach.MAX_INMAILS_PER_DAY,
     connectedAt: acc.connectedAt,
   };
 }
@@ -108,12 +110,14 @@ router.get("/account", async (req, res) => {
 router.get("/config", async (req, res) => {
   const dsn = await platformConfig.get("unipile_dsn");
   const token = await platformConfig.get("unipile_access_token");
-  res.json({ unipileDsn: dsn || "", unipileAccessTokenSet: Boolean(token), unipileConfigured: Boolean(dsn && token) });
+  const inmailApi = await platformConfig.getInmailApi();
+  res.json({ unipileDsn: dsn || "", unipileAccessTokenSet: Boolean(token), unipileConfigured: Boolean(dsn && token), inmailApi });
 });
 router.patch("/config", requireOwner, async (req, res) => {
   const parsed = z.object({
     unipileDsn: z.string().max(300).optional(),
     unipileAccessToken: z.string().max(500).optional(),
+    inmailApi: z.enum(["classic", "recruiter", "sales_navigator"]).optional(),
   }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -125,12 +129,16 @@ router.patch("/config", requireOwner, async (req, res) => {
   if (parsed.data.unipileAccessToken && parsed.data.unipileAccessToken.trim()) {
     entries.push({ key: "unipile_access_token", value: parsed.data.unipileAccessToken.trim(), isSecret: true });
   }
+  if (parsed.data.inmailApi !== undefined) {
+    entries.push({ key: "unipile_inmail_api", value: parsed.data.inmailApi, isSecret: false });
+  }
   if (entries.length) await platformConfig.setMany(entries);
 
   const dsn = await platformConfig.get("unipile_dsn");
   const token = await platformConfig.get("unipile_access_token");
+  const inmailApi = await platformConfig.getInmailApi();
   await logAction(req, "linkedin.config.updated", "Ενημερώθηκε το Unipile configuration.", { companyId: req.user.companyId });
-  res.json({ unipileDsn: dsn || "", unipileAccessTokenSet: Boolean(token), unipileConfigured: Boolean(dsn && token) });
+  res.json({ unipileDsn: dsn || "", unipileAccessTokenSet: Boolean(token), unipileConfigured: Boolean(dsn && token), inmailApi });
 });
 
 // Start the hosted-auth flow → returns a URL the owner opens to log into LinkedIn.
@@ -220,6 +228,28 @@ router.post("/contacts/:id/connect", loadContact, async (req, res) => {
   } catch (err) {
     const map = { contact_has_no_linkedin_url: 400, could_not_resolve_profile: 422 };
     res.status(map[err.message] || 502).json({ error: err.message || "connect_failed" });
+  }
+});
+
+// Send an InMail now (manual, premium-only — respects the daily inmail cap).
+router.post("/contacts/:id/inmail", loadContact, async (req, res) => {
+  const parsed = z.object({
+    subject: z.string().max(200).optional(),
+    text: z.string().min(1).max(8000),
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_request" });
+
+  const account = await outreach.getSendableAccount(req.user.companyId);
+  if (!account) return res.status(400).json({ error: "linkedin_not_connected_or_paused" });
+  if (!outreach.canSendInmail(account)) return res.status(429).json({ error: "daily_inmail_cap_reached", limit: outreach.MAX_INMAILS_PER_DAY });
+  if (!req.contact.linkedinProfileUrl) return res.status(400).json({ error: "contact_has_no_linkedin_url" });
+
+  try {
+    await outreach.sendInmailMessage({ account, contact: req.contact, subject: parsed.data.subject, text: parsed.data.text });
+    res.json({ ok: true });
+  } catch (err) {
+    const map = { contact_has_no_linkedin_url: 400, could_not_resolve_profile: 422 };
+    res.status(map[err.message] || 502).json({ error: err.message || "inmail_failed" });
   }
 });
 

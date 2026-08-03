@@ -791,6 +791,7 @@ model LinkedInOutreachAccount {
   // DB-backed daily rate limiting (per account), reset ~every 24h by the tick.
   connectionsSentToday Int      @default(0)
   messagesSentToday    Int      @default(0)
+  inmailsSentToday     Int      @default(0)
   counterResetAt       DateTime @default(now())
   connectedAt      DateTime @default(now())
   createdAt        DateTime @default(now())

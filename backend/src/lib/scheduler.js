@@ -151,6 +151,9 @@ async function sendNextStep(enrollment) {
   if (sequence.channel === "linkedin") {
     return sendNextLinkedinStep(enrollment);
   }
+  if (sequence.channel === "linkedin_inmail") {
+    return sendNextInmailStep(enrollment);
+  }
 
   if (contact.unsubscribed) {
     await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
@@ -326,6 +329,52 @@ async function sendNextLinkedinStep(enrollment) {
     });
   } catch (err) {
     captureException(err, { scope: "scheduler.linkedinMessage", enrollmentId: enrollment.id });
+    throw err;
+  }
+  await advanceEnrollment(enrollment, sequence);
+  return true;
+}
+
+// InMail sequence: no connection prerequisite (InMail reaches non-connections),
+// so each step just sends an InMail with the step's subject + body, then
+// advances like an email step. Gated by the send window and the separate InMail
+// daily cap.
+async function sendNextInmailStep(enrollment) {
+  const { contact, sequence } = enrollment;
+
+  if (contact.unsubscribed) {
+    await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
+    return false;
+  }
+
+  const account = await linkedinOutreach.getSendableAccount(sequence.companyId);
+  if (!account) return false; // not connected / paused — leave due, retry next tick
+
+  if (!withinSendWindow(sequence.company, new Date(), contact.timezone)) {
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { nextSendAt: nextSendWindowOpen(sequence.company, new Date(), contact.timezone) },
+    });
+    return false;
+  }
+
+  const step = sequence.steps[enrollment.currentStep];
+  if (!step) {
+    await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "completed" } });
+    return false;
+  }
+  if (!linkedinOutreach.canSendInmail(account)) return false; // daily inmail cap — retry next tick
+
+  try {
+    await linkedinOutreach.sendInmailMessage({
+      account, contact, subject: step.subject, text: step.body, enrollmentId: enrollment.id, stepId: step.id,
+    });
+  } catch (err) {
+    if (err.message === "contact_has_no_linkedin_url" || err.message === "could_not_resolve_profile") {
+      await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
+      return false;
+    }
+    captureException(err, { scope: "scheduler.linkedinInmail", enrollmentId: enrollment.id });
     throw err;
   }
   await advanceEnrollment(enrollment, sequence);

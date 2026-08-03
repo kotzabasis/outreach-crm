@@ -52,7 +52,7 @@ const stepSchema = z
 
 const sequenceSchema = z.object({
   name: z.string().min(1).max(200),
-  channel: z.enum(["email", "linkedin"]).optional().default("email"),
+  channel: z.enum(["email", "linkedin", "linkedin_inmail"]).optional().default("email"),
   // LinkedIn only: connection-request note for not-yet-connected contacts.
   linkedinConnectionNote: z.string().max(300).optional().default(""),
   steps: z.array(stepSchema).min(1).max(20),
@@ -107,10 +107,15 @@ router.post("/", async (req, res) => {
 
   const { channel, linkedinConnectionNote } = parsed.data;
 
-  // Email inline steps require a subject; LinkedIn steps are messages (no subject).
+  // Email inline steps require a subject; LinkedIn (message) steps don't.
   if (channel === "email") {
     const missing = parsed.data.steps.some((s) => !s.templateId && !s.subject);
     if (missing) return res.status(400).json({ error: "email_steps_need_subject" });
+  }
+  // InMail carries a subject line, so InMail steps need both subject and body.
+  if (channel === "linkedin_inmail") {
+    const missing = parsed.data.steps.some((s) => !s.subject || !s.body);
+    if (missing) return res.status(400).json({ error: "inmail_steps_need_subject_and_body" });
   }
 
   let resolvedSteps;
@@ -308,7 +313,9 @@ router.post("/:id/enroll", async (req, res) => {
       unsubscribed: false,
       // LinkedIn sequences can only run against contacts that have a LinkedIn
       // profile URL to resolve — silently skip the rest (reported back).
-      ...(sequence.channel === "linkedin" ? { NOT: { linkedinProfileUrl: "" }, linkedinProfileUrl: { not: null } } : {}),
+      ...(sequence.channel === "linkedin" || sequence.channel === "linkedin_inmail"
+        ? { NOT: { linkedinProfileUrl: "" }, linkedinProfileUrl: { not: null } }
+        : {}),
     },
   });
 

@@ -168,6 +168,27 @@ async function sendMessage(unipileAccountId, providerId, text) {
   });
 }
 
+// --- InMail (premium only) -------------------------------------------------
+// Sends a LinkedIn InMail to a provider id — works on people you are NOT
+// connected to (unlike sendMessage), but requires a premium seat (Sales
+// Navigator / Recruiter) and consumes an InMail credit. Same POST /chats
+// endpoint as a normal message, with the LinkedIn-specific `inmail` flag set
+// and an `api` type that must match the account's premium tier
+// (classic | recruiter | sales_navigator). InMails carry a subject line.
+// Shape per https://developer.unipile.com/docs/send-messages — verify live.
+async function sendInmail(unipileAccountId, providerId, { subject, text, api = "classic" } = {}) {
+  return unipileRequest("/api/v1/chats", {
+    method: "POST",
+    body: {
+      account_id: unipileAccountId,
+      attendees_ids: [providerId],
+      subject: subject ? String(subject).slice(0, 200) : undefined,
+      text: String(text || "").slice(0, 8000),
+      linkedin: { api: api || "classic", inmail: true },
+    },
+  });
+}
+
 // Recent inbound messages for reply detection (Unipile CAN read the mailbox —
 // this is the LinkedIn advantage over the email channel). `since` is an ISO
 // string; caller filters/acts on replies to pause enrollments.
@@ -187,5 +208,6 @@ module.exports = {
   sendInvitation,
   withdrawInvitation,
   sendMessage,
+  sendInmail,
   listMessages,
 };

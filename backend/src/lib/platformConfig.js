@@ -60,8 +60,17 @@ async function isUnipileConfigured() {
   return Boolean(dsn && accessToken);
 }
 
+// Which Unipile "api" tier to use for InMail — must match the account's premium
+// seat: classic | recruiter | sales_navigator. Defaults to classic (works for
+// most Sales Navigator InMail). Set via the owner's Unipile settings.
+const INMAIL_API_VALUES = ["classic", "recruiter", "sales_navigator"];
+async function getInmailApi() {
+  const v = await get("unipile_inmail_api");
+  return INMAIL_API_VALUES.includes(v) ? v : "classic";
+}
+
 function invalidate() {
   cache = null;
 }
 
-module.exports = { get, setMany, getUnipileConfig, isUnipileConfigured, invalidate };
+module.exports = { get, setMany, getUnipileConfig, isUnipileConfigured, getInmailApi, INMAIL_API_VALUES, invalidate };

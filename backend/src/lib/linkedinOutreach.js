@@ -1,6 +1,7 @@
 const prisma = require("../db");
 const unipile = require("./unipileClient");
 const { renderTemplate } = require("./gmailClient");
+const { getInmailApi } = require("./platformConfig");
 const { captureException } = require("./sentry");
 
 // Core LinkedIn outreach service — shared by the routes (manual actions) and the
@@ -13,6 +14,9 @@ const { captureException } = require("./sentry");
 // defaults conservative.
 const MAX_CONNECTIONS_PER_DAY = Number(process.env.LINKEDIN_MAX_CONNECTIONS_PER_DAY || 12); // 10–15 recommended
 const MAX_MESSAGES_PER_DAY = Number(process.env.LINKEDIN_MAX_MESSAGES_PER_DAY || 40);
+// InMail is credit-metered by LinkedIn (a premium seat has a limited monthly
+// allowance), so keep the daily cap low — it's a safety net, not the real quota.
+const MAX_INMAILS_PER_DAY = Number(process.env.LINKEDIN_MAX_INMAILS_PER_DAY || 20);
 
 // A sample contact object used only to render merge tokens for a test/preview.
 function renderText(template, contact) {
@@ -28,7 +32,7 @@ async function resetCountersIfNeeded(account) {
   if (hours >= 24) {
     return prisma.linkedInOutreachAccount.update({
       where: { id: account.id },
-      data: { connectionsSentToday: 0, messagesSentToday: 0, counterResetAt: new Date() },
+      data: { connectionsSentToday: 0, messagesSentToday: 0, inmailsSentToday: 0, counterResetAt: new Date() },
     });
   }
   return account;
@@ -48,6 +52,9 @@ function canSendConnection(account) {
 }
 function canSendMessage(account) {
   return account && !account.paused && account.status === "ok" && account.messagesSentToday < MAX_MESSAGES_PER_DAY;
+}
+function canSendInmail(account) {
+  return account && !account.paused && account.status === "ok" && account.inmailsSentToday < MAX_INMAILS_PER_DAY;
 }
 
 // Ensure the contact has a resolved provider id (resolving once and caching it
@@ -138,6 +145,41 @@ async function sendLinkedinMessage({ account, contact, text, enrollmentId = null
   return { action: action[0] };
 }
 
+// Send a LinkedIn InMail (subject + body). Unlike sendLinkedinMessage, this
+// works on people you're NOT connected to, but needs a premium seat and burns
+// an InMail credit. Records a LinkedInAction (type "inmail") and increments the
+// separate inmail daily counter — only after Unipile confirms.
+async function sendInmailMessage({ account, contact, subject, text, enrollmentId = null, stepId = null }) {
+  const { providerId } = await ensureResolved(account, contact);
+  const renderedSubject = subject ? renderText(subject, contact) : "";
+  const rendered = renderText(text, contact);
+  const api = await getInmailApi();
+  let result;
+  try {
+    result = await unipile.sendInmail(account.unipileAccountId, providerId, { subject: renderedSubject, text: rendered, api });
+  } catch (err) {
+    await prisma.linkedInAction.create({
+      data: {
+        companyId: account.companyId, type: "inmail", contactId: contact.id, accountId: account.id,
+        enrollmentId, stepId, text: rendered, status: "failed", errorMessage: String(err.message || err).slice(0, 400),
+      },
+    }).catch(() => {});
+    throw err;
+  }
+  const action = await prisma.$transaction([
+    prisma.linkedInAction.create({
+      data: {
+        companyId: account.companyId, type: "inmail", contactId: contact.id, accountId: account.id,
+        enrollmentId, stepId, text: rendered, status: "sent", sentAt: new Date(),
+        unipileId: result?.message_id || result?.chat_id || result?.id || null,
+      },
+    }),
+    prisma.contact.update({ where: { id: contact.id }, data: { lastActivityAt: new Date() } }),
+    prisma.linkedInOutreachAccount.update({ where: { id: account.id }, data: { inmailsSentToday: { increment: 1 } } }),
+  ]);
+  return { action: action[0] };
+}
+
 // Withdraw a still-pending invitation.
 async function withdrawConnectionRequest({ account, contact }) {
   const lastInvite = await prisma.linkedInAction.findFirst({
@@ -156,12 +198,15 @@ async function withdrawConnectionRequest({ account, contact }) {
 module.exports = {
   MAX_CONNECTIONS_PER_DAY,
   MAX_MESSAGES_PER_DAY,
+  MAX_INMAILS_PER_DAY,
   getSendableAccount,
   resetCountersIfNeeded,
   canSendConnection,
   canSendMessage,
+  canSendInmail,
   ensureResolved,
   sendConnectionRequest,
   sendLinkedinMessage,
+  sendInmailMessage,
   withdrawConnectionRequest,
 };
