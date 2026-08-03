@@ -9,7 +9,7 @@ import {
   CalendarClock, Download, Eye, Handshake, Bold, Italic, Underline,
   List, ListOrdered, Link as LinkIcon, UserPlus, Menu,
   AlignLeft, AlignCenter, AlignRight, Info, Megaphone, Play, Pause, Globe,
-  Facebook, Instagram, MapPin, Star
+  Facebook, Instagram, MapPin, Star, Linkedin
 } from "lucide-react";
 import { api, API_URL, ApiError } from "./lib/api";
 import { C, Card, Spinner, ErrorNote, StatCard, Brand, fmtMoney, fmtDate, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
@@ -616,7 +616,7 @@ function NewContactModal({ onClose, onCreate }) {
   const [form, setForm] = useState({
     name: "", firstName: "", lastName: "", email: "", phone: "", company: "",
     category: "", tags: "", timezone: "", website: "", gmb: "", facebook: "", instagram: "",
-    googleReviews: "", reportLink: "", comments: "", internalNotes: "",
+    googleReviews: "", reportLink: "", linkedinProfileUrl: "", comments: "", internalNotes: "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -683,6 +683,8 @@ function NewContactModal({ onClose, onCreate }) {
           </div>
           <input placeholder="Report link (προαιρετικό — {{report_link}} σε emails)" value={form.reportLink} onChange={(e) => setForm((f) => ({ ...f, reportLink: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          <input placeholder="LinkedIn profile URL (προαιρετικό — για LinkedIn outreach)" value={form.linkedinProfileUrl} onChange={(e) => setForm((f) => ({ ...f, linkedinProfileUrl: e.target.value }))}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div>
             <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
               Σχόλια <span style={{ fontWeight: 400 }}>— διαθέσιμο ως {"{{comments}}"} σε emails</span>
@@ -698,6 +700,85 @@ function NewContactModal({ onClose, onCreate }) {
           </button>
         </form>
       </Card>
+    </div>
+  );
+}
+
+// LinkedIn outreach panel inside the contact drawer: shows the connection
+// status and lets a user resolve the profile, send a connection request (with
+// optional note), or withdraw a pending one. Only rendered when the contact has
+// a linkedinProfileUrl. Talks to /linkedin/* directly and calls onChanged() to
+// refresh the parent after any action.
+const LINKEDIN_STATUS_LABELS = {
+  "": "Δεν έχει σταλεί",
+  not_sent: "Δεν έχει σταλεί",
+  pending: "Εκκρεμεί (αίτημα στάλθηκε)",
+  accepted: "Αποδεκτό ✓",
+  connected: "Συνδεδεμένος ✓",
+  declined: "Απορρίφθηκε",
+  withdrawn: "Ανακλήθηκε",
+};
+function LinkedInContactPanel({ contact, onChanged }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const status = contact.linkedinConnectionStatus || "";
+  const pending = status === "pending";
+  const connected = status === "accepted" || status === "connected";
+
+  async function act(kind, fn) {
+    setBusy(kind); setMsg(""); setErr("");
+    try {
+      const r = await fn();
+      if (r && r.skipped) setMsg(r.reason === "already_connected" ? "Είστε ήδη συνδεδεμένοι." : "Παραλείφθηκε.");
+      else setMsg("Έγινε ✓");
+      onChanged && onChanged();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Η ενέργεια απέτυχε.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <div className="rounded-lg border px-3 py-3" style={{ borderColor: C.line }}>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-xs font-semibold flex items-center gap-1.5" style={{ color: C.ink }}>
+          <Linkedin size={14} /> LinkedIn outreach
+        </span>
+        <span className="text-xs" style={{ color: connected ? C.mint : pending ? C.amber : C.slate }}>
+          {LINKEDIN_STATUS_LABELS[status] || status}
+        </span>
+      </div>
+      {!connected && !pending && (
+        <>
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300}
+            placeholder="Προσωπικό σημείωμα (προαιρετικό, max 300 χαρ.)"
+            className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none mb-2" style={{ borderColor: C.line, color: C.ink }} />
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={!!busy}
+              onClick={() => act("connect", () => api.post(`/linkedin/contacts/${contact.id}/connect`, { note: note || undefined }))}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}>
+              {busy === "connect" ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />} Αίτημα σύνδεσης
+            </button>
+            <button type="button" disabled={!!busy}
+              onClick={() => act("resolve", () => api.post(`/linkedin/contacts/${contact.id}/resolve`))}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
+              Έλεγχος προφίλ
+            </button>
+          </div>
+        </>
+      )}
+      {pending && (
+        <button type="button" disabled={!!busy}
+          onClick={() => act("withdraw", () => api.post(`/linkedin/contacts/${contact.id}/withdraw`))}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.coral, opacity: busy ? 0.6 : 1 }}>
+          {busy === "withdraw" ? "Ανάκληση…" : "Ανάκληση αιτήματος"}
+        </button>
+      )}
+      {msg && <div className="text-xs mt-2" style={{ color: C.mint }}>{msg}</div>}
+      {err && <div className="text-xs mt-2" style={{ color: C.coral }}>{err}</div>}
     </div>
   );
 }
@@ -730,7 +811,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [contactForm, setContactForm] = useState({
     name: "", firstName: "", lastName: "", phone: "", company: "",
     category: "", tags: "", timezone: "", website: "", gmb: "", facebook: "", instagram: "",
-    googleReviews: "", reportLink: "",
+    googleReviews: "", reportLink: "", linkedinProfileUrl: "",
   });
   const [savingContact, setSavingContact] = useState(false);
 
@@ -778,6 +859,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
         instagram: data.instagram || "",
         googleReviews: data.googleReviews || "",
         reportLink: data.reportLink || "",
+        linkedinProfileUrl: data.linkedinProfileUrl || "",
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στοιχεία επαφής.");
@@ -865,6 +947,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       instagram: detail.instagram || "",
       googleReviews: detail.googleReviews || "",
       reportLink: detail.reportLink || "",
+      linkedinProfileUrl: detail.linkedinProfileUrl || "",
     });
     setEditingContact(false);
   }
@@ -954,6 +1037,9 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                       placeholder="Report link"
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   </div>
+                  <input value={contactForm.linkedinProfileUrl} onChange={(e) => setContactForm((f) => ({ ...f, linkedinProfileUrl: e.target.value }))}
+                    placeholder="LinkedIn profile URL (για LinkedIn outreach)"
+                    className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   <div className="flex items-center gap-2 mt-1">
                     <button type="button" onClick={handleSaveContact} disabled={savingContact}
                       className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: C.sky, opacity: savingContact ? 0.6 : 1 }}>
@@ -1017,6 +1103,12 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                           <LinkIcon size={12} /> Report link
                         </a>
                       )}
+                      {detail.linkedinProfileUrl && (
+                        <a href={normalizeLinkUrl(detail.linkedinProfileUrl)} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 underline" style={{ color: C.sky }}>
+                          <Linkedin size={12} /> LinkedIn
+                        </a>
+                      )}
                     </div>
                     <div className="flex gap-1.5 flex-wrap mt-2">
                       {(detail.tags || "").split(",").filter(Boolean).map((t) => <TagChip key={t}>{t.trim()}</TagChip>)}
@@ -1049,6 +1141,10 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                 )}
               </div>
             </div>
+
+            {detail.linkedinProfileUrl && (
+              <LinkedInContactPanel contact={detail} onChanged={load} />
+            )}
 
             <div>
               <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
@@ -2529,9 +2625,12 @@ function emptyStep(index) {
 
 function NewSequenceModal({ onClose, onCreate, templates }) {
   const [name, setName] = useState("");
+  const [channel, setChannel] = useState("email");
+  const [linkedinConnectionNote, setLinkedinConnectionNote] = useState("");
   const [steps, setSteps] = useState([emptyStep(0)]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const isLinkedin = channel === "linkedin";
 
   function updateStep(i, patch) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -2553,7 +2652,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
           ? { templateId: s.templateId, subjectVariants: s.subjectVariants || [], delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
           : { subject: s.subject, subjectVariants: s.subjectVariants || [], body: s.body, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
       );
-      await onCreate({ name, steps: payloadSteps });
+      await onCreate({ name, channel, linkedinConnectionNote: isLinkedin ? linkedinConnectionNote : undefined, steps: payloadSteps });
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία sequence.");
@@ -2579,6 +2678,33 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <input required placeholder="Όνομα sequence" value={name} onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+
+          <div>
+            <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>Κανάλι</label>
+            <div className="flex gap-2">
+              {[["email", "Email", Mail], ["linkedin", "LinkedIn", Linkedin]].map(([val, label, Icon]) => (
+                <button key={val} type="button" onClick={() => setChannel(val)}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border"
+                  style={channel === val ? { borderColor: C.sky, color: C.sky, backgroundColor: `${C.sky}0F` } : { borderColor: C.line, color: C.slate }}>
+                  <Icon size={14} /> {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isLinkedin && (
+            <>
+              <TipBanner tone="info">
+                LinkedIn sequence: αν η επαφή δεν είναι ήδη σύνδεση, το 1ο βήμα στέλνει αίτημα σύνδεσης με το σημείωμα παρακάτω. Τα follow-up μηνύματα ξεκινούν όταν γίνει αποδεκτό το αίτημα. Ισχύει ημερήσιο όριο αιτημάτων για προστασία του λογαριασμού. Μόνο επαφές με LinkedIn URL θα εγγραφούν.
+              </TipBanner>
+              <div>
+                <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>Σημείωμα αιτήματος σύνδεσης <span style={{ fontWeight: 400 }}>(προαιρετικό, max 300 χαρ.)</span></label>
+                <textarea value={linkedinConnectionNote} onChange={(e) => setLinkedinConnectionNote(e.target.value)} maxLength={300} rows={2}
+                  placeholder="π.χ. Γεια σου {{first_name}}, θα ήθελα να συνδεθούμε…"
+                  className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
+              </div>
+            </>
+          )}
 
           {steps.map((step, i) => (
             <Card key={i} className="p-4" style={{ backgroundColor: C.pale }}>
@@ -3778,6 +3904,126 @@ function SendWindowCard({ isOwner }) {
   );
 }
 
+// Owner-facing card to connect / monitor the single LinkedIn outreach account
+// (Unipile). Connect opens the Unipile hosted-auth flow in a new tab (handles
+// login + 2FA/checkpoint); status + daily counters are polled from /linkedin/account.
+function LinkedInAccountCard() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      setData(await api.get("/linkedin/account"));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Δεν φορτώθηκε.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function connect() {
+    setBusy("connect"); setErr("");
+    try {
+      const r = await api.post("/linkedin/connect");
+      if (r.url) window.open(r.url, "_blank", "noopener");
+      else setErr("Δεν επιστράφηκε σύνδεσμος σύνδεσης.");
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Η σύνδεση απέτυχε.");
+    } finally {
+      setBusy("");
+    }
+  }
+  async function doAction(kind, path) {
+    setBusy(kind); setErr("");
+    try { await api.post(path); await load(); }
+    catch (e) { setErr(e instanceof ApiError ? e.message : "Η ενέργεια απέτυχε."); }
+    finally { setBusy(""); }
+  }
+  async function disconnect() {
+    if (!window.confirm("Αποσύνδεση του LinkedIn λογαριασμού;")) return;
+    setBusy("disconnect"); setErr("");
+    try { await api.del("/linkedin/account"); await load(); }
+    catch (e) { setErr(e instanceof ApiError ? e.message : "Η αποσύνδεση απέτυχε."); }
+    finally { setBusy(""); }
+  }
+
+  const acc = data?.account;
+  const configured = data?.configured;
+  const statusColor = acc?.status === "ok" ? C.mint : acc?.status === "error" ? C.coral : C.amber;
+  const statusLabel = { ok: "Ενεργός", checkpoint_needed: "Χρειάζεται επαλήθευση (checkpoint)", error: "Σφάλμα", paused: "Σε παύση" }[acc?.status] || acc?.status;
+
+  return (
+    <Card className="p-4 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-medium flex items-center gap-1.5" style={{ color: C.ink }}>
+          <Linkedin size={15} /> LinkedIn outreach
+        </div>
+        {!acc && configured && (
+          <button onClick={connect} disabled={!!busy}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}>
+            {busy === "connect" ? <Loader2 size={13} className="animate-spin" /> : <Linkedin size={13} />} Σύνδεση λογαριασμού
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <Spinner label="Φόρτωση…" />
+      ) : !configured ? (
+        <p className="text-xs" style={{ color: C.slate }}>
+          Το LinkedIn outreach δεν έχει ρυθμιστεί ακόμα από τον διαχειριστή πλατφόρμας (Unipile access token). Επικοινώνησε μαζί του για να ενεργοποιηθεί.
+        </p>
+      ) : !acc ? (
+        <p className="text-xs" style={{ color: C.slate }}>
+          Σύνδεσε τον προσωπικό σου LinkedIn λογαριασμό για να στέλνεις αιτήματα σύνδεσης και μηνύματα μέσω sequences. Η σύνδεση γίνεται σε νέα καρτέλα (login + τυχόν 2FA).
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between rounded-lg px-3 py-2 mb-2" style={{ backgroundColor: C.pale }}>
+            <div className="text-sm" style={{ color: C.ink }}>
+              <span className="font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+              {acc.paused && <span className="ml-2 text-xs" style={{ color: C.amber }}>· σε παύση</span>}
+              <span className="ml-2 text-xs" style={{ color: C.slate }}>
+                {acc.connectionsSentToday}/{acc.maxConnectionsPerDay} αιτήματα · {acc.messagesSentToday}/{acc.maxMessagesPerDay} μηνύματα σήμερα
+              </span>
+            </div>
+          </div>
+          {acc.statusMessage && <p className="text-xs mb-2" style={{ color: C.slate }}>{acc.statusMessage}</p>}
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => doAction("refresh", "/linkedin/account/refresh")} disabled={!!busy}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
+              {busy === "refresh" ? "Ανανέωση…" : "Ανανέωση status"}
+            </button>
+            {acc.paused ? (
+              <button onClick={() => doAction("resume", "/linkedin/account/resume")} disabled={!!busy}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.mint }}>
+                {busy === "resume" ? "…" : "Επανεκκίνηση"}
+              </button>
+            ) : (
+              <button onClick={() => doAction("pause", "/linkedin/account/pause")} disabled={!!busy}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.amber }}>
+                {busy === "pause" ? "…" : "Παύση (kill-switch)"}
+              </button>
+            )}
+            <button onClick={connect} disabled={!!busy}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
+              Επανασύνδεση
+            </button>
+            <button onClick={disconnect} disabled={!!busy}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium border ml-auto" style={{ borderColor: C.line, color: C.coral }}>
+              <Trash2 size={12} className="inline" /> Αποσύνδεση
+            </button>
+          </div>
+        </>
+      )}
+      {err && <p className="text-xs mt-2" style={{ color: C.coral }}>{err}</p>}
+    </Card>
+  );
+}
+
 function TeamView({ members, loading, error, onReload, onInvite, onRemove, currentUserId, isOwner, invites, onInviteExisting, onRevokeInvite, onExport, gmailAccounts, onDisconnectMailbox }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -3908,6 +4154,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
             )}
           </Card>
         )}
+        {isOwner && <LinkedInAccountCard />}
         {loading ? (
           <Spinner label="Φόρτωση ομάδας…" />
         ) : (

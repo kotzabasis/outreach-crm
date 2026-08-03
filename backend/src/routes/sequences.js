@@ -43,12 +43,18 @@ const stepSchema = z
     conditions: conditionsSchema,
     attachments: attachmentsSchema,
   })
-  .refine((s) => s.templateId || (s.subject && s.body), {
-    message: "Provide either templateId or both subject and body",
+  // Inline steps need a body; subject is required only for the email channel
+  // (enforced in the create handler once we know the channel). LinkedIn steps
+  // are messages — body only.
+  .refine((s) => s.templateId || s.body, {
+    message: "Provide either templateId or a body",
   });
 
 const sequenceSchema = z.object({
   name: z.string().min(1).max(200),
+  channel: z.enum(["email", "linkedin"]).optional().default("email"),
+  // LinkedIn only: connection-request note for not-yet-connected contacts.
+  linkedinConnectionNote: z.string().max(300).optional().default(""),
   steps: z.array(stepSchema).min(1).max(20),
 });
 
@@ -73,7 +79,7 @@ async function resolveSteps(steps, companyId) {
       });
     } else {
       resolved.push({
-        subject: step.subject,
+        subject: step.subject || "", // "" for LinkedIn message steps (no subject)
         subjectVariants: step.subjectVariants || [],
         body: step.body,
         delayDays: step.delayDays,
@@ -99,6 +105,14 @@ router.post("/", async (req, res) => {
   const parsed = sequenceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
+  const { channel, linkedinConnectionNote } = parsed.data;
+
+  // Email inline steps require a subject; LinkedIn steps are messages (no subject).
+  if (channel === "email") {
+    const missing = parsed.data.steps.some((s) => !s.templateId && !s.subject);
+    if (missing) return res.status(400).json({ error: "email_steps_need_subject" });
+  }
+
   let resolvedSteps;
   try {
     resolvedSteps = await resolveSteps(parsed.data.steps, req.user.companyId);
@@ -111,6 +125,8 @@ router.post("/", async (req, res) => {
       userId: req.user.id,
       companyId: req.user.companyId,
       name: parsed.data.name,
+      channel,
+      linkedinConnectionNote: channel === "linkedin" ? linkedinConnectionNote || "" : "",
       steps: {
         create: resolvedSteps.map((s, i) => ({ ...s, order: i })),
       },
@@ -286,7 +302,14 @@ router.post("/:id/enroll", async (req, res) => {
   if (contactIds.length > 500) return res.status(400).json({ error: "max_500_contacts_per_enroll" });
 
   const contacts = await prisma.contact.findMany({
-    where: { id: { in: contactIds }, companyId: req.user.companyId, unsubscribed: false },
+    where: {
+      id: { in: contactIds },
+      companyId: req.user.companyId,
+      unsubscribed: false,
+      // LinkedIn sequences can only run against contacts that have a LinkedIn
+      // profile URL to resolve — silently skip the rest (reported back).
+      ...(sequence.channel === "linkedin" ? { NOT: { linkedinProfileUrl: "" }, linkedinProfileUrl: { not: null } } : {}),
+    },
   });
 
   const now = Date.now();
@@ -304,7 +327,11 @@ router.post("/:id/enroll", async (req, res) => {
     )
   );
 
-  res.status(201).json({ enrolled: created.length, skippedUnsubscribed: contactIds.length - contacts.length });
+  res.status(201).json({
+    enrolled: created.length,
+    skipped: contactIds.length - contacts.length,
+    channel: sequence.channel,
+  });
 });
 
 module.exports = router;

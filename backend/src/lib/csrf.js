@@ -42,7 +42,8 @@ function csrfValidationMiddleware(req, res, next) {
     "/track/unsubscribe",             // one-click List-Unsubscribe POST (RFC 8058)
     "/integrations/inbound",          // generic inbound lead webhook (/integrations/inbound/:token)
     "/integrations/meta/webhook",     // Meta Lead Ads webhook (validates X-Hub-Signature)
-    "/integrations/linkedin/webhook", // LinkedIn Lead Sync webhook
+    "/integrations/linkedin/webhook", // LinkedIn Lead Sync webhook (official inbound)
+    "/linkedin/webhook",              // Unipile notify webhook (LinkedIn OUTREACH module)
   ];
   if (publicMutatingPaths.some((p) => req.path.startsWith(p))) {
     return next();

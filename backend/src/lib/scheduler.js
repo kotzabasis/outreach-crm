@@ -10,6 +10,13 @@ const { logAction } = require("./auditLog");
 const { captureException } = require("./sentry");
 const { webhookRetryTick } = require("./webhookRetry");
 const { withinSendWindow, nextSendWindowOpen } = require("./sendWindow");
+const linkedinOutreach = require("./linkedinOutreach");
+
+// How long to wait before re-checking a LinkedIn enrollment that's parked
+// waiting for a connection request to be accepted. The accept normally arrives
+// sooner via the Unipile webhook (which nudges nextSendAt to now); this is the
+// polling floor so nothing gets stuck if a webhook is missed.
+const LINKEDIN_ACCEPT_WAIT_MS = Number(process.env.LINKEDIN_ACCEPT_WAIT_MS || 6 * 60 * 60 * 1000);
 
 // The company columns the send-window check needs — kept in one place so both
 // the sequence and campaign queries select exactly these.
@@ -139,6 +146,12 @@ async function advanceEnrollment(enrollment, sequence) {
 async function sendNextStep(enrollment) {
   const { contact, sequence } = enrollment;
 
+  // Same enrollment/step engine, different channel: LinkedIn sequences send via
+  // Unipile instead of Gmail (see sendNextLinkedinStep).
+  if (sequence.channel === "linkedin") {
+    return sendNextLinkedinStep(enrollment);
+  }
+
   if (contact.unsubscribed) {
     await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
     return false;
@@ -231,6 +244,107 @@ async function sendNextStep(enrollment) {
   ]);
 
   return true;
+}
+
+// LinkedIn channel: reuses the enrollment/step/nextSendAt machinery but sends
+// via Unipile. Flow:
+//   - contact not connected + not yet invited  -> send connection request
+//     (sequence.linkedinConnectionNote), then park waiting for accept
+//   - invited, still pending                   -> keep waiting (re-check later;
+//     the accept event nudges nextSendAt to now)
+//   - connected/accepted                       -> send the current step as a
+//     direct message, then advance like an email step
+// Rate limits are the DB-backed per-account daily caps in linkedinOutreach.
+async function sendNextLinkedinStep(enrollment) {
+  const { contact, sequence } = enrollment;
+
+  if (contact.unsubscribed) {
+    await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
+    return false;
+  }
+
+  const account = await linkedinOutreach.getSendableAccount(sequence.companyId);
+  if (!account) return false; // not connected / paused / bad status — leave due, retry next tick
+
+  // Same business-hours window as email, evaluated in the contact's timezone.
+  if (!withinSendWindow(sequence.company, new Date(), contact.timezone)) {
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { nextSendAt: nextSendWindowOpen(sequence.company, new Date(), contact.timezone) },
+    });
+    return false;
+  }
+
+  const connected = ["connected", "accepted"].includes(contact.linkedinConnectionStatus);
+
+  if (!connected) {
+    if (contact.linkedinConnectionStatus === "pending") {
+      // Invited, waiting for the accept event — park and re-check later.
+      await prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: { nextSendAt: new Date(Date.now() + LINKEDIN_ACCEPT_WAIT_MS) },
+      });
+      return false;
+    }
+    if (!linkedinOutreach.canSendConnection(account)) return false; // daily cap — retry next tick
+    try {
+      const r = await linkedinOutreach.sendConnectionRequest({
+        account, contact, note: sequence.linkedinConnectionNote,
+        enrollmentId: enrollment.id, stepId: sequence.steps[0]?.id || null,
+      });
+      if (r.skipped && r.reason === "already_connected") {
+        // Turned out to be a 1st-degree connection — go straight to messaging.
+        await prisma.enrollment.update({ where: { id: enrollment.id }, data: { nextSendAt: new Date() } });
+        return false;
+      }
+    } catch (err) {
+      if (err.message === "contact_has_no_linkedin_url" || err.message === "could_not_resolve_profile") {
+        await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
+        return false;
+      }
+      captureException(err, { scope: "scheduler.linkedinConnect", enrollmentId: enrollment.id });
+      throw err;
+    }
+    // Sent the invite — now wait for accept.
+    await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { nextSendAt: new Date(Date.now() + LINKEDIN_ACCEPT_WAIT_MS) },
+    });
+    return true;
+  }
+
+  // Connected → send the current step as a direct message.
+  const step = sequence.steps[enrollment.currentStep];
+  if (!step) {
+    await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "completed" } });
+    return false;
+  }
+  if (!linkedinOutreach.canSendMessage(account)) return false; // daily message cap — retry next tick
+  try {
+    await linkedinOutreach.sendLinkedinMessage({
+      account, contact, text: step.body, enrollmentId: enrollment.id, stepId: step.id,
+    });
+  } catch (err) {
+    captureException(err, { scope: "scheduler.linkedinMessage", enrollmentId: enrollment.id });
+    throw err;
+  }
+  await advanceEnrollment(enrollment, sequence);
+  return true;
+}
+
+// Housekeeping tick for the LinkedIn module: rolls the per-account daily
+// counters over. (Accept/reply state changes come in via the Unipile webhook;
+// this is just the counter reset so the caps stay accurate over days.)
+async function linkedinOutreachTick() {
+  try {
+    const accounts = await prisma.linkedInOutreachAccount.findMany();
+    for (const acc of accounts) {
+      await linkedinOutreach.resetCountersIfNeeded(acc).catch(() => {});
+    }
+  } catch (err) {
+    console.error("LinkedIn outreach tick failed:", err.message);
+    captureException(err, { scope: "scheduler.linkedinOutreachTick" });
+  }
 }
 
 // Sends at most one recipient per running campaign per tick, gated by
@@ -494,6 +608,11 @@ function startScheduler() {
   webhookRetryTickWrapper();
   setInterval(webhookRetryTickWrapper, WEBHOOK_RETRY_INTERVAL_MS);
   console.log(`Webhook retry processor started (every ${WEBHOOK_RETRY_INTERVAL_MS / 3600000} h).`);
+
+  // LinkedIn outreach daily-counter reset (rate-limit hygiene). Every 30 min.
+  linkedinOutreachTick();
+  setInterval(linkedinOutreachTick, 30 * 60 * 1000);
+  console.log("LinkedIn outreach housekeeping started (every 30 min).");
 }
 
 module.exports = { startScheduler, processDueEnrollments, processDueCampaigns };

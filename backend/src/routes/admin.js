@@ -5,9 +5,49 @@ const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const requireAdmin = require("../lib/requireAdmin");
 const { logAction } = require("../lib/auditLog");
+const platformConfig = require("../lib/platformConfig");
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
+
+// --- Platform settings: Unipile (LinkedIn outreach) credentials -------------
+// Platform-wide, admin-only. The access token is a secret: it's stored
+// AES-256-GCM encrypted and NEVER returned to the client — the UI only learns
+// whether one is set. DSN is a plain endpoint URL, safe to echo back.
+router.get("/platform-settings", async (req, res) => {
+  const dsn = await platformConfig.get("unipile_dsn");
+  const token = await platformConfig.get("unipile_access_token");
+  res.json({
+    unipileDsn: dsn,
+    unipileAccessTokenSet: Boolean(token),
+    unipileConfigured: Boolean(dsn && token),
+  });
+});
+
+const platformSettingsSchema = z.object({
+  unipileDsn: z.string().max(300).optional(),
+  // Blank/omitted = keep the existing token (never erased by an empty save).
+  unipileAccessToken: z.string().max(500).optional(),
+});
+
+router.patch("/platform-settings", async (req, res) => {
+  const parsed = platformSettingsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const entries = [];
+  if (parsed.data.unipileDsn !== undefined) {
+    entries.push({ key: "unipile_dsn", value: parsed.data.unipileDsn.trim(), isSecret: false });
+  }
+  if (parsed.data.unipileAccessToken && parsed.data.unipileAccessToken.trim()) {
+    entries.push({ key: "unipile_access_token", value: parsed.data.unipileAccessToken.trim(), isSecret: true });
+  }
+  await platformConfig.setMany(entries);
+  await logAction(req, "platform.settings.updated", "Ενημερώθηκαν οι ρυθμίσεις Unipile (LinkedIn).", {});
+
+  const dsn = await platformConfig.get("unipile_dsn");
+  const token = await platformConfig.get("unipile_access_token");
+  res.json({ unipileDsn: dsn, unipileAccessTokenSet: Boolean(token), unipileConfigured: Boolean(dsn && token) });
+});
 
 const newUserSchema = z.object({
   email: z.string().email(),

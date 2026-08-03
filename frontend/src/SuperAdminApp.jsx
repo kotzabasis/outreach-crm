@@ -761,6 +761,95 @@ function AuditLogCard({ companies }) {
   );
 }
 
+// Platform-wide Unipile (LinkedIn outreach) configuration. The access token is
+// a write-only secret: the backend never returns it, only whether one is set
+// (unipileAccessTokenSet). Leaving the token field blank on save keeps the
+// existing one — you only need to type it to set or rotate it.
+function UnipileConfigPanel() {
+  const [state, setState] = useState(null);
+  const [dsn, setDsn] = useState("");
+  const [token, setToken] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      const s = await api.get("/admin/platform-settings");
+      setState(s);
+      setDsn(s.unipileDsn || "");
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Δεν φορτώθηκαν οι ρυθμίσεις.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true); setSaved(false); setErr("");
+    try {
+      await api.patch("/admin/platform-settings", { unipileDsn: dsn.trim(), unipileAccessToken: token || undefined });
+      setToken("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      await load();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Η αποθήκευση απέτυχε.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-base font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>LinkedIn outreach (Unipile)</h2>
+        {state && (
+          <span className="text-xs font-medium px-2 py-1 rounded-md"
+            style={state.unipileConfigured ? { backgroundColor: `${C.mint}18`, color: C.mint } : { backgroundColor: C.pale, color: C.slate }}>
+            {state.unipileConfigured ? "Ρυθμισμένο ✓" : "Δεν έχει ρυθμιστεί"}
+          </span>
+        )}
+      </div>
+      <p className="text-sm mb-4" style={{ color: C.slate }}>
+        Access token και DSN για το Unipile API. Το token αποθηκεύεται κρυπτογραφημένο (AES-256-GCM) και δεν εμφανίζεται ποτέ ξανά.
+      </p>
+      {loading ? (
+        <Spinner label="Φόρτωση…" />
+      ) : (
+        <form onSubmit={save} className="space-y-3 max-w-xl">
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Unipile DSN (base URL)</label>
+            <input value={dsn} onChange={(e) => setDsn(e.target.value)}
+              placeholder="π.χ. https://api8.unipile.com:13851"
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
+          <div>
+            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
+              Access token {state?.unipileAccessTokenSet && <span style={{ color: C.mint, fontWeight: 400 }}>— έχει οριστεί (άφησέ το κενό για να μείνει ίδιο)</span>}
+            </label>
+            <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off"
+              placeholder={state?.unipileAccessTokenSet ? "••••••••  (άφησε κενό για να μη το αλλάξεις)" : "X-API-KEY access token"}
+              className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+          </div>
+          {err && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{err}</p>}
+          <div className="flex items-center gap-3">
+            <button type="submit" disabled={busy}
+              className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+              {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+            </button>
+            {saved && <span className="text-xs" style={{ color: C.mint }}>Αποθηκεύτηκε ✓</span>}
+          </div>
+        </form>
+      )}
+    </Card>
+  );
+}
+
 function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPromote, onDemote, onCreateUser, onDeleteUser, onAddMembership, onRemoveMembership, currentUserId, companies, companiesLoading, companiesError, onReloadCompanies, onCreateCompany, onEditCompany, onSuspendCompany, onActivateCompany }) {
   const [busyId, setBusyId] = useState(null);
   const [showNew, setShowNew] = useState(false);
@@ -836,6 +925,8 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
           onActivate={onActivateCompany}
           users={users}
         />
+
+        <UnipileConfigPanel />
 
         {membershipsUser && (
           <ManageMembershipsModal

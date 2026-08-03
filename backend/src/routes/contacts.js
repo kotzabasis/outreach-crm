@@ -55,6 +55,7 @@ const contactSchema = z.object({
   facebook: z.string().max(500).optional().default("").transform(sanitizeUrlField),
   instagram: z.string().max(500).optional().default("").transform(sanitizeUrlField),
   googleReviews: z.string().max(500).optional().default("").transform(sanitizeUrlField),
+  linkedinProfileUrl: z.string().max(500).optional().default("").transform(sanitizeUrlField),
   // Freeform personalization notes, usable as {{comments}} in email bodies.
   // Rich-text HTML now (bold/italic/lists) — the cap is higher than a
   // plain-text field would need to leave room for markup overhead.
@@ -348,7 +349,7 @@ router.patch("/:id", async (req, res) => {
 
   const allowed = [
     "name", "firstName", "lastName", "phone", "company", "category", "tags", "timezone",
-    "website", "gmb", "facebook", "instagram", "googleReviews", "reportLink",
+    "website", "gmb", "facebook", "instagram", "googleReviews", "reportLink", "linkedinProfileUrl",
     "comments", "internalNotes", "status", "unsubscribed",
   ];
   const data = {};
@@ -357,7 +358,7 @@ router.patch("/:id", async (req, res) => {
   // same scheme sanitization applied here explicitly — otherwise editing a
   // contact from the drawer would bypass the guard that create/CSV-upload
   // already get.
-  for (const urlField of ["website", "gmb", "facebook", "instagram", "googleReviews", "reportLink"]) {
+  for (const urlField of ["website", "gmb", "facebook", "instagram", "googleReviews", "reportLink", "linkedinProfileUrl"]) {
     if (urlField in data) data[urlField] = sanitizeUrlField(data[urlField]);
   }
   // Manual follow-up reminder — independent of automatic sequence sends, so

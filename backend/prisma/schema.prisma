@@ -206,6 +206,10 @@ model Company {
   integrations Integration[]
   metaLeadConnections MetaLeadConnection[]
   linkedinLeadConnections LinkedInLeadConnection[]
+  // LinkedIn OUTREACH (Unipile) — distinct from linkedinLeadConnections above,
+  // which is the official inbound Lead Gen integration. See LinkedIn module.
+  linkedinOutreachAccount LinkedInOutreachAccount?
+  linkedinActions         LinkedInAction[]
 }
 
 // A generic inbound-lead webhook, one (or more) per company. Covers
@@ -451,6 +455,13 @@ model Contact {
   facebook       String?  @default("") // {{facebook}}
   instagram      String?  @default("") // {{instagram}}
   googleReviews  String?  @default("") // {{google_reviews}}
+  // LinkedIn outreach (second channel on the SAME contact — see LinkedIn module).
+  // profileUrl is what the user enters; providerId is resolved once via Unipile
+  // and cached here; connectionStatus tracks the invite lifecycle. All contact-
+  // level state, exactly like the social URLs above and `status`/`unsubscribed`.
+  linkedinProfileUrl       String? @default("") // {{linkedin}}
+  linkedinProviderId       String? @default("") // Unipile-resolved provider id (empty until resolved)
+  linkedinConnectionStatus String? @default("") // ""|not_sent|pending|accepted|declined|withdrawn|connected
   // Freeform personalization notes about this specific contact (what they do,
   // something they mentioned, a pain point) — separate from ContactNote
   // (timestamped CRM activity log). Usable as a merge field via {{comments}}
@@ -482,6 +493,7 @@ model Contact {
   notes              ContactNote[]
   emailLogs          EmailLog[]
   campaignRecipients CampaignRecipient[]
+  linkedinActions    LinkedInAction[]
 
   @@index([userId, email])
   @@index([userId, category])
@@ -544,6 +556,16 @@ model Sequence {
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name      String
   active    Boolean  @default(true)
+  // Which channel this sequence runs on. "email" (default) is the existing
+  // Gmail path; "linkedin" runs the same step engine but sends via the
+  // connected LinkedIn account (Unipile) — first step becomes a connection
+  // request for non-connections, follow-ups fire on the "connection accepted"
+  // event. A sequence is single-channel for the MVP.
+  channel   String   @default("email") // email | linkedin
+  // LinkedIn only: the connection-request note sent when an enrolled contact
+  // isn't a 1st-degree connection yet. Once accepted, the sequence's steps run
+  // as direct messages. Ignored for email sequences.
+  linkedinConnectionNote String? @default("")
   createdAt DateTime @default(now())
 
   steps       SequenceStep[]
@@ -733,4 +755,72 @@ model FailedWebhookDelivery {
   updatedAt   DateTime @updatedAt
 
   @@index([status, nextRetryAt])
+}
+
+// ---------------------------------------------------------------------------
+// LinkedIn OUTREACH module (Unipile). Distinct from the official inbound
+// LinkedInLeadConnection / linkedinLeads.js above — this is outbound connection
+// requests + messaging over Unipile's (unofficial) API.
+// ---------------------------------------------------------------------------
+
+// Platform-wide key/value settings, edited by platform admins in the SuperAdmin
+// view. Key/value so new integration credentials can be added without a
+// migration; secret values are AES-256-GCM encrypted at rest (isSecret=true),
+// the same mechanism as Gmail tokens (lib/crypto.js). Powers the Unipile
+// DSN/access token behind the LinkedIn module.
+model PlatformSetting {
+  key       String   @id
+  value     String   @default("") // plaintext for config; AES-256-GCM ciphertext when isSecret
+  isSecret  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+// A company's connected LinkedIn account for OUTREACH via Unipile. One per
+// company for the MVP (Phase 1). Rate-limit counters live HERE, not in memory,
+// so a scheduler restart/redeploy can't reset them and blow past the daily cap
+// — a hard requirement to avoid LinkedIn account bans.
+model LinkedInOutreachAccount {
+  id               String   @id @default(uuid())
+  companyId        String   @unique
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId           String?  // who connected it — audit only
+  unipileAccountId String   @unique // Unipile's account id for this LinkedIn login
+  status           String   @default("ok") // ok | checkpoint_needed | error | paused
+  statusMessage    String?  // last error/checkpoint detail from Unipile
+  paused           Boolean  @default(false) // manual kill-switch (safety rules require this)
+  // DB-backed daily rate limiting (per account), reset ~every 24h by the tick.
+  connectionsSentToday Int      @default(0)
+  messagesSentToday    Int      @default(0)
+  counterResetAt       DateTime @default(now())
+  connectedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  actions LinkedInAction[]
+}
+
+// One LinkedIn outreach action against one contact — the LinkedIn analogue of
+// EmailLog. LinkedIn has no opens/clicks, so it's its own funnel (accept/reply),
+// not part of the email analytics. Drives the scheduler's LinkedIn tick.
+model LinkedInAction {
+  id           String   @id @default(uuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type         String   // connection_request | message
+  contactId    String
+  contact      Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  accountId    String
+  account      LinkedInOutreachAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  enrollmentId String?  // set when the action originates from a linkedin sequence step
+  stepId       String?
+  text         String   @default("") // invite note or message body (rendered with merge tokens)
+  status       String   @default("pending") // pending|sent|accepted|declined|withdrawn|failed|skipped
+  errorMessage String?
+  unipileId    String?  // Unipile invite/message id, for later status lookups
+  scheduledAt  DateTime @default(now())
+  sentAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([companyId, type, status])
+  @@index([contactId])
+  @@index([status, scheduledAt])
 }
