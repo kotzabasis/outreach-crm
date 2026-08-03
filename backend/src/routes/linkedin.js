@@ -4,7 +4,8 @@ const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const requireOwner = require("../lib/requireOwner");
 const unipile = require("../lib/unipileClient");
-const { isUnipileConfigured } = require("../lib/platformConfig");
+const platformConfig = require("../lib/platformConfig");
+const { isUnipileConfigured } = platformConfig;
 const outreach = require("../lib/linkedinOutreach");
 const { logAction } = require("../lib/auditLog");
 const { captureException } = require("../lib/sentry");
@@ -97,6 +98,39 @@ router.get("/account", async (req, res) => {
     prisma.linkedInOutreachAccount.findUnique({ where: { companyId: req.user.companyId } }),
   ]);
   res.json({ configured, account: publicAccount(acc) });
+});
+
+// --- Unipile platform config (owner-facing, lives in the main app) ---------
+// The access token is a global platform secret (one Unipile subscription serves
+// the whole install), stored encrypted. The token is NEVER returned — only
+// whether one is set. GET is readable by any member so the settings panel can
+// render "configured / not configured"; PATCH is owner-only.
+router.get("/config", async (req, res) => {
+  const dsn = await platformConfig.get("unipile_dsn");
+  const token = await platformConfig.get("unipile_access_token");
+  res.json({ unipileDsn: dsn || "", unipileAccessTokenSet: Boolean(token), unipileConfigured: Boolean(dsn && token) });
+});
+router.patch("/config", requireOwner, async (req, res) => {
+  const parsed = z.object({
+    unipileDsn: z.string().max(300).optional(),
+    unipileAccessToken: z.string().max(500).optional(),
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const entries = [];
+  if (parsed.data.unipileDsn !== undefined) {
+    entries.push({ key: "unipile_dsn", value: parsed.data.unipileDsn.trim(), isSecret: false });
+  }
+  // Blank token = keep the existing one (write-only rotate).
+  if (parsed.data.unipileAccessToken && parsed.data.unipileAccessToken.trim()) {
+    entries.push({ key: "unipile_access_token", value: parsed.data.unipileAccessToken.trim(), isSecret: true });
+  }
+  if (entries.length) await platformConfig.setMany(entries);
+
+  const dsn = await platformConfig.get("unipile_dsn");
+  const token = await platformConfig.get("unipile_access_token");
+  await logAction(req, "linkedin.config.updated", "Ενημερώθηκε το Unipile configuration.", { companyId: req.user.companyId });
+  res.json({ unipileDsn: dsn || "", unipileAccessTokenSet: Boolean(token), unipileConfigured: Boolean(dsn && token) });
 });
 
 // Start the hosted-auth flow → returns a URL the owner opens to log into LinkedIn.

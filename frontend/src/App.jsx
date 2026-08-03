@@ -3904,10 +3904,110 @@ function SendWindowCard({ isOwner }) {
   );
 }
 
+// Owner-facing Unipile credentials (DSN + access token). The token is
+// write-only: the backend never returns it, only whether one is set. Leaving
+// the token blank on save keeps the current one. Lives in the main app (Team
+// view) so the owner configures everything in one place.
+function UnipileSettingsCard({ onSaved }) {
+  const [state, setState] = useState(null);
+  const [dsn, setDsn] = useState("");
+  const [token, setToken] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      const s = await api.get("/linkedin/config");
+      setState(s);
+      setDsn(s.unipileDsn || "");
+      setOpen(!s.unipileConfigured); // auto-expand if not set up yet
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Δεν φορτώθηκε.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true); setSaved(false); setErr("");
+    try {
+      await api.patch("/linkedin/config", { unipileDsn: dsn.trim(), unipileAccessToken: token || undefined });
+      setToken("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      await load();
+      onSaved && onSaved();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Η αποθήκευση απέτυχε.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="p-4 mb-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium flex items-center gap-1.5" style={{ color: C.ink }}>
+          <Linkedin size={15} /> Ρυθμίσεις Unipile
+          {state && (
+            <span className="ml-1 text-xs font-medium px-2 py-0.5 rounded-md"
+              style={state.unipileConfigured ? { backgroundColor: `${C.mint}18`, color: C.mint } : { backgroundColor: C.pale, color: C.slate }}>
+              {state.unipileConfigured ? "Ρυθμισμένο ✓" : "Δεν έχει ρυθμιστεί"}
+            </span>
+          )}
+        </div>
+        <button type="button" onClick={() => setOpen((o) => !o)} className="text-xs font-medium" style={{ color: C.sky }}>
+          {open ? "Απόκρυψη" : "Επεξεργασία"}
+        </button>
+      </div>
+      {open && (
+        loading ? (
+          <div className="mt-3"><Spinner label="Φόρτωση…" /></div>
+        ) : (
+          <form onSubmit={save} className="space-y-3 mt-3">
+            <p className="text-xs" style={{ color: C.slate }}>
+              Access token και DSN για το Unipile API. Το token αποθηκεύεται κρυπτογραφημένο και δεν εμφανίζεται ποτέ ξανά.
+            </p>
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Unipile DSN (base URL)</label>
+              <input value={dsn} onChange={(e) => setDsn(e.target.value)}
+                placeholder="π.χ. https://api8.unipile.com:13851"
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
+                Access token {state?.unipileAccessTokenSet && <span style={{ color: C.mint, fontWeight: 400 }}>— έχει οριστεί (κενό = ίδιο)</span>}
+              </label>
+              <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off"
+                placeholder={state?.unipileAccessTokenSet ? "••••••••  (άφησε κενό για να μη το αλλάξεις)" : "X-API-KEY access token"}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
+            </div>
+            {err && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{err}</p>}
+            <div className="flex items-center gap-3">
+              <button type="submit" disabled={busy}
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
+                {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+              </button>
+              {saved && <span className="text-xs" style={{ color: C.mint }}>Αποθηκεύτηκε ✓</span>}
+            </div>
+          </form>
+        )
+      )}
+      {!open && err && <p className="text-xs mt-2" style={{ color: C.coral }}>{err}</p>}
+    </Card>
+  );
+}
+
 // Owner-facing card to connect / monitor the single LinkedIn outreach account
 // (Unipile). Connect opens the Unipile hosted-auth flow in a new tab (handles
 // login + 2FA/checkpoint); status + daily counters are polled from /linkedin/account.
-function LinkedInAccountCard() {
+function LinkedInAccountCard({ refreshKey }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
@@ -3923,7 +4023,7 @@ function LinkedInAccountCard() {
       setLoading(false);
     }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   async function connect() {
     setBusy("connect"); setErr("");
@@ -4032,6 +4132,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
   const [exportError, setExportError] = useState("");
   const [mailboxBusyId, setMailboxBusyId] = useState(null);
   const [mailboxError, setMailboxError] = useState("");
+  const [linkedinRefresh, setLinkedinRefresh] = useState(0);
 
   async function handleRemove(m) {
     if (!window.confirm(`Αφαίρεση του/της ${m.name || m.email} από την ομάδα;`)) return;
@@ -4154,7 +4255,12 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
             )}
           </Card>
         )}
-        {isOwner && <LinkedInAccountCard />}
+        {isOwner && (
+          <>
+            <UnipileSettingsCard onSaved={() => setLinkedinRefresh((n) => n + 1)} />
+            <LinkedInAccountCard refreshKey={linkedinRefresh} />
+          </>
+        )}
         {loading ? (
           <Spinner label="Φόρτωση ομάδας…" />
         ) : (
