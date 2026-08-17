@@ -26,6 +26,8 @@ const SEND_WINDOW_SELECT = {
   sendWindowEnd: true,
   sendDays: true,
   sendTimezone: true,
+  emailTrackingEnabled: true,
+  unsubscribeEnabled: true,
 };
 
 // Space real sends apart by a randomized delay instead of firing a whole due
@@ -217,6 +219,8 @@ async function sendNextStep(enrollment) {
       body: step.body,
       trackingId,
       attachments: Array.isArray(step.attachments) ? step.attachments : [],
+      trackingEnabled: sequence.company?.emailTrackingEnabled !== false,
+      unsubscribeEnabled: sequence.company?.unsubscribeEnabled !== false,
     });
   } catch (err) {
     if (isAuthError(err)) await flagNeedsReconnect(gmailAccount.id);
@@ -479,6 +483,8 @@ async function sendNextCampaignRecipient(campaign) {
       body: campaign.body,
       trackingId,
       attachments: Array.isArray(campaign.attachments) ? campaign.attachments : [],
+      trackingEnabled: campaign.company?.emailTrackingEnabled !== false,
+      unsubscribeEnabled: campaign.company?.unsubscribeEnabled !== false,
     });
   } catch (err) {
     if (isAuthError(err)) await flagNeedsReconnect(gmailAccount.id);

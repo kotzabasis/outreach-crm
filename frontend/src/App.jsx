@@ -64,6 +64,18 @@ const SPAM_WORDS = [
 const DEFAULT_DISCLAIMER_HTML =
   '<p><br></p><div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:11px;color:#94a3b8;">Αν δεν θέλετε να λάβετε καμία άλλη επικοινωνία από εμάς, <a href="{{unsubscribe_link}}" style="color:#94a3b8;text-decoration:underline;">πατήστε εδώ</a>.</div>';
 
+// The unsubscribe footer is now editable per workspace (Ομάδα → settings). The
+// configured value is fetched once at app load and cached here; new draft
+// bodies seed from unsubscribeSeed() instead of the hardcoded default. Falls
+// back to DEFAULT_DISCLAIMER_HTML until settings load (and if the field is empty).
+let _unsubscribeSeed = DEFAULT_DISCLAIMER_HTML;
+function unsubscribeSeed() {
+  return _unsubscribeSeed || DEFAULT_DISCLAIMER_HTML;
+}
+export function setUnsubscribeSeed(html) {
+  _unsubscribeSeed = html || DEFAULT_DISCLAIMER_HTML;
+}
+
 // A body is "compliant" if it still contains a real unsubscribe link — check
 // the raw HTML (not the tag-stripped plain text used for spam/word counts),
 // since the token lives inside an href attribute that tag-stripping would
@@ -1967,7 +1979,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
 function TemplateModal({ initial, onClose, onSave }) {
   const [name, setName] = useState(initial?.name || "");
   const [subject, setSubject] = useState(initial?.subject || "");
-  const [body, setBody] = useState(initial?.body || DEFAULT_DISCLAIMER_HTML);
+  const [body, setBody] = useState(() => initial?.body || unsubscribeSeed());
   const [attachments, setAttachments] = useState(initial?.attachments || []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -2658,7 +2670,7 @@ function emptyStep(index) {
     templateId: "",
     subject: "",
     subjectVariants: [],
-    body: DEFAULT_DISCLAIMER_HTML,
+    body: unsubscribeSeed(),
     delayDays: SUGGESTED_DELAYS[index] ?? 7,
     conditions: { requireEvent: null, requireTags: [] },
     attachments: [],
@@ -3152,7 +3164,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
   const [minimized, setMinimized] = useState(false);
   const [contactId, setContactId] = useState(initialContactId || "");
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState(DEFAULT_DISCLAIMER_HTML);
+  const [body, setBody] = useState(() => unsubscribeSeed());
   const [attachments, setAttachments] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -3249,7 +3261,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [subjectVariants, setSubjectVariants] = useState([]);
-  const [body, setBody] = useState(DEFAULT_DISCLAIMER_HTML);
+  const [body, setBody] = useState(() => unsubscribeSeed());
   const [attachments, setAttachments] = useState([]);
   const [intervalMinutes, setIntervalMinutes] = useState(2);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -3883,7 +3895,13 @@ function SendWindowCard({ isOwner }) {
         sendWindowEnd: Number(s.sendWindowEnd),
         sendDays: days,
         sendTimezone: s.sendTimezone,
+        emailTrackingEnabled: s.emailTrackingEnabled !== false,
+        unsubscribeEnabled: s.unsubscribeEnabled !== false,
+        unsubscribeText: s.unsubscribeText || "",
+        unsubscribeConfirmTitle: s.unsubscribeConfirmTitle || "",
+        unsubscribeConfirmMessage: s.unsubscribeConfirmMessage || "",
       });
+      setUnsubscribeSeed(saved.unsubscribeText);
       setS(saved);
       setMsg("Αποθηκεύτηκε.");
     } catch (err) {
@@ -3936,6 +3954,66 @@ function SendWindowCard({ isOwner }) {
             placeholder="Europe/Athens"
             className="rounded-md px-2 py-1 text-xs border bg-white flex-1 min-w-[160px]" style={{ borderColor: C.line, color: C.ink }} />
         </div>
+      </div>
+
+      {/* Email tracking on/off — deliverability */}
+      <div className="mt-4 pt-4 border-t" style={{ borderColor: C.line }}>
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-sm font-medium" style={{ color: C.ink }}>Email tracking</div>
+          <label className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
+            <input type="checkbox" disabled={!isOwner} checked={s.emailTrackingEnabled !== false}
+              onChange={(e) => update({ emailTrackingEnabled: e.target.checked })} />
+            Ενεργό
+          </label>
+        </div>
+        <p className="text-xs" style={{ color: C.slate }}>
+          {s.emailTrackingEnabled !== false
+            ? "Καταγράφονται opens & clicks (open pixel + rewriting των links)."
+            : "Clean αποστολή — χωρίς open pixel και χωρίς rewriting των links, για καλύτερο deliverability. Δεν θα υπάρχουν στατιστικά open/click."}
+        </p>
+      </div>
+
+      {/* One-click unsubscribe on/off */}
+      <div className="mt-4 pt-4 border-t" style={{ borderColor: C.line }}>
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-sm font-medium" style={{ color: C.ink }}>One-click unsubscribe</div>
+          <label className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
+            <input type="checkbox" disabled={!isOwner} checked={s.unsubscribeEnabled !== false}
+              onChange={(e) => update({ unsubscribeEnabled: e.target.checked })} />
+            Ενεργό
+          </label>
+        </div>
+        <p className="text-xs" style={{ color: C.slate }}>
+          {s.unsubscribeEnabled !== false
+            ? "Προστίθεται List-Unsubscribe header + ο σύνδεσμος {{unsubscribe_link}} λειτουργεί. Συνιστάται για deliverability."
+            : "Χωρίς List-Unsubscribe header· το {{unsubscribe_link}} αφαιρείται από το κείμενο — 100% clean 1:1 αποστολή. Πρόσεξε τη συμμόρφωση (σε bulk απαιτείται unsubscribe)."}
+        </p>
+
+        {s.unsubscribeEnabled !== false && (
+          <div className="mt-3 space-y-3">
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
+                Κείμενο unsubscribe στο email <span style={{ fontWeight: 400 }}>— seed σε νέα emails· πρέπει να περιέχει {"{{unsubscribe_link}}"}</span>
+              </label>
+              <textarea disabled={!isOwner} value={s.unsubscribeText || ""} onChange={(e) => update({ unsubscribeText: e.target.value })}
+                rows={3}
+                className="w-full rounded-md px-2 py-1.5 text-xs border bg-white font-mono" style={{ borderColor: C.line, color: C.ink }} />
+              {(s.unsubscribeText || "").indexOf("{{unsubscribe_link}}") === -1 && (
+                <p className="text-[11px] mt-1" style={{ color: C.amber }}>⚠ Λείπει το {"{{unsubscribe_link}}"} — ο σύνδεσμος δεν θα λειτουργεί.</p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Σελίδα επιβεβαίωσης — τίτλος</label>
+              <input disabled={!isOwner} value={s.unsubscribeConfirmTitle || ""} onChange={(e) => update({ unsubscribeConfirmTitle: e.target.value })}
+                className="w-full rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Σελίδα επιβεβαίωσης — μήνυμα</label>
+              <input disabled={!isOwner} value={s.unsubscribeConfirmMessage || ""} onChange={(e) => update({ unsubscribeConfirmMessage: e.target.value })}
+                className="w-full rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {isOwner && (
@@ -5113,6 +5191,16 @@ export default function App() {
   useEffect(() => {
     if (authState === "authed") loadCore();
   }, [authState, loadCore]);
+
+  // Load the workspace's editable unsubscribe footer once, so new draft bodies
+  // (compose, sequence steps, campaigns, templates) seed from the configured
+  // text instead of the hardcoded default. Best-effort — falls back silently.
+  useEffect(() => {
+    if (authState !== "authed") return;
+    api.get("/company/settings")
+      .then((s) => { if (s?.unsubscribeText) setUnsubscribeSeed(s.unsubscribeText); })
+      .catch(() => {});
+  }, [authState]);
 
   // Analytics/Inbox numbers otherwise only change on the actions we happen to
   // remember to refresh after (see handleManualSend etc. above) — that misses

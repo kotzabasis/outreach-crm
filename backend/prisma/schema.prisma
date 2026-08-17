@@ -185,6 +185,22 @@ model Company {
   sendDays          Json    @default("[1,2,3,4,5]")
   sendTimezone      String  @default("Europe/Athens")
 
+  // Email open/click tracking. On by default (existing behaviour). When off,
+  // sends go out "clean": no open pixel and no click-link rewriting — better
+  // deliverability, no analytics. The unsubscribe link/header is unaffected.
+  emailTrackingEnabled Boolean @default(true)
+  // One-click unsubscribe (List-Unsubscribe header + {{unsubscribe_link}} token).
+  // On by default. When off, no List-Unsubscribe header is sent and the body
+  // token resolves to empty — for fully clean 1:1 personalized sends.
+  unsubscribeEnabled   Boolean @default(true)
+  // Editable unsubscribe copy. Empty = use the built-in defaults (see
+  // lib/unsubscribeDefaults.js). unsubscribeText is the footer line seeded into
+  // new email bodies (keeps the {{unsubscribe_link}} token); the confirm fields
+  // are the page shown after someone clicks the unsubscribe link.
+  unsubscribeText            String @default("")
+  unsubscribeConfirmTitle    String @default("")
+  unsubscribeConfirmMessage  String @default("")
+
   users        User[]
   contacts     Contact[]
   sequences    Sequence[]

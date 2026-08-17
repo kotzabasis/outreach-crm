@@ -163,14 +163,30 @@ function toBase64Url(str) {
 // tag: the naive regex matched past the closing quote and into the visible
 // link text (stopping only at the next "<" or whitespace), mangling the
 // markup and producing broken links plus garbled rendering downstream.
-function injectTracking(html, trackingId) {
+// When `trackingEnabled` is false (workspace setting), the email goes out
+// "clean": no click-link rewriting and no open pixel — the two things that add
+// our tracking domain into the body and hurt deliverability. The unsubscribe
+// link is NOT tracking (it's a functional, compliance link) so it's always
+// resolved; the List-Unsubscribe header is likewise always sent (see
+// sendTrackedEmail) so one-click unsubscribe keeps working regardless.
+function injectTracking(html, trackingId, { trackingEnabled = true, unsubscribeEnabled = true } = {}) {
+  const unsubscribeUrl = `${process.env.BASE_URL}/track/unsubscribe/${trackingId}`;
+  // The {{unsubscribe_link}} body token resolves to the working URL when
+  // unsubscribe is on, or to empty (token removed) when off — so a "clean" send
+  // never leaves a broken placeholder or a dead link behind.
+  const resolveUnsub = (s) => s.replaceAll("{{unsubscribe_link}}", unsubscribeEnabled ? unsubscribeUrl : "");
+
+  if (!trackingEnabled) {
+    // Clean send: leave real links untouched, no pixel.
+    return resolveUnsub(html);
+  }
+
   const withWrappedLinks = html.replace(
     /href=(["'])(https?:\/\/[^"']+)\1/g,
     (match, quote, url) =>
       `href=${quote}${process.env.BASE_URL}/track/click/${trackingId}?url=${encodeURIComponent(url)}${quote}`
   );
-  const unsubscribeUrl = `${process.env.BASE_URL}/track/unsubscribe/${trackingId}`;
-  const withUnsubscribeLink = withWrappedLinks.replaceAll("{{unsubscribe_link}}", unsubscribeUrl);
+  const withUnsubscribeLink = resolveUnsub(withWrappedLinks);
   const pixel = `<img src="${process.env.BASE_URL}/track/open/${trackingId}.png" width="1" height="1" style="display:none" alt="" />`;
   return `${withUnsubscribeLink}${pixel}`;
 }
@@ -288,13 +304,13 @@ function buildRawMessage({ from, to, subject, html, text, attachments = [], list
   return toBase64Url(parts.join("\r\n"));
 }
 
-async function sendTrackedEmail({ gmailAccount, contact, subject, body, trackingId, attachments = [] }) {
+async function sendTrackedEmail({ gmailAccount, contact, subject, body, trackingId, attachments = [], trackingEnabled = true, unsubscribeEnabled = true }) {
   const client = await getAuthedClientForGmailAccount(gmailAccount);
   const gmail = google.gmail({ version: "v1", auth: client });
 
   const renderedSubject = renderTemplate(subject, contact, { asHtml: false });
   const renderedBodyHtml = renderTemplate(body, contact);
-  const htmlWithTracking = injectTracking(renderedBodyHtml, trackingId);
+  const htmlWithTracking = injectTracking(renderedBodyHtml, trackingId, { trackingEnabled, unsubscribeEnabled });
   // Plain-text alternative from the body BEFORE tracking injection — so it has
   // the real link text and no 1x1 pixel.
   const textAlternative = htmlToText(renderedBodyHtml);
@@ -308,8 +324,8 @@ async function sendTrackedEmail({ gmailAccount, contact, subject, body, tracking
     attachments,
     // Same URL the {{unsubscribe_link}} body token resolves to — surfaced in
     // the headers too so one-click unsubscribe works even if the sender edited
-    // or removed the in-body link.
-    listUnsubscribeUrl: `${process.env.BASE_URL}/track/unsubscribe/${trackingId}`,
+    // or removed the in-body link. Omitted entirely when unsubscribe is off.
+    listUnsubscribeUrl: unsubscribeEnabled ? `${process.env.BASE_URL}/track/unsubscribe/${trackingId}` : null,
   });
 
   const res = await gmail.users.messages.send({

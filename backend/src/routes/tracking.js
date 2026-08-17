@@ -117,18 +117,43 @@ async function applyUnsubscribe(trackingId) {
   }
 }
 
+// Minimal HTML escape so the owner-configured confirmation copy can't inject
+// markup/script into this public page.
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
 // GET: the human-facing path — someone clicks the {{unsubscribe_link}} in the
-// email body and lands on a confirmation page.
+// email body and lands on a confirmation page. The title/message are editable
+// per workspace (Company settings); we resolve them from the tracking id's
+// company, falling back to the built-in defaults.
 router.get("/unsubscribe/:trackingId", async (req, res) => {
   await applyUnsubscribe(req.params.trackingId);
-  // Always show the same confirmation, whether or not the tracking id was
-  // valid — never reveal anything about the underlying data to the visitor.
+
+  let title = DEFAULT_CONFIRM_TITLE;
+  let message = DEFAULT_CONFIRM_MESSAGE;
+  try {
+    const emailLog = await prisma.emailLog.findUnique({
+      where: { trackingId: req.params.trackingId },
+      select: { contact: { select: { company: { select: { unsubscribeConfirmTitle: true, unsubscribeConfirmMessage: true } } } } },
+    });
+    const company = emailLog?.contact?.company;
+    if (company?.unsubscribeConfirmTitle) title = company.unsubscribeConfirmTitle;
+    if (company?.unsubscribeConfirmMessage) message = company.unsubscribeConfirmMessage;
+  } catch {
+    // fall back to defaults — never fail the confirmation page over a lookup
+  }
+
+  // Always show a confirmation, whether or not the tracking id was valid —
+  // never reveal anything about the underlying data to the visitor.
   res.set("Content-Type", "text/html; charset=utf-8");
   res.send(`<!DOCTYPE html>
 <html lang="el"><head><meta charset="utf-8"><title>Unsubscribed</title></head>
 <body style="font-family:sans-serif;max-width:480px;margin:80px auto;text-align:center;color:#10192B;">
-  <h2>Έγινε η απεγγραφή σου.</h2>
-  <p style="color:#64748B;">Δεν θα λαμβάνεις άλλα emails.</p>
+  <h2>${escapeHtml(title)}</h2>
+  <p style="color:#64748B;">${escapeHtml(message)}</p>
 </body></html>`);
 });
 

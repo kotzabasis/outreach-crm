@@ -249,6 +249,10 @@ router.post("/:id/steps/:stepId/test-send", async (req, res) => {
       ? req.body.subject.trim().slice(0, 300)
       : step.subject;
 
+  const trackingCompany = await prisma.company.findUnique({
+    where: { id: req.user.companyId },
+    select: { emailTrackingEnabled: true, unsubscribeEnabled: true },
+  });
   try {
     await sendTrackedEmail({
       gmailAccount,
@@ -257,6 +261,8 @@ router.post("/:id/steps/:stepId/test-send", async (req, res) => {
       body: step.body,
       trackingId,
       attachments: Array.isArray(step.attachments) ? step.attachments : [],
+      trackingEnabled: trackingCompany?.emailTrackingEnabled !== false,
+      unsubscribeEnabled: trackingCompany?.unsubscribeEnabled !== false,
     });
   } catch (err) {
     console.error("Test send failed:", err.message);

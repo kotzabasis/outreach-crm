@@ -46,6 +46,10 @@ router.post("/", async (req, res) => {
   }
 
   const trackingId = uuid();
+  const company = await prisma.company.findUnique({
+    where: { id: req.user.companyId },
+    select: { emailTrackingEnabled: true, unsubscribeEnabled: true },
+  });
   let gmailMessageId;
   try {
     gmailMessageId = await sendTrackedEmail({
@@ -55,6 +59,8 @@ router.post("/", async (req, res) => {
       body: parsed.data.body,
       trackingId,
       attachments: parsed.data.attachments,
+      trackingEnabled: company?.emailTrackingEnabled !== false,
+      unsubscribeEnabled: company?.unsubscribeEnabled !== false,
     });
   } catch (err) {
     console.error("Manual send failed:", err.message);

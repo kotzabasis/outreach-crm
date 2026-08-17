@@ -3,6 +3,18 @@ const { z } = require("zod");
 const prisma = require("../db");
 const requireAuth = require("../lib/requireAuth");
 const requireOwner = require("../lib/requireOwner");
+const { DEFAULT_UNSUBSCRIBE_TEXT, DEFAULT_CONFIRM_TITLE, DEFAULT_CONFIRM_MESSAGE } = require("../lib/unsubscribeDefaults");
+
+// Fill empty stored unsubscribe copy with the built-in defaults so the client
+// always sees real, editable text (empty in the DB just means "not customized").
+function withUnsubscribeDefaults(company) {
+  return {
+    ...company,
+    unsubscribeText: company.unsubscribeText || DEFAULT_UNSUBSCRIBE_TEXT,
+    unsubscribeConfirmTitle: company.unsubscribeConfirmTitle || DEFAULT_CONFIRM_TITLE,
+    unsubscribeConfirmMessage: company.unsubscribeConfirmMessage || DEFAULT_CONFIRM_MESSAGE,
+  };
+}
 
 const router = express.Router();
 router.use(requireAuth);
@@ -18,6 +30,11 @@ const SETTINGS_SELECT = {
   sendWindowEnd: true,
   sendDays: true,
   sendTimezone: true,
+  emailTrackingEnabled: true,
+  unsubscribeEnabled: true,
+  unsubscribeText: true,
+  unsubscribeConfirmTitle: true,
+  unsubscribeConfirmMessage: true,
 };
 
 // Readable by any member (the UI shows when automated sends go out); only an
@@ -29,7 +46,7 @@ router.get("/settings", async (req, res) => {
     select: SETTINGS_SELECT,
   });
   if (!company) return res.status(404).json({ error: "not_found" });
-  res.json(company);
+  res.json(withUnsubscribeDefaults(company));
 });
 
 const sendWindowSchema = z.object({
@@ -38,6 +55,11 @@ const sendWindowSchema = z.object({
   sendWindowEnd: z.number().int().min(1).max(24).optional(), // exclusive; 24 = end of day
   sendDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   sendTimezone: z.string().min(1).max(64).optional(),
+  emailTrackingEnabled: z.boolean().optional(),
+  unsubscribeEnabled: z.boolean().optional(),
+  unsubscribeText: z.string().max(4000).optional(),
+  unsubscribeConfirmTitle: z.string().max(200).optional(),
+  unsubscribeConfirmMessage: z.string().max(1000).optional(),
 });
 
 router.patch("/settings", requireOwner, async (req, res) => {
@@ -66,7 +88,7 @@ router.patch("/settings", requireOwner, async (req, res) => {
     data: parsed.data,
     select: SETTINGS_SELECT,
   });
-  res.json(updated);
+  res.json(withUnsubscribeDefaults(updated));
 });
 
 module.exports = router;
