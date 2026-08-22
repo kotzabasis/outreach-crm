@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { X, Loader2, Building2, Pencil, ShieldCheck, UserPlus, UserCheck, UserX, Trash2, LogOut, Search } from "lucide-react";
 import { api, ApiError } from "./lib/api";
 import { C, Card, Spinner, ErrorNote, StatCard, Brand, fmtMoney, fmtDate } from "./lib/ui.jsx";
+import { t, useLang, LanguageSwitcher } from "./lib/i18n.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
 
 // ---------- Admin ----------
@@ -989,6 +990,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
 // to isAdmin accounts; a logged-in company owner/member who lands here sees
 // an access-denied screen, never the panel itself.
 export function SuperAdminApp() {
+  useLang(); // re-render on language switch
   const [authState, setAuthState] = useState("loading"); // loading | anon | authed | forbidden
   const [user, setUser] = useState(null);
 
@@ -1165,13 +1167,14 @@ export function SuperAdminApp() {
         <div className="flex items-center gap-3">
           <Brand size={28} textSize="text-sm" />
           <span className="text-xs font-medium px-2 py-1 rounded-md" style={{ backgroundColor: C.pale, color: C.navy }}>
-            Διαχείριση πλατφόρμας
+            {t("Διαχείριση πλατφόρμας")}
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <a href="/" className="text-xs font-medium" style={{ color: C.sky }}>Πίσω στην εφαρμογή</a>
+          <LanguageSwitcher compact />
+          <a href="/" className="text-xs font-medium" style={{ color: C.sky }}>{t("Πίσω στην εφαρμογή")}</a>
           <div className="text-xs text-right" style={{ color: C.slate }}>{user?.email}</div>
-          <button onClick={handleLogout} className="text-slate-400 hover:text-slate-600" title="Αποσύνδεση">
+          <button onClick={handleLogout} className="text-slate-400 hover:text-slate-600" title={t("Αποσύνδεση")}>
             <LogOut size={16} />
           </button>
         </div>

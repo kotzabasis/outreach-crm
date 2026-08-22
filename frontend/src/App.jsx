@@ -12,6 +12,7 @@ import {
   Facebook, Instagram, MapPin, Star, Linkedin
 } from "lucide-react";
 import { api, API_URL, ApiError } from "./lib/api";
+import { t, useLang, LanguageSwitcher } from "./lib/i18n.jsx";
 import { C, Card, Spinner, ErrorNote, StatCard, Brand, fmtMoney, fmtDate, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
 import DOMPurify from "dompurify";
@@ -1612,10 +1613,10 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Επαφές</h1>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Επαφές")}</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-            {hasActiveFilters ? `${total} επαφές (φιλτραρισμένο)` : `${total} επαφές συνολικά`}
-            {dueCount > 0 ? ` · ${dueCount} με εκκρεμή υπενθύμιση` : ""}
+            {hasActiveFilters ? t("{n} επαφές (φιλτραρισμένο)", { n: total }) : t("{n} επαφές συνολικά", { n: total })}
+            {dueCount > 0 ? t(" · {n} με εκκρεμή υπενθύμιση", { n: dueCount }) : ""}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -1625,7 +1626,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
             className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border"
             style={{ borderColor: C.line, color: C.ink, opacity: exporting ? 0.6 : 1 }}
           >
-            {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Εξαγωγή CSV
+            {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} {t("Εξαγωγή CSV")}
           </button>
           <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
           <button
@@ -1635,13 +1636,13 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
             className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border"
             style={{ borderColor: C.line, color: C.ink, opacity: uploading ? 0.6 : 1 }}
           >
-            {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Ανέβασμα CSV
+            {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} {t("Ανέβασμα CSV")}
           </button>
           <button
             onClick={() => setShowNew(true)}
             className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky }}
           >
-            <Plus size={15} /> Νέα επαφή
+            <Plus size={15} /> {t("Νέα επαφή")}
           </button>
         </div>
       </div>
@@ -1658,7 +1659,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Αναζήτηση σε όνομα, email, τηλέφωνο, εταιρεία, website, tags, σχόλια…"
+            placeholder={t("Αναζήτηση σε όνομα, email, τηλέφωνο, εταιρεία, website, tags, σχόλια…")}
             className="bg-transparent outline-none text-sm flex-1"
             style={{ color: C.ink }}
           />
@@ -1669,7 +1670,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
           className="rounded-lg px-3 py-2 text-sm border outline-none"
           style={{ borderColor: C.line, color: C.ink }}
         >
-          <option value="all">Όλες οι καταστάσεις</option>
+          <option value="all">{t("Όλες οι καταστάσεις")}</option>
           {Object.entries(statusMeta).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
@@ -1681,7 +1682,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
           className="rounded-lg px-3 py-2 text-sm border outline-none"
           style={{ borderColor: C.line, color: C.ink }}
         >
-          <option value="all">Όλες οι κατηγορίες</option>
+          <option value="all">{t("Όλες οι κατηγορίες")}</option>
           {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
         </select>
 
@@ -1691,23 +1692,23 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
           className="rounded-lg px-3 py-2 text-sm border outline-none"
           style={{ borderColor: C.line, color: C.ink }}
         >
-          <option value="all">Όλες οι ετικέτες</option>
-          {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
+          <option value="all">{t("Όλες οι ετικέτες")}</option>
+          {allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
         </select>
 
         <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.slate }}>
           <input type="checkbox" checked={onlyDue} onChange={(e) => setOnlyDue(e.target.checked)} />
-          Μόνο εκκρεμείς υπενθυμίσεις
+          {t("Μόνο εκκρεμείς υπενθυμίσεις")}
         </label>
 
         <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.slate }}>
           <input type="checkbox" checked={hideUnsubscribed} onChange={(e) => setHideUnsubscribed(e.target.checked)} />
-          Απόκρυψη unsubscribed
+          {t("Απόκρυψη unsubscribed")}
         </label>
 
         <label className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.slate }}>
           <input type="checkbox" checked={hasWebsiteOnly} onChange={(e) => setHasWebsiteOnly(e.target.checked)} />
-          Μόνο με website
+          {t("Μόνο με website")}
         </label>
 
         {hasActiveFilters && (
@@ -3013,7 +3014,7 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
     <div className="h-full overflow-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Απεσταλμένα</h1>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Απεσταλμένα")}</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>Όλα τα emails που στάλθηκαν — sequences και χειροκίνητα. Πάτησε ένα για το trace.</p>
         </div>
         <button
@@ -3083,7 +3084,7 @@ function DashboardView({ dashboard, loading, error, onReload, onSelectContact })
   return (
     <div className="h-full overflow-auto">
       <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
-        <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Σήμερα</h1>
+        <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Σήμερα")}</h1>
         <p className="text-sm mt-0.5" style={{ color: C.slate }}>Ό,τι είναι εκκρεμές ή έληξε σήμερα — follow-ups και αυτόματα sequence sends.</p>
       </div>
       <div className="px-8 py-4 space-y-6">
@@ -3436,7 +3437,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
                 className="flex-1 rounded-lg px-3 py-1.5 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
                 className="rounded-lg px-2 py-1.5 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-                <option value="all">Όλες οι κατηγορίες</option>
+                <option value="all">{t("Όλες οι κατηγορίες")}</option>
                 {categories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}
@@ -4312,7 +4313,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
       {showExisting && <InviteExistingModal onClose={() => setShowExisting(false)} onInvite={onInviteExisting} />}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Ομάδα</h1>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Ομάδα")}</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>Οι συνεργάτες στο workspace σου — μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.</p>
         </div>
         {isOwner && (
@@ -4860,6 +4861,9 @@ function InviteResponseModal({ invites, onAccept, onDecline, onDismiss }) {
 
 // ---------- App ----------
 export default function App() {
+  // Subscribe to the language store so a switch re-renders the whole tree and
+  // every t() call re-evaluates (see lib/i18n.jsx).
+  useLang();
   const [authState, setAuthState] = useState("loading"); // loading | anon | authed
   const [user, setUser] = useState(null);
   const [view, setView] = useState("dashboard");
@@ -5601,28 +5605,28 @@ export default function App() {
             className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white mb-3 shadow-sm"
             style={{ backgroundColor: C.sky }}
           >
-            <Pencil size={14} /> Σύνταξη
+            <Pencil size={14} /> {t("Σύνταξη")}
           </button>
         </div>
 
         <GlobalSearch onSelectContact={handleSelectFromSearch} />
 
         <div className="px-3 space-y-0.5 flex-1">
-          <NavItem icon={CalendarClock} label="Σήμερα" active={view === "dashboard"} onClick={() => { setView("dashboard"); setSidebarOpen(false); }} count={counts.dueToday} />
-          <NavItem icon={Mail} label="Απεσταλμένα" active={view === "inbox"} onClick={() => { setView("inbox"); setSidebarOpen(false); }} count={counts.inbox} />
-          <NavItem icon={Users} label="Επαφές" active={view === "contacts"} onClick={() => { setView("contacts"); setSidebarOpen(false); }} count={counts.contacts} />
-          <NavItem icon={Layers} label="Sequences" active={view === "sequences"} onClick={() => { setView("sequences"); setSidebarOpen(false); }} count={counts.sequences} />
-          <NavItem icon={FileText} label="Templates" active={view === "templates"} onClick={() => { setView("templates"); setSidebarOpen(false); }} count={counts.templates} />
-          <NavItem icon={Handshake} label="Offers" active={view === "offers"} onClick={() => { setView("offers"); setSidebarOpen(false); }} count={counts.offers} />
-          <NavItem icon={Megaphone} label="Campaigns" active={view === "campaigns"} onClick={() => { setView("campaigns"); setSidebarOpen(false); }} count={counts.campaigns} />
-          <NavItem icon={BarChart3} label="Analytics" active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
-          <NavItem icon={UserPlus} label="Ομάδα" active={view === "team"} onClick={() => { setView("team"); setSidebarOpen(false); }} />
-          <NavItem icon={Globe} label="Integrations" active={view === "integrations"} onClick={() => { setView("integrations"); setSidebarOpen(false); }} />
+          <NavItem icon={CalendarClock} label={t("Σήμερα")} active={view === "dashboard"} onClick={() => { setView("dashboard"); setSidebarOpen(false); }} count={counts.dueToday} />
+          <NavItem icon={Mail} label={t("Απεσταλμένα")} active={view === "inbox"} onClick={() => { setView("inbox"); setSidebarOpen(false); }} count={counts.inbox} />
+          <NavItem icon={Users} label={t("Επαφές")} active={view === "contacts"} onClick={() => { setView("contacts"); setSidebarOpen(false); }} count={counts.contacts} />
+          <NavItem icon={Layers} label={t("Sequences")} active={view === "sequences"} onClick={() => { setView("sequences"); setSidebarOpen(false); }} count={counts.sequences} />
+          <NavItem icon={FileText} label={t("Templates")} active={view === "templates"} onClick={() => { setView("templates"); setSidebarOpen(false); }} count={counts.templates} />
+          <NavItem icon={Handshake} label={t("Offers")} active={view === "offers"} onClick={() => { setView("offers"); setSidebarOpen(false); }} count={counts.offers} />
+          <NavItem icon={Megaphone} label={t("Campaigns")} active={view === "campaigns"} onClick={() => { setView("campaigns"); setSidebarOpen(false); }} count={counts.campaigns} />
+          <NavItem icon={BarChart3} label={t("Analytics")} active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
+          <NavItem icon={UserPlus} label={t("Ομάδα")} active={view === "team"} onClick={() => { setView("team"); setSidebarOpen(false); }} />
+          <NavItem icon={Globe} label={t("Integrations")} active={view === "integrations"} onClick={() => { setView("integrations"); setSidebarOpen(false); }} />
         </div>
 
         {user?.memberships?.length > 1 && (
           <div className="px-5 pb-2">
-            <label className="text-[11px] font-medium block mb-1" style={{ color: C.slate }}>Εταιρεία</label>
+            <label className="text-[11px] font-medium block mb-1" style={{ color: C.slate }}>{t("Εταιρεία")}</label>
             <select
               value={user.company?.id || ""}
               onChange={(e) => handleSwitchCompany(e.target.value)}
@@ -5631,21 +5635,25 @@ export default function App() {
             >
               {user.memberships.map((m) => (
                 <option key={m.companyId} value={m.companyId}>
-                  {m.companyName} ({m.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"})
+                  {m.companyName} ({m.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")})
                 </option>
               ))}
             </select>
           </div>
         )}
+        <div className="px-5 pt-3 pb-1 flex items-center justify-between">
+          <span className="text-[11px] font-medium" style={{ color: C.slate }}>{t("Γλώσσα")}</span>
+          <LanguageSwitcher compact />
+        </div>
         <div className="px-5 py-4 border-t flex items-center gap-2.5" style={{ borderColor: C.line }}>
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0" style={{ backgroundColor: C.navy }}>
             {(user?.name || user?.email || "?").slice(0, 2).toUpperCase()}
           </div>
           <div className="text-xs min-w-0 flex-1">
-            <div className="font-medium truncate" style={{ color: C.ink }}>{user?.name || "Χρήστης"}</div>
+            <div className="font-medium truncate" style={{ color: C.ink }}>{user?.name || t("Χρήστης")}</div>
             <div className="truncate" style={{ color: C.slate }}>{user?.email}</div>
           </div>
-          <button onClick={handleLogout} className="text-slate-400 hover:text-slate-600 shrink-0" title="Αποσύνδεση">
+          <button onClick={handleLogout} className="text-slate-400 hover:text-slate-600 shrink-0" title={t("Αποσύνδεση")}>
             <LogOut size={15} />
           </button>
         </div>

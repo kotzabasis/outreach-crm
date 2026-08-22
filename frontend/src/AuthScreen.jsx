@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { api, ApiError } from "./lib/api";
 import { C, Card, Brand } from "./lib/ui.jsx";
+import { t, useLang, LanguageSwitcher } from "./lib/i18n.jsx";
 
 // Shared between the main App (default screen) and SuperAdminApp (/superadmin)
 // — both are gated behind the same login, just with a different destination
@@ -9,6 +10,7 @@ import { C, Card, Brand } from "./lib/ui.jsx";
 // either one pulling in the other's code (see main.jsx for the lazy-loaded
 // split).
 export function AuthScreen({ onAuthenticated }) {
+  useLang(); // re-render on language switch
   const [mode, setMode] = useState("login"); // "login" | "register" | "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -68,16 +70,17 @@ export function AuthScreen({ onAuthenticated }) {
   return (
     <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
       <div className="w-full max-w-sm">
-        <div className="flex items-center justify-center mb-8">
+        <div className="flex flex-col items-center justify-center mb-8 gap-3">
           <Brand size={38} textSize="text-2xl" />
+          <LanguageSwitcher compact />
         </div>
 
         <Card className="p-6">
           {mode === "forgot" ? (
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-semibold" style={{ color: C.ink }}>Επαναφορά κωδικού</h3>
+              <h3 className="text-sm font-semibold" style={{ color: C.ink }}>{t("Επαναφορά κωδικού")}</h3>
               <button type="button" onClick={() => switchMode("login")} className="text-xs font-medium" style={{ color: C.sky }}>
-                Πίσω στη σύνδεση
+                {t("Πίσω στη σύνδεση")}
               </button>
             </div>
           ) : (
@@ -90,7 +93,7 @@ export function AuthScreen({ onAuthenticated }) {
                   className="flex-1 rounded-md py-1.5 text-sm font-medium transition-colors"
                   style={{ backgroundColor: mode === m ? "#fff" : "transparent", color: mode === m ? C.navy : C.slate }}
                 >
-                  {m === "login" ? "Σύνδεση" : "Εγγραφή"}
+                  {m === "login" ? t("Σύνδεση") : t("Εγγραφή")}
                 </button>
               ))}
             </div>
@@ -103,7 +106,7 @@ export function AuthScreen({ onAuthenticated }) {
           <form onSubmit={handleSubmit} className="space-y-3">
             {mode === "register" && (
               <div>
-                <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Όνομα</label>
+                <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Όνομα")}</label>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -127,7 +130,7 @@ export function AuthScreen({ onAuthenticated }) {
             </div>
             {mode !== "forgot" && (
               <div>
-                <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Κωδικός</label>
+                <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Κωδικός")}</label>
                 <input
                   type="password"
                   required
@@ -139,11 +142,11 @@ export function AuthScreen({ onAuthenticated }) {
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
                 />
                 {mode === "register" && (
-                  <p className="text-[11px] mt-1" style={{ color: C.slate }}>Τουλάχιστον 10 χαρακτήρες.</p>
+                  <p className="text-[11px] mt-1" style={{ color: C.slate }}>{t("Τουλάχιστον 10 χαρακτήρες.")}</p>
                 )}
                 {mode === "login" && (
                   <button type="button" onClick={() => switchMode("forgot")} className="text-[11px] font-medium mt-1.5" style={{ color: C.sky }}>
-                    Ξέχασες τον κωδικό;
+                    {t("Ξέχασες τον κωδικό;")}
                   </button>
                 )}
               </div>
@@ -151,7 +154,7 @@ export function AuthScreen({ onAuthenticated }) {
 
             {mode === "register" && (
               <p className="text-[11px] rounded-lg px-3 py-2" style={{ backgroundColor: C.pale, color: C.navy }}>
-                Η πρόσβαση εγκρίνεται από διαχειριστή — μετά την εγγραφή θα περιμένεις έγκριση πριν μπορέσεις να συνδεθείς.
+                {t("Η πρόσβαση εγκρίνεται από διαχειριστή — μετά την εγγραφή θα περιμένεις έγκριση πριν μπορέσεις να συνδεθείς.")}
               </p>
             )}
 
@@ -166,7 +169,7 @@ export function AuthScreen({ onAuthenticated }) {
               style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}
             >
               {busy && <Loader2 size={14} className="animate-spin" />}
-              {mode === "login" ? "Σύνδεση" : mode === "forgot" ? "Αποστολή συνδέσμου" : "Δημιουργία λογαριασμού"}
+              {mode === "login" ? t("Σύνδεση") : mode === "forgot" ? t("Αποστολή συνδέσμου") : t("Δημιουργία λογαριασμού")}
             </button>
           </form>
         </Card>
