@@ -7,24 +7,12 @@ backend/    Node.js/Express API — real Gmail sending, sequences, tracking, ana
 frontend/   React (Vite) CRM UI — contacts, sequences, analytics, Gmail-style compose
 ```
 
-## Current status — important
+## Current status
 
-- **`backend/` is fully functional**: password auth + forgot/reset password, Gmail OAuth connection, contact CSV import, sequence engine with a cron scheduler, open/click tracking, analytics endpoints, email templates. See `backend/SETUP.md` and `backend/SECURITY.md`.
-- **`frontend/` is currently a working UI *demo* using mock/seed data** — it renders and looks/behaves like the final product, but it is **not yet wired to the backend's API**. Nothing you do in it (upload a CSV, create a sequence, send a "compose" email) hits the real backend or sends real email yet.
+Both halves are fully functional and wired together — this is one working product, deployed live.
 
-## What's left before this is one working product
-
-The frontend's `src/App.jsx` needs its mock data (`seedContacts`, `seedSequences`, etc.) replaced with real calls to the backend:
-
-- Login/register screen → `POST /auth/register`, `POST /auth/login`
-- "Connect Gmail" banner when not connected → link to `GET /auth/google`
-- Contacts view → `GET /contacts`, `POST /contacts/upload` (CSV)
-- Sequences view → `GET /sequences`, `POST /sequences`, `POST /sequences/:id/enroll`, `POST /sequences/:id/steps`
-- Templates → `GET/POST/PATCH/DELETE /templates`
-- Analytics view → `GET /analytics/overview`, `GET /analytics/timeline`
-- All `fetch` calls need `credentials: "include"` so the session cookie is sent, and an env var (e.g. `VITE_API_URL`) pointing at the deployed backend URL.
-
-This is a well-defined, scoped task — happy to do it in a follow-up. Deploying the frontend as-is will give you a good-looking, non-functional demo; deploying the backend as-is gives you a fully working API with no UI yet.
+- **`backend/`**: password auth + forgot/reset password, Gmail OAuth + real sending, contact CSV import, sequence engine with a cron scheduler, campaigns, open/click tracking + one-click unsubscribe, analytics, email templates, LinkedIn outreach (Unipile: connection requests, messages, InMail), webhooks, multi-company/team. See `backend/SETUP.md` and `backend/SECURITY.md`.
+- **`frontend/`**: React (Vite) UI fully wired to the backend via `src/lib/api.js` — every view (login/register, contacts, sequences, templates, campaigns, analytics, team/settings, LinkedIn/InMail, SuperAdmin) makes real authenticated `fetch` calls (`credentials: "include"`, CSRF token, `VITE_API_URL`). There is **no** mock/seed data. EL/EN language switch via `src/lib/i18n.jsx`.
 
 ## Both build cleanly right now
 

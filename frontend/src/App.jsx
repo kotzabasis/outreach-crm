@@ -169,9 +169,9 @@ function EventTrace({ sentAt, events = [] }) {
       label:
         e.type === "open"
           ? e.isBot
-            ? "Άνοιγμα αγνοήθηκε (αυτόματο/bot, όχι πραγματικό)"
-            : "Άνοιξε"
-          : `Κλικ σε σύνδεσμο${e.url ? `: ${e.url}` : ""}`,
+            ? t("Άνοιγμα αγνοήθηκε (αυτόματο/bot, όχι πραγματικό)")
+            : t("Άνοιξε")
+          : t("Κλικ σε σύνδεσμο") + (e.url ? `: ${e.url}` : ""),
       at: e.occurredAt,
       kind: e.type === "open" ? (e.isBot ? "bot" : "open") : "click",
     })),
@@ -184,7 +184,7 @@ function EventTrace({ sentAt, events = [] }) {
           {it.kind === "open" && <Eye size={11} style={{ color: C.sky }} className="shrink-0" />}
           {it.kind === "bot" && <Info size={11} style={{ color: C.slate }} className="shrink-0" />}
           {it.kind === "click" && <LinkIcon size={11} style={{ color: C.amber }} className="shrink-0" />}
-          <span className="truncate">{it.label}</span>
+          <span className="truncate">{t(it.label)}</span>
           <span className="ml-auto shrink-0 pl-2" style={{ color: C.slate }}>{fmtDateTime(it.at)}</span>
         </div>
       ))}
@@ -201,7 +201,7 @@ function Pill({ status }) {
       style={{ backgroundColor: `${meta.color}1A`, color: meta.color }}
     >
       <meta.Icon size={12} strokeWidth={2.5} />
-      {meta.label}
+      {t(meta.label)}
     </span>
   );
 }
@@ -301,7 +301,7 @@ function GlobalSearch({ onSelectContact }) {
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Αναζήτηση επαφών…"
+          placeholder={t("Αναζήτηση επαφών…")}
           className="w-full rounded-lg pl-8 pr-3 py-2 text-xs border outline-none"
           style={{ borderColor: C.line, color: C.ink, backgroundColor: C.pale }}
         />
@@ -309,9 +309,9 @@ function GlobalSearch({ onSelectContact }) {
       {open && (
         <div className="absolute left-3 right-3 mt-1 rounded-lg border bg-white shadow-lg z-50 overflow-hidden max-h-64 overflow-y-auto" style={{ borderColor: C.line }}>
           {loading ? (
-            <div className="px-3 py-2 text-xs" style={{ color: C.slate }}>Αναζήτηση…</div>
+            <div className="px-3 py-2 text-xs" style={{ color: C.slate }}>{t("Αναζήτηση…")}</div>
           ) : results.length === 0 ? (
-            <div className="px-3 py-2 text-xs" style={{ color: C.slate }}>Καμία επαφή.</div>
+            <div className="px-3 py-2 text-xs" style={{ color: C.slate }}>{t("Καμία επαφή.")}</div>
           ) : (
             results.map((c) => (
               <button key={c.id} type="button" onClick={() => handleSelect(c)}
@@ -383,14 +383,14 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
   }
 
   function handleLink() {
-    const raw = window.prompt("Σύνδεσμος (URL):", "https://");
+    const raw = window.prompt(t("Σύνδεσμος (URL):"), "https://");
     if (!raw || !raw.trim()) return;
     const url = normalizeLinkUrl(raw);
     try {
       // eslint-disable-next-line no-new
       new URL(url);
     } catch {
-      window.alert("Ο σύνδεσμος δεν φαίνεται έγκυρος.");
+      window.alert(t("Ο σύνδεσμος δεν φαίνεται έγκυρος."));
       return;
     }
     const safeUrl = url.replace(/"/g, "&quot;");
@@ -438,11 +438,11 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
     const next = [...attachments];
     for (const file of files) {
       if (next.length >= MAX_ATTACHMENTS) {
-        setAttachError(`Μέχρι ${MAX_ATTACHMENTS} αρχεία ανά email.`);
+        setAttachError(t("Μέχρι {n} αρχεία ανά email.", { n: MAX_ATTACHMENTS }));
         break;
       }
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        setAttachError(`Το "${file.name}" ξεπερνάει τα 2MB.`);
+        setAttachError(t("Το \"{name}\" ξεπερνάει τα 2MB.", { name: file.name }));
         continue;
       }
       const contentBase64 = await fileToBase64(file);
@@ -465,22 +465,22 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
   return (
     <div className="rounded-lg border overflow-hidden" style={{ borderColor: C.line }}>
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b flex-wrap" style={{ borderColor: C.line, backgroundColor: C.pale }}>
-        <ToolBtn onClick={() => exec("bold")} title="Έντονα"><Bold size={14} /></ToolBtn>
-        <ToolBtn onClick={() => exec("italic")} title="Πλάγια"><Italic size={14} /></ToolBtn>
-        <ToolBtn onClick={() => exec("underline")} title="Υπογράμμιση"><Underline size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("bold")} title={t("Έντονα")}><Bold size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("italic")} title={t("Πλάγια")}><Italic size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("underline")} title={t("Υπογράμμιση")}><Underline size={14} /></ToolBtn>
         <span className="w-px h-4 mx-1" style={{ backgroundColor: C.line }} />
-        <ToolBtn onClick={() => exec("insertUnorderedList")} title="Λίστα με κουκκίδες"><List size={14} /></ToolBtn>
-        <ToolBtn onClick={() => exec("insertOrderedList")} title="Αριθμημένη λίστα"><ListOrdered size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("insertUnorderedList")} title={t("Λίστα με κουκκίδες")}><List size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("insertOrderedList")} title={t("Αριθμημένη λίστα")}><ListOrdered size={14} /></ToolBtn>
         <span className="w-px h-4 mx-1" style={{ backgroundColor: C.line }} />
-        <ToolBtn onClick={() => exec("justifyLeft")} title="Στοίχιση αριστερά"><AlignLeft size={14} /></ToolBtn>
-        <ToolBtn onClick={() => exec("justifyCenter")} title="Στοίχιση στο κέντρο"><AlignCenter size={14} /></ToolBtn>
-        <ToolBtn onClick={() => exec("justifyRight")} title="Στοίχιση δεξιά"><AlignRight size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("justifyLeft")} title={t("Στοίχιση αριστερά")}><AlignLeft size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("justifyCenter")} title={t("Στοίχιση στο κέντρο")}><AlignCenter size={14} /></ToolBtn>
+        <ToolBtn onClick={() => exec("justifyRight")} title={t("Στοίχιση δεξιά")}><AlignRight size={14} /></ToolBtn>
         <span className="w-px h-4 mx-1" style={{ backgroundColor: C.line }} />
-        <ToolBtn onClick={handleLink} title="Σύνδεσμος"><LinkIcon size={14} /></ToolBtn>
+        <ToolBtn onClick={handleLink} title={t("Σύνδεσμος")}><LinkIcon size={14} /></ToolBtn>
         {onAttachmentsChange && (
           <>
             <input ref={fileRef} type="file" multiple className="hidden" onChange={handleFiles} />
-            <ToolBtn onClick={() => fileRef.current?.click()} title="Επισύναψη αρχείου"><Paperclip size={14} /></ToolBtn>
+            <ToolBtn onClick={() => fileRef.current?.click()} title={t("Επισύναψη αρχείου")}><Paperclip size={14} /></ToolBtn>
           </>
         )}
       </div>
@@ -516,7 +516,7 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
 function AutoTrackingPixelNote() {
   return (
     <div className="flex items-center gap-1.5 text-[11px] mt-2" style={{ color: C.slate }}>
-      <Info size={11} className="shrink-0" /> Προστίθεται επίσης ένα αόρατο pixel παρακολούθησης ανοίγματος σε κάθε αποστολή.
+      <Info size={11} className="shrink-0" /> {t("Προστίθεται επίσης ένα αόρατο pixel παρακολούθησης ανοίγματος σε κάθε αποστολή.")}
     </div>
   );
 }
@@ -538,8 +538,8 @@ function GmailBanner({ user }) {
       <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
         <span>
           {isOwner
-            ? "Δεν έχετε συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό."
-            : "Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον ιδιοκτήτη να το συνδέσει."}
+            ? t("Δεν έχετε συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό.")
+            : t("Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον ιδιοκτήτη να το συνδέσει.")}
         </span>
         {isOwner && (
           <a
@@ -547,7 +547,7 @@ function GmailBanner({ user }) {
             className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0"
             style={{ backgroundColor: C.amber }}
           >
-            Σύνδεση Gmail
+            {t("Σύνδεση Gmail")}
           </a>
         )}
       </div>
@@ -565,8 +565,8 @@ function GmailBanner({ user }) {
       <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>
         <span>
           {isOwner
-            ? "Η σύνδεση Gmail διακόπηκε (πιθανώς ανακλήθηκε η πρόσβαση) — οι αποστολές έχουν σταματήσει μέχρι να συνδεθεί ξανά."
-            : "Η σύνδεση Gmail του workspace διακόπηκε — ζήτησε από τον ιδιοκτήτη να τη συνδέσει ξανά."}
+            ? t("Η σύνδεση Gmail διακόπηκε (πιθανώς ανακλήθηκε η πρόσβαση) — οι αποστολές έχουν σταματήσει μέχρι να συνδεθεί ξανά.")
+            : t("Η σύνδεση Gmail του workspace διακόπηκε — ζήτησε από τον ιδιοκτήτη να τη συνδέσει ξανά.")}
         </span>
         {isOwner && (
           <a
@@ -574,7 +574,7 @@ function GmailBanner({ user }) {
             className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0"
             style={{ backgroundColor: C.coral }}
           >
-            Επανασύνδεση Gmail
+            {t("Επανασύνδεση Gmail")}
           </a>
         )}
       </div>
@@ -590,12 +590,12 @@ function GmailBanner({ user }) {
       <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
         <span>
           {isOwner
-            ? `${user.gmail.brokenCount} από τα ${user.gmail.mailboxCount} mailbox χρειάζονται επανασύνδεση — η αποστολή συνεχίζει με μειωμένη χωρητικότητα.`
-            : "Ένα mailbox του workspace χρειάζεται επανασύνδεση — ζήτησε από τον ιδιοκτήτη να το φτιάξει."}
+            ? t("{broken} από τα {total} mailbox χρειάζονται επανασύνδεση — η αποστολή συνεχίζει με μειωμένη χωρητικότητα.", { broken: user.gmail.brokenCount, total: user.gmail.mailboxCount })
+            : t("Ένα mailbox του workspace χρειάζεται επανασύνδεση — ζήτησε από τον ιδιοκτήτη να το φτιάξει.")}
         </span>
         {isOwner && (
           <a href={`${API_URL}/auth/google`} className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0" style={{ backgroundColor: C.amber }}>
-            Επανασύνδεση
+            {t("Επανασύνδεση")}
           </a>
         )}
       </div>
@@ -617,8 +617,8 @@ function GmailBanner({ user }) {
     >
       <span>
         {capped
-          ? `Το ημερήσιο όριο emails (${sentToday}/${dailyCap}) έχει συμπληρωθεί — η αποστολή θα συνεχίσει αύριο.`
-          : `Πλησιάζετε το ημερήσιο όριο emails: ${sentToday}/${dailyCap} έχουν σταλεί σήμερα.`}
+          ? t("Το ημερήσιο όριο emails ({sent}/{cap}) έχει συμπληρωθεί — η αποστολή θα συνεχίσει αύριο.", { sent: sentToday, cap: dailyCap })
+          : t("Πλησιάζετε το ημερήσιο όριο emails: {sent}/{cap} έχουν σταλεί σήμερα.", { sent: sentToday, cap: dailyCap })}
       </span>
     </div>
   );
@@ -642,7 +642,7 @@ function NewContactModal({ onClose, onCreate }) {
       await onCreate(form);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία επαφής.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η δημιουργία επαφής."));
     } finally {
       setBusy(false);
     }
@@ -652,35 +652,35 @@ function NewContactModal({ onClose, onCreate }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5 max-h-[88vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέα επαφή</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Νέα επαφή")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <input required placeholder="Όνομα (εμφανίζεται ως {{name}} σε emails)" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          <input required placeholder={t("Όνομα (εμφανίζεται ως {{name}} σε emails)")} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div className="grid grid-cols-2 gap-2">
-            <input placeholder="Όνομα (first name)" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+            <input placeholder={t("Όνομα (first name)")} value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-            <input placeholder="Επώνυμο (last name)" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+            <input placeholder={t("Επώνυμο (last name)")} value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
           <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div className="grid grid-cols-2 gap-2">
-            <input placeholder="Τηλέφωνο" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            <input placeholder={t("Τηλέφωνο")} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-            <input placeholder="Εταιρεία" value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+            <input placeholder={t("Εταιρεία")} value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <input placeholder="Κατηγορία (π.χ. Lead, Πελάτης)" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+            <input placeholder={t("Κατηγορία (π.χ. Lead, Πελάτης)")} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-            <input placeholder="Ετικέτες (χωρισμένες με κόμμα)" value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
+            <input placeholder={t("Ετικέτες (χωρισμένες με κόμμα)")} value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
-          <input placeholder="Ζώνη ώρας (προαιρετικό, π.χ. Europe/London — για send window στην ώρα του παραλήπτη)" value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
+          <input placeholder={t("Ζώνη ώρας (προαιρετικό, π.χ. Europe/London — για send window στην ώρα του παραλήπτη)")} value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Website (προαιρετικό — {{website}} σε emails)" value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
+          <input placeholder={t("Website (προαιρετικό — {{website}} σε emails)")} value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div className="grid grid-cols-2 gap-2">
             <input placeholder="GMB" value={form.gmb} onChange={(e) => setForm((f) => ({ ...f, gmb: e.target.value }))}
@@ -694,22 +694,22 @@ function NewContactModal({ onClose, onCreate }) {
             <input placeholder="Google Reviews" value={form.googleReviews} onChange={(e) => setForm((f) => ({ ...f, googleReviews: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
-          <input placeholder="Report link (προαιρετικό — {{report_link}} σε emails)" value={form.reportLink} onChange={(e) => setForm((f) => ({ ...f, reportLink: e.target.value }))}
+          <input placeholder={t("Report link (προαιρετικό — {{report_link}} σε emails)")} value={form.reportLink} onChange={(e) => setForm((f) => ({ ...f, reportLink: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="LinkedIn profile URL (προαιρετικό — για LinkedIn outreach)" value={form.linkedinProfileUrl} onChange={(e) => setForm((f) => ({ ...f, linkedinProfileUrl: e.target.value }))}
+          <input placeholder={t("LinkedIn profile URL (προαιρετικό — για LinkedIn outreach)")} value={form.linkedinProfileUrl} onChange={(e) => setForm((f) => ({ ...f, linkedinProfileUrl: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div>
             <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
-              Σχόλια <span style={{ fontWeight: 400 }}>— διαθέσιμο ως {"{{comments}}"} σε emails</span>
+              {t("Σχόλια")} <span style={{ fontWeight: 400 }}>{t("— διαθέσιμο ως {{comments}} σε emails")}</span>
             </label>
             <RichTextEditor value={form.comments} onChange={(html) => setForm((f) => ({ ...f, comments: html }))} minHeight={70} />
           </div>
-          <textarea placeholder="Internal σχόλια (προαιρετικό — ΔΕΝ χρησιμοποιείται σε emails, μόνο εσωτερική χρήση)"
+          <textarea placeholder={t("Internal σχόλια (προαιρετικό — ΔΕΝ χρησιμοποιείται σε emails, μόνο εσωτερική χρήση)")}
             value={form.internalNotes} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.value }))}
             rows={2} className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Προσθήκη
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Προσθήκη")}
           </button>
         </form>
       </Card>
@@ -747,12 +747,12 @@ function LinkedInContactPanel({ contact, onChanged }) {
     setBusy("inmail"); setMsg(""); setErr("");
     try {
       await api.post(`/linkedin/contacts/${contact.id}/inmail`, { subject: inmailSubject || undefined, text: inmailText });
-      setMsg("Το InMail στάλθηκε ✓");
+      setMsg(t("Το InMail στάλθηκε ✓"));
       setInmailSubject(""); setInmailText(""); setInmailOpen(false);
       onChanged && onChanged();
     } catch (e) {
       const code = e instanceof ApiError && e.data && e.data.error;
-      setErr(code === "daily_inmail_cap_reached" ? "Συμπληρώθηκε το ημερήσιο όριο InMail." : (e instanceof ApiError ? e.message : "Η αποστολή απέτυχε."));
+      setErr(code === "daily_inmail_cap_reached" ? t("Συμπληρώθηκε το ημερήσιο όριο InMail.") : (e instanceof ApiError ? e.message : t("Η αποστολή απέτυχε.")));
     } finally {
       setBusy("");
     }
@@ -762,11 +762,11 @@ function LinkedInContactPanel({ contact, onChanged }) {
     setBusy(kind); setMsg(""); setErr("");
     try {
       const r = await fn();
-      if (r && r.skipped) setMsg(r.reason === "already_connected" ? "Είστε ήδη συνδεδεμένοι." : "Παραλείφθηκε.");
-      else setMsg("Έγινε ✓");
+      if (r && r.skipped) setMsg(r.reason === "already_connected" ? t("Είστε ήδη συνδεδεμένοι.") : t("Παραλείφθηκε."));
+      else setMsg(t("Έγινε ✓"));
       onChanged && onChanged();
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Η ενέργεια απέτυχε.");
+      setErr(e instanceof ApiError ? e.message : t("Η ενέργεια απέτυχε."));
     } finally {
       setBusy("");
     }
@@ -779,24 +779,24 @@ function LinkedInContactPanel({ contact, onChanged }) {
           <Linkedin size={14} /> LinkedIn outreach
         </span>
         <span className="text-xs" style={{ color: connected ? C.mint : pending ? C.amber : C.slate }}>
-          {LINKEDIN_STATUS_LABELS[status] || status}
+          {t(LINKEDIN_STATUS_LABELS[status] || status)}
         </span>
       </div>
       {!connected && !pending && (
         <>
           <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300}
-            placeholder="Προσωπικό σημείωμα (προαιρετικό, max 300 χαρ.)"
+            placeholder={t("Προσωπικό σημείωμα (προαιρετικό, max 300 χαρ.)")}
             className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none mb-2" style={{ borderColor: C.line, color: C.ink }} />
           <div className="flex items-center gap-2">
             <button type="button" disabled={!!busy}
               onClick={() => act("connect", () => api.post(`/linkedin/contacts/${contact.id}/connect`, { note: note || undefined }))}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}>
-              {busy === "connect" ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />} Αίτημα σύνδεσης
+              {busy === "connect" ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />} {t("Αίτημα σύνδεσης")}
             </button>
             <button type="button" disabled={!!busy}
               onClick={() => act("resolve", () => api.post(`/linkedin/contacts/${contact.id}/resolve`))}
               className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
-              Έλεγχος προφίλ
+              {t("Έλεγχος προφίλ")}
             </button>
           </div>
         </>
@@ -805,7 +805,7 @@ function LinkedInContactPanel({ contact, onChanged }) {
         <button type="button" disabled={!!busy}
           onClick={() => act("withdraw", () => api.post(`/linkedin/contacts/${contact.id}/withdraw`))}
           className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.coral, opacity: busy ? 0.6 : 1 }}>
-          {busy === "withdraw" ? "Ανάκληση…" : "Ανάκληση αιτήματος"}
+          {busy === "withdraw" ? t("Ανάκληση…") : t("Ανάκληση αιτήματος")}
         </button>
       )}
 
@@ -813,21 +813,21 @@ function LinkedInContactPanel({ contact, onChanged }) {
       <div className="mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
         <button type="button" onClick={() => setInmailOpen((o) => !o)}
           className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.sky }}>
-          <Send size={12} /> {inmailOpen ? "Απόκρυψη InMail" : "Αποστολή InMail (premium)"}
+          <Send size={12} /> {inmailOpen ? t("Απόκρυψη InMail") : t("Αποστολή InMail (premium)")}
         </button>
         {inmailOpen && (
           <div className="mt-2 space-y-2">
             <input value={inmailSubject} onChange={(e) => setInmailSubject(e.target.value)} maxLength={200}
-              placeholder="Θέμα InMail"
+              placeholder={t("Θέμα InMail")}
               className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
             <textarea value={inmailText} onChange={(e) => setInmailText(e.target.value)} rows={3} maxLength={8000}
-              placeholder="Μήνυμα InMail… (υποστηρίζει {{first_name}} κ.λπ.)"
+              placeholder={t("Μήνυμα InMail… (υποστηρίζει {{first_name}} κ.λπ.)")}
               className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
             <button type="button" disabled={!!busy || !inmailText.trim()} onClick={sendInmail}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: C.sky, opacity: (busy || !inmailText.trim()) ? 0.6 : 1 }}>
-              {busy === "inmail" ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Αποστολή InMail
+              {busy === "inmail" ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} {t("Αποστολή InMail")}
             </button>
-            <p className="text-[11px]" style={{ color: C.slate }}>Χρειάζεται premium LinkedIn (Sales Navigator/Recruiter) και καταναλώνει InMail credit.</p>
+            <p className="text-[11px]" style={{ color: C.slate }}>{t("Χρειάζεται premium LinkedIn (Sales Navigator/Recruiter) και καταναλώνει InMail credit.")}</p>
           </div>
         )}
       </div>
@@ -917,7 +917,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
         linkedinProfileUrl: data.linkedinProfileUrl || "",
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στοιχεία επαφής.");
+      setError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα στοιχεία επαφής."));
     } finally {
       setLoading(false);
     }
@@ -1011,25 +1011,25 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
     <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <div className="w-full max-w-lg h-full bg-white overflow-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white" style={{ borderColor: C.line }}>
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Στοιχεία επαφής</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Στοιχεία επαφής")}</h3>
           <div className="flex items-center gap-3">
             <button onClick={handleMarkReplied} disabled={markingReplied}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border"
               style={{ borderColor: C.line, color: C.mint, opacity: markingReplied ? 0.6 : 1 }}
-              title="Δεν διαβάζουμε το inbox σου — σημείωσε το χειροκίνητα όταν κάποιος απαντήσει, για να σταματήσει το sequence και να μετρήσει σωστά το reply rate.">
-              <Reply size={13} /> Mark ως απάντησε
+              title={t("Δεν διαβάζουμε το inbox σου — σημείωσε το χειροκίνητα όταν κάποιος απαντήσει, για να σταματήσει το sequence και να μετρήσει σωστά το reply rate.")}>
+              <Reply size={13} /> {t("Mark ως απάντησε")}
             </button>
             <button onClick={onCompose}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
               style={{ backgroundColor: C.sky }}>
-              <Mail size={13} /> Αποστολή email
+              <Mail size={13} /> {t("Αποστολή email")}
             </button>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
           </div>
         </div>
 
         {loading ? (
-          <Spinner label="Φόρτωση…" />
+          <Spinner label={t("Φόρτωση…")} />
         ) : error ? (
           <div className="p-6"><ErrorNote message={error} onRetry={load} /></div>
         ) : detail ? (
@@ -1038,35 +1038,35 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
               {editingContact ? (
                 <div className="space-y-2">
                   <input value={contactForm.name} onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="Όνομα (εμφανίζεται ως {{name}} σε emails)"
+                    placeholder={t("Όνομα (εμφανίζεται ως {{name}} σε emails)")}
                     className="w-full rounded-lg px-3 py-1.5 text-sm font-semibold border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   <div className="text-sm" style={{ color: C.slate }}>{detail.email}</div>
                   <div className="grid grid-cols-2 gap-2">
                     <input value={contactForm.firstName} onChange={(e) => setContactForm((f) => ({ ...f, firstName: e.target.value }))}
-                      placeholder="Όνομα (first name)"
+                      placeholder={t("Όνομα (first name)")}
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                     <input value={contactForm.lastName} onChange={(e) => setContactForm((f) => ({ ...f, lastName: e.target.value }))}
-                      placeholder="Επώνυμο (last name)"
+                      placeholder={t("Επώνυμο (last name)")}
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input value={contactForm.phone} onChange={(e) => setContactForm((f) => ({ ...f, phone: e.target.value }))}
-                      placeholder="Τηλέφωνο"
+                      placeholder={t("Τηλέφωνο")}
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                     <input value={contactForm.company} onChange={(e) => setContactForm((f) => ({ ...f, company: e.target.value }))}
-                      placeholder="Εταιρεία"
+                      placeholder={t("Εταιρεία")}
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input value={contactForm.category} onChange={(e) => setContactForm((f) => ({ ...f, category: e.target.value }))}
-                      placeholder="Κατηγορία"
+                      placeholder={t("Κατηγορία")}
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                     <input value={contactForm.tags} onChange={(e) => setContactForm((f) => ({ ...f, tags: e.target.value }))}
-                      placeholder="Ετικέτες (χωρισμένες με κόμμα)"
+                      placeholder={t("Ετικέτες (χωρισμένες με κόμμα)")}
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   </div>
                   <input value={contactForm.timezone} onChange={(e) => setContactForm((f) => ({ ...f, timezone: e.target.value }))}
-                    placeholder="Ζώνη ώρας (π.χ. Europe/London — για send window στην ώρα του παραλήπτη)"
+                    placeholder={t("Ζώνη ώρας (π.χ. Europe/London — για send window στην ώρα του παραλήπτη)")}
                     className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   <div className="grid grid-cols-2 gap-2">
                     <input value={contactForm.website} onChange={(e) => setContactForm((f) => ({ ...f, website: e.target.value }))}
@@ -1093,16 +1093,16 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   </div>
                   <input value={contactForm.linkedinProfileUrl} onChange={(e) => setContactForm((f) => ({ ...f, linkedinProfileUrl: e.target.value }))}
-                    placeholder="LinkedIn profile URL (για LinkedIn outreach)"
+                    placeholder={t("LinkedIn profile URL (για LinkedIn outreach)")}
                     className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   <div className="flex items-center gap-2 mt-1">
                     <button type="button" onClick={handleSaveContact} disabled={savingContact}
                       className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: C.sky, opacity: savingContact ? 0.6 : 1 }}>
-                      {savingContact && <Loader2 size={12} className="animate-spin" />} Αποθήκευση
+                      {savingContact && <Loader2 size={12} className="animate-spin" />} {t("Αποθήκευση")}
                     </button>
                     <button type="button" onClick={handleCancelEditContact} disabled={savingContact}
                       className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
-                      Ακύρωση
+                      {t("Ακύρωση")}
                     </button>
                   </div>
                 </div>
@@ -1113,7 +1113,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                     <div className="text-sm" style={{ color: C.slate }}>{detail.email}</div>
                     <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: C.slate }}>
                       {detail.phone && (
-                        <a href={`tel:${detail.phone}`} className="flex items-center gap-1 hover:underline" style={{ color: C.slate }} title="Κλήση">
+                        <a href={`tel:${detail.phone}`} className="flex items-center gap-1 hover:underline" style={{ color: C.slate }} title={t("Κλήση")}>
                           <Phone size={12} /> {detail.phone}
                         </a>
                       )}
@@ -1172,8 +1172,8 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                   </div>
                   <button type="button" onClick={() => setEditingContact(true)}
                     className="flex items-center gap-1 shrink-0 rounded-lg px-2 py-1 text-xs font-medium" style={{ color: C.sky }}
-                    title="Επεξεργασία στοιχείων επαφής">
-                    <Pencil size={12} /> Επεξεργασία
+                    title={t("Επεξεργασία στοιχείων επαφής")}>
+                    <Pencil size={12} /> {t("Επεξεργασία")}
                   </button>
                 </div>
               )}
@@ -1185,13 +1185,13 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                     </span>
                     <button onClick={handleToggleUnsubscribed} disabled={togglingUnsub}
                       className="text-xs font-medium underline shrink-0" style={{ color: C.coral, opacity: togglingUnsub ? 0.6 : 1 }}>
-                      Ακύρωση
+                      {t("Ακύρωση")}
                     </button>
                   </div>
                 ) : (
                   <button onClick={handleToggleUnsubscribed} disabled={togglingUnsub}
                     className="text-xs font-medium underline" style={{ color: C.slate, opacity: togglingUnsub ? 0.6 : 1 }}>
-                    Επισήμανση ως unsubscribed
+                    {t("Επισήμανση ως unsubscribed")}
                   </button>
                 )}
               </div>
@@ -1203,7 +1203,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
 
             <div>
               <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
-                <StickyNote size={13} /> Σχόλια <span style={{ color: C.slate, fontWeight: 400 }}>— διαθέσιμο ως {"{{comments}}"} σε emails</span>
+                <StickyNote size={13} /> {t("Σχόλια")} <span style={{ color: C.slate, fontWeight: 400 }}>{t("— διαθέσιμο ως {{comments}} σε emails")}</span>
               </label>
               <RichTextEditor
                 value={comments}
@@ -1218,20 +1218,20 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                   className="text-xs font-medium rounded-lg px-2.5 py-1 text-white"
                   style={{ backgroundColor: C.sky, opacity: savingComments || comments === (detail.comments || "") ? 0.5 : 1 }}
                 >
-                  {savingComments ? "Αποθήκευση…" : "Αποθήκευση σχολίων"}
+                  {savingComments ? t("Αποθήκευση…") : t("Αποθήκευση σχολίων")}
                 </button>
-                {commentsSaved && <span className="text-xs" style={{ color: C.mint }}>Αποθηκεύτηκε ✓</span>}
+                {commentsSaved && <span className="text-xs" style={{ color: C.mint }}>{t("Αποθηκεύτηκε ✓")}</span>}
               </div>
             </div>
 
             <div>
               <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
-                <StickyNote size={13} /> Internal σχόλια <span style={{ color: C.slate, fontWeight: 400 }}>— εσωτερική χρήση μόνο, ΔΕΝ στέλνεται ποτέ σε email</span>
+                <StickyNote size={13} /> {t("Internal σχόλια")} <span style={{ color: C.slate, fontWeight: 400 }}>{t("— εσωτερική χρήση μόνο, ΔΕΝ στέλνεται ποτέ σε email")}</span>
               </label>
               <textarea
                 value={internalNotes}
                 onChange={(e) => { setInternalNotes(e.target.value); setInternalNotesSaved(false); }}
-                placeholder="π.χ. εσωτερική σημείωση για το πώς προσεγγίσαμε αυτή την επαφή..."
+                placeholder={t("π.χ. εσωτερική σημείωση για το πώς προσεγγίσαμε αυτή την επαφή...")}
                 rows={2}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none"
                 style={{ borderColor: C.line, color: C.ink }}
@@ -1244,15 +1244,15 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                   className="text-xs font-medium rounded-lg px-2.5 py-1 text-white"
                   style={{ backgroundColor: C.sky, opacity: savingInternalNotes || internalNotes === (detail.internalNotes || "") ? 0.5 : 1 }}
                 >
-                  {savingInternalNotes ? "Αποθήκευση…" : "Αποθήκευση internal σχολίων"}
+                  {savingInternalNotes ? t("Αποθήκευση…") : t("Αποθήκευση internal σχολίων")}
                 </button>
-                {internalNotesSaved && <span className="text-xs" style={{ color: C.mint }}>Αποθηκεύτηκε ✓</span>}
+                {internalNotesSaved && <span className="text-xs" style={{ color: C.mint }}>{t("Αποθηκεύτηκε ✓")}</span>}
               </div>
             </div>
 
             <div>
               <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
-                <CalendarClock size={13} /> Επόμενη υπενθύμιση
+                <CalendarClock size={13} /> {t("Επόμενη υπενθύμιση")}
               </label>
               <input
                 type="date"
@@ -1265,16 +1265,16 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
 
             <div>
               <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
-                <Euro size={14} /> Προσφορές ({detail.offers?.length || 0})
+                <Euro size={14} /> {t("Προσφορές")} ({detail.offers?.length || 0})
               </div>
               {(!detail.offers || detail.offers.length === 0) ? (
-                <p className="text-xs" style={{ color: C.slate }}>Καμία προσφορά ακόμα.</p>
+                <p className="text-xs" style={{ color: C.slate }}>{t("Καμία προσφορά ακόμα.")}</p>
               ) : (
                 <div className="space-y-2">
                   {detail.offers.map((o) => (
                     <div key={o.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
                       <span className="text-xs font-medium" style={{ color: C.ink }}>{o.title}</span>
-                      <span className="text-xs" style={{ color: C.slate }}>{fmtMoney(o.value, o.currency)} · {OFFER_STATUSES.find((s) => s.key === o.status)?.label}</span>
+                      <span className="text-xs" style={{ color: C.slate }}>{fmtMoney(o.value, o.currency)} · {t(OFFER_STATUSES.find((s) => s.key === o.status)?.label || "")}</span>
                     </div>
                   ))}
                 </div>
@@ -1283,36 +1283,36 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
 
             <div>
               <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
-                <Mail size={14} /> Ιστορικό αποστολών ({detail.timeline?.length || 0})
+                <Mail size={14} /> {t("Ιστορικό αποστολών")} ({detail.timeline?.length || 0})
               </div>
               {(!detail.timeline || detail.timeline.length === 0) ? (
-                <p className="text-xs" style={{ color: C.slate }}>Δεν έχει σταλεί κανένα email ακόμα.</p>
+                <p className="text-xs" style={{ color: C.slate }}>{t("Δεν έχει σταλεί κανένα email ακόμα.")}</p>
               ) : (
                 <div className="space-y-2">
-                  {detail.timeline.map((t) => {
-                    const open = expandedLogId === t.id;
+                  {detail.timeline.map((ev) => {
+                    const open = expandedLogId === ev.id;
                     return (
-                      <div key={t.id} className="rounded-lg overflow-hidden" style={{ backgroundColor: C.pale }}>
+                      <div key={ev.id} className="rounded-lg overflow-hidden" style={{ backgroundColor: C.pale }}>
                         <button
                           type="button"
-                          onClick={() => setExpandedLogId(open ? null : t.id)}
+                          onClick={() => setExpandedLogId(open ? null : ev.id)}
                           className="w-full flex items-center justify-between px-3 py-2 text-left"
                         >
                           <div className="min-w-0 flex items-center gap-1.5">
                             <ChevronRight size={12} style={{ color: C.slate, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} className="shrink-0" />
                             <div className="min-w-0">
-                              <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{t.subject}</div>
-                              <div className="text-[11px]" style={{ color: C.slate }}>{t.sequenceName || "Χειροκίνητο"} · {fmtDate(t.sentAt)}</div>
+                              <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{ev.subject}</div>
+                              <div className="text-[11px]" style={{ color: C.slate }}>{ev.sequenceName || t("Χειροκίνητο")} · {fmtDate(ev.sentAt)}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
-                            {t.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>Άνοιξε</span>}
-                            {t.clicked && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.amber}1A`, color: C.amber }}>Κλικ</span>}
+                            {ev.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>{t("Άνοιξε")}</span>}
+                            {ev.clicked && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.amber}1A`, color: C.amber }}>{t("Κλικ")}</span>}
                           </div>
                         </button>
                         {open && (
                           <div className="px-3 pb-2.5 pl-7">
-                            <EventTrace sentAt={t.sentAt} events={t.events} />
+                            <EventTrace sentAt={ev.sentAt} events={ev.events} />
                           </div>
                         )}
                       </div>
@@ -1324,22 +1324,22 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
 
             <div>
               <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
-                <StickyNote size={14} /> Σημειώσεις ({detail.notes?.length || 0})
+                <StickyNote size={14} /> {t("Σημειώσεις")} ({detail.notes?.length || 0})
               </div>
               <form onSubmit={handleAddNote} className="flex gap-2 mb-3">
                 <input
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Νέα σημείωση…"
+                  placeholder={t("Νέα σημείωση…")}
                   className="flex-1 rounded-lg px-3 py-2 text-sm border outline-none"
                   style={{ borderColor: C.line, color: C.ink }}
                 />
                 <button type="submit" disabled={savingNote || !noteText.trim()} className="rounded-lg px-3 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky, opacity: savingNote ? 0.7 : 1 }}>
-                  {savingNote ? <Loader2 size={14} className="animate-spin" /> : "Προσθήκη"}
+                  {savingNote ? <Loader2 size={14} className="animate-spin" /> : t("Προσθήκη")}
                 </button>
               </form>
               {(!detail.notes || detail.notes.length === 0) ? (
-                <p className="text-xs" style={{ color: C.slate }}>Καμία σημείωση ακόμα.</p>
+                <p className="text-xs" style={{ color: C.slate }}>{t("Καμία σημείωση ακόμα.")}</p>
               ) : (
                 <div className="space-y-2">
                   {detail.notes.map((n) => (
@@ -1445,7 +1445,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       setTotal(data.total);
       setDueCount(data.dueCount);
     } catch (err) {
-      setRowsError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η φόρτωση επαφών.");
+      setRowsError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η φόρτωση επαφών."));
     } finally {
       setRowsLoading(false);
     }
@@ -1491,10 +1491,10 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
     setUploadNote("");
     try {
       const result = await onUpload(file);
-      setUploadNote(`Προστέθηκαν ${result.created}, αγνοήθηκαν ${result.skipped}.`);
+      setUploadNote(t("Προστέθηκαν {created}, αγνοήθηκαν {skipped}.", { created: result.created, skipped: result.skipped }));
       await Promise.all([fetchPage(), fetchFacets()]);
     } catch (err) {
-      setUploadNote(err instanceof ApiError ? err.message : "Το ανέβασμα απέτυχε.");
+      setUploadNote(err instanceof ApiError ? err.message : t("Το ανέβασμα απέτυχε."));
     } finally {
       setUploading(false);
     }
@@ -1508,7 +1508,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       setEnrollSeqId("");
       await fetchPage();
     } catch (err) {
-      setUploadNote(err instanceof ApiError ? err.message : "Η εγγραφή απέτυχε.");
+      setUploadNote(err instanceof ApiError ? err.message : t("Η εγγραφή απέτυχε."));
     }
   }
 
@@ -1520,7 +1520,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       setBulkCategory("");
       await Promise.all([fetchPage(), fetchFacets()]);
     } catch (err) {
-      setUploadNote(err instanceof ApiError ? err.message : "Η μαζική ενέργεια απέτυχε.");
+      setUploadNote(err instanceof ApiError ? err.message : t("Η μαζική ενέργεια απέτυχε."));
     } finally {
       setBulkBusy(false);
     }
@@ -1534,7 +1534,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       setBulkTag("");
       await Promise.all([fetchPage(), fetchFacets()]);
     } catch (err) {
-      setUploadNote(err instanceof ApiError ? err.message : "Η μαζική ενέργεια απέτυχε.");
+      setUploadNote(err instanceof ApiError ? err.message : t("Η μαζική ενέργεια απέτυχε."));
     } finally {
       setBulkBusy(false);
     }
@@ -1548,7 +1548,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       setSelected(new Set());
       await fetchPage();
     } catch (err) {
-      setUploadNote(err instanceof ApiError ? err.message : "Η διαγραφή απέτυχε.");
+      setUploadNote(err instanceof ApiError ? err.message : t("Η διαγραφή απέτυχε."));
     } finally {
       setBulkBusy(false);
     }
@@ -1559,7 +1559,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
     try {
       await onExport();
     } catch (err) {
-      setUploadNote(err instanceof ApiError ? err.message : "Η εξαγωγή απέτυχε.");
+      setUploadNote(err instanceof ApiError ? err.message : t("Η εξαγωγή απέτυχε."));
     } finally {
       setExporting(false);
     }
@@ -1632,7 +1632,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            title="Στήλες CSV: name, firstName, lastName, email, phone, company, category, tags, website, reportLink, comments, internalNotes"
+            title={t("Στήλες CSV: name, firstName, lastName, email, phone, company, category, tags, website, reportLink, comments, internalNotes")}
             className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border"
             style={{ borderColor: C.line, color: C.ink, opacity: uploading ? 0.6 : 1 }}
           >
@@ -1672,7 +1672,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
         >
           <option value="all">{t("Όλες οι καταστάσεις")}</option>
           {Object.entries(statusMeta).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
+            <option key={k} value={k}>{t(v.label)}</option>
           ))}
         </select>
 
@@ -1717,20 +1717,20 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
             onClick={() => { setQuery(""); setStatusFilter("all"); setCategoryFilter("all"); setTagFilter("all"); setOnlyDue(false); setHideUnsubscribed(false); setHasWebsiteOnly(false); }}
             className="text-xs font-medium underline" style={{ color: C.slate }}
           >
-            Καθαρισμός φίλτρων
+            {t("Καθαρισμός φίλτρων")}
           </button>
         )}
 
         {selected.size > 0 && (
           <div className="flex items-center gap-2 flex-wrap ml-auto">
-            <span className="text-xs font-medium" style={{ color: C.slate }}>{selected.size} επιλεγμένες</span>
+            <span className="text-xs font-medium" style={{ color: C.slate }}>{t("{n} επιλεγμένες", { n: selected.size })}</span>
             <select
               value={enrollSeqId}
               onChange={(e) => setEnrollSeqId(e.target.value)}
               className="rounded-lg px-2 py-1.5 text-sm border outline-none"
               style={{ borderColor: C.line, color: C.ink }}
             >
-              <option value="">Εγγραφή σε sequence…</option>
+              <option value="">{t("Εγγραφή σε sequence…")}</option>
               {sequences.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <button
@@ -1739,30 +1739,30 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
               className="rounded-lg px-3 py-1.5 text-xs font-medium text-white"
               style={{ backgroundColor: C.sky, opacity: enrollSeqId ? 1 : 0.5 }}
             >
-              Εγγραφή
+              {t("Εγγραφή")}
             </button>
             <input
               value={bulkCategory}
               onChange={(e) => setBulkCategory(e.target.value)}
-              placeholder="Νέα κατηγορία…"
+              placeholder={t("Νέα κατηγορία…")}
               className="w-32 rounded-lg px-2 py-1.5 text-xs border outline-none"
               style={{ borderColor: C.line, color: C.ink }}
             />
             <button onClick={handleBulkCategory} disabled={bulkBusy || !bulkCategory} className="rounded-lg px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
-              Ορισμός κατηγορίας
+              {t("Ορισμός κατηγορίας")}
             </button>
             <input
               value={bulkTag}
               onChange={(e) => setBulkTag(e.target.value)}
-              placeholder="Νέα ετικέτα…"
+              placeholder={t("Νέα ετικέτα…")}
               className="w-28 rounded-lg px-2 py-1.5 text-xs border outline-none"
               style={{ borderColor: C.line, color: C.ink }}
             />
             <button onClick={handleBulkTag} disabled={bulkBusy || !bulkTag.trim()} className="rounded-lg px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
-              Προσθήκη ετικέτας
+              {t("Προσθήκη ετικέτας")}
             </button>
             <button onClick={handleBulkDelete} disabled={bulkBusy} className="rounded-lg px-2.5 py-1.5 text-xs font-medium" style={{ color: C.coral }}>
-              Διαγραφή
+              {t("Διαγραφή")}
             </button>
           </div>
         )}
@@ -1771,7 +1771,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       <div className="flex-1 overflow-auto px-6 py-4">
         <ErrorNote message={rowsError} onRetry={fetchPage} />
         {rowsLoading ? (
-          <Spinner label="Φόρτωση επαφών…" />
+          <Spinner label={t("Φόρτωση επαφών…")} />
         ) : (
           <>
             {/* Desktop table view */}
@@ -1780,15 +1780,15 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                 <thead>
                   <tr className="text-left" style={{ color: C.slate }}>
                     <th className="font-medium pb-3 w-8"></th>
-                    <th className="font-medium pb-3">Όνομα</th>
-                    <th className="font-medium pb-3">Τηλέφωνο</th>
-                    <th className="font-medium pb-3">Εταιρεία</th>
-                    <th className="font-medium pb-3">Κατηγορία</th>
+                    <th className="font-medium pb-3">{t("Όνομα")}</th>
+                    <th className="font-medium pb-3">{t("Τηλέφωνο")}</th>
+                    <th className="font-medium pb-3">{t("Εταιρεία")}</th>
+                    <th className="font-medium pb-3">{t("Κατηγορία")}</th>
                     <th className="font-medium pb-3">Website</th>
                     <th className="font-medium pb-3">Sequence</th>
-                    <th className="font-medium pb-3">Ετικέτες</th>
-                    <th className="font-medium pb-3">Υπενθύμιση</th>
-                    <th className="font-medium pb-3">Τελ. ενέργεια</th>
+                    <th className="font-medium pb-3">{t("Ετικέτες")}</th>
+                    <th className="font-medium pb-3">{t("Υπενθύμιση")}</th>
+                    <th className="font-medium pb-3">{t("Τελ. ενέργεια")}</th>
                     <th className="font-medium pb-3 w-8"></th>
                   </tr>
                 </thead>
@@ -1816,7 +1816,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                       <td className="py-3" style={{ color: C.ink }}>
                         {c.phone ? (
                           <a href={`tel:${c.phone}`} onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1.5 hover:underline" style={{ color: C.ink }} title="Κλήση">
+                            className="flex items-center gap-1.5 hover:underline" style={{ color: C.ink }} title={t("Κλήση")}>
                             <Phone size={13} style={{ color: C.slate }} />
                             {c.phone}
                           </a>
@@ -1847,7 +1847,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                         )}
                       </td>
                       <td className="py-3" style={{ color: C.ink }}>
-                        {c.currentSequence ? `${c.currentSequence} · βήμα ${c.currentStep}` : "—"}
+                        {c.currentSequence ? t("{seq} · βήμα {n}", { seq: c.currentSequence, n: c.currentStep }) : "—"}
                       </td>
                       <td className="py-3">
                         <div className="flex gap-1 flex-wrap">
@@ -1866,14 +1866,14 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                       </td>
                       <td className="py-3 text-xs" style={{ color: C.slate }}>{fmtDate(c.lastActivityAt)}</td>
                       <td className="py-3">
-                        <button onClick={() => setDetailContactId(c.id)} style={{ color: C.slate }} title="Στοιχεία επαφής">
+                        <button onClick={() => setDetailContactId(c.id)} style={{ color: C.slate }} title={t("Στοιχεία επαφής")}>
                           <Eye size={15} />
                         </button>
                       </td>
                     </tr>
                   ))}
                   {rows.length === 0 && (
-                    <tr><td colSpan={11} className="py-10 text-center text-sm" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</td></tr>
+                    <tr><td colSpan={11} className="py-10 text-center text-sm" style={{ color: C.slate }}>{t("Καμία επαφή δεν ταιριάζει.")}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1882,7 +1882,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
             {/* Mobile card view */}
             <div className="md:hidden space-y-3">
               {rows.length === 0 ? (
-                <div className="text-center py-10 text-sm" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</div>
+                <div className="text-center py-10 text-sm" style={{ color: C.slate }}>{t("Καμία επαφή δεν ταιριάζει.")}</div>
               ) : (
                 rows.map((c) => (
                   <div key={c.id} className="rounded-lg border p-4" style={{ borderColor: C.line }}>
@@ -1903,7 +1903,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                         </div>
                         <div className="text-xs truncate" style={{ color: C.slate }}>{c.email}</div>
                       </div>
-                      <button onClick={() => setDetailContactId(c.id)} style={{ color: C.slate }} title="Στοιχεία επαφής">
+                      <button onClick={() => setDetailContactId(c.id)} style={{ color: C.slate }} title={t("Στοιχεία επαφής")}>
                         <Eye size={15} className="shrink-0" />
                       </button>
                     </div>
@@ -1937,11 +1937,11 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                         <div className="flex items-center gap-2">
                           <CalendarClock size={13} style={{ color: C.slate }} className="shrink-0" />
                           <span style={{ color: isFollowUpDue(c.nextFollowUpAt) ? C.coral : C.slate }}>
-                            Υπενθύμιση: {fmtDate(c.nextFollowUpAt)}
+                            {t("Υπενθύμιση: {d}", { d: fmtDate(c.nextFollowUpAt) })}
                           </span>
                         </div>
                       )}
-                      <div className="text-xs" style={{ color: C.slate }}>Τελ. ενέργεια: {fmtDate(c.lastActivityAt)}</div>
+                      <div className="text-xs" style={{ color: C.slate }}>{t("Τελ. ενέργεια: {d}", { d: fmtDate(c.lastActivityAt) })}</div>
                     </div>
                   </div>
                 ))
@@ -1958,16 +1958,16 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
               className="rounded-lg px-3 py-1.5 text-xs font-medium border"
               style={{ borderColor: C.line, color: C.ink, opacity: page <= 1 ? 0.5 : 1 }}
             >
-              Προηγούμενη
+              {t("Προηγούμενη")}
             </button>
-            <span className="text-xs font-medium" style={{ color: C.slate }}>Σελίδα {page} από {pageCount}</span>
+            <span className="text-xs font-medium" style={{ color: C.slate }}>{t("Σελίδα {page} από {total}", { page, total: pageCount })}</span>
             <button
               onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
               disabled={page >= pageCount}
               className="rounded-lg px-3 py-1.5 text-xs font-medium border"
               style={{ borderColor: C.line, color: C.ink, opacity: page >= pageCount ? 0.5 : 1 }}
             >
-              Επόμενη
+              {t("Επόμενη")}
             </button>
           </div>
         )}
@@ -2003,7 +2003,7 @@ function TemplateModal({ initial, onClose, onSave }) {
       await onSave({ name, subject, body, attachments });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποθήκευση.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αποθήκευση."));
     } finally {
       setBusy(false);
     }
@@ -2013,29 +2013,29 @@ function TemplateModal({ initial, onClose, onSave }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-3xl p-5 max-h-[88vh] overflow-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{initial ? "Επεξεργασία template" : "Νέο template"}</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{initial ? t("Επεξεργασία template") : t("Νέο template")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-3">
-            <input required placeholder="Όνομα template" value={name} onChange={(e) => setName(e.target.value)}
+            <input required placeholder={t("Όνομα template")} value={name} onChange={(e) => setName(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
 
             <div>
-              <input required placeholder="Θέμα" value={subject} onChange={(e) => setSubject(e.target.value)}
+              <input required placeholder={t("Θέμα")} value={subject} onChange={(e) => setSubject(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
               <div className="flex items-center justify-between mt-1">
                 <span className="text-[11px]" style={{ color: subject.length > 60 ? C.amber : C.slate }}>
-                  {subject.length} χαρακτήρες {subject.length > 60 ? "(συνιστάται κάτω από 60 για καλύτερο open rate)" : ""}
+                  {t("{n} χαρακτήρες", { n: subject.length })} {subject.length > 60 ? t("(συνιστάται κάτω από 60 για καλύτερο open rate)") : ""}
                 </span>
               </div>
               {subjectSpam.length > 0 && (
-                <p className="text-[11px] mt-1" style={{ color: C.amber }}>⚠ Πιθανές λέξεις spam-trigger: {subjectSpam.join(", ")}</p>
+                <p className="text-[11px] mt-1" style={{ color: C.amber }}>{t("⚠ Πιθανές λέξεις spam-trigger: {words}", { words: subjectSpam.join(", ") })}</p>
               )}
             </div>
 
             <div className="flex gap-1.5 flex-wrap">
-              <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
+              <span className="text-[11px] self-center" style={{ color: C.slate }}>{t("Εισαγωγή token:")}</span>
               {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{gmb}}", "{{facebook}}", "{{instagram}}", "{{google_reviews}}", "{{report_link}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
@@ -2045,25 +2045,25 @@ function TemplateModal({ initial, onClose, onSave }) {
             </div>
             <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={180} />
             <div className="flex items-center justify-between">
-              <span className="text-[11px]" style={{ color: C.slate }}>{plainBody.trim().length} χαρακτήρες · {plainBody.split(/\s+/).filter(Boolean).length} λέξεις</span>
+              <span className="text-[11px]" style={{ color: C.slate }}>{t("{chars} χαρακτήρες · {words} λέξεις", { chars: plainBody.trim().length, words: plainBody.split(/\s+/).filter(Boolean).length })}</span>
             </div>
             {bodySpam.length > 0 && (
-              <p className="text-[11px]" style={{ color: C.amber }}>⚠ Πιθανές λέξεις spam-trigger: {bodySpam.join(", ")}</p>
+              <p className="text-[11px]" style={{ color: C.amber }}>{t("⚠ Πιθανές λέξεις spam-trigger: {words}", { words: bodySpam.join(", ") })}</p>
             )}
             {!hasUnsubscribeLink(body) && body.length > 0 && (
-              <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής — βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails. Πρόσθεσε ένα link με href {"{{unsubscribe_link}}"}.</TipBanner>
+              <TipBanner>{t("Best practice: το email δεν έχει σύνδεσμο απεγγραφής — βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails. Πρόσθεσε ένα link με href {{unsubscribe_link}}.")}</TipBanner>
             )}
 
             {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
             <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-              {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+              {busy && <Loader2 size={14} className="animate-spin" />} {t("Αποθήκευση")}
             </button>
           </div>
 
           <div>
-            <p className="text-xs font-medium mb-2" style={{ color: C.slate }}>Προεπισκόπηση (με δείγμα δεδομένων)</p>
+            <p className="text-xs font-medium mb-2" style={{ color: C.slate }}>{t("Προεπισκόπηση (με δείγμα δεδομένων)")}</p>
             <Card className="p-4" style={{ backgroundColor: C.pale }}>
-              <div className="text-xs mb-2" style={{ color: C.slate }}>Προς: {MERGE_SAMPLE.name} &lt;{MERGE_SAMPLE.email}&gt;</div>
+              <div className="text-xs mb-2" style={{ color: C.slate }}>{t("Προς:")} {MERGE_SAMPLE.name} &lt;{MERGE_SAMPLE.email}&gt;</div>
               <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{renderPreview(subject) || "—"}</div>
               <div className="text-sm" style={{ color: C.ink }} dangerouslySetInnerHTML={{ __html: renderPreview(body) || "—" }} />
               <AutoTrackingPixelNote />
@@ -2123,49 +2123,49 @@ function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Templates</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{templates.length} αποθηκευμένα templates</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("{n} αποθηκευμένα templates", { n: templates.length })}</p>
         </div>
         <button onClick={() => setEditing("new")} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky }}>
-          <Plus size={15} /> Νέο template
+          <Plus size={15} /> {t("Νέο template")}
         </button>
       </div>
       <div className="px-8 py-6">
         <ErrorNote message={error} onRetry={onReload} />
         {loading ? (
-          <Spinner label="Φόρτωση templates…" />
+          <Spinner label={t("Φόρτωση templates…")} />
         ) : templates.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
             <FileText size={28} strokeWidth={1.5} />
-            Δεν υπάρχουν templates ακόμα.
+            {t("Δεν υπάρχουν templates ακόμα.")}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {templates.map((t) => (
-              <Card key={t.id} className="p-4">
+            {templates.map((tpl) => (
+              <Card key={tpl.id} className="p-4">
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate" style={{ color: C.ink }}>{t.name}</div>
-                    <div className="text-xs truncate mt-0.5" style={{ color: C.slate }}>{t.subject}</div>
+                    <div className="text-sm font-semibold truncate" style={{ color: C.ink }}>{tpl.name}</div>
+                    <div className="text-xs truncate mt-0.5" style={{ color: C.slate }}>{tpl.subject}</div>
                   </div>
                   <span className="text-[11px] font-medium rounded-full px-2 py-0.5 shrink-0" style={{ backgroundColor: C.pale, color: C.navy }}>
-                    {t.usageCount || 0}× σε χρήση
+                    {t("{n}× σε χρήση", { n: tpl.usageCount || 0 })}
                   </span>
                 </div>
                 <p className="text-xs mb-3" style={{ color: C.slate }}>
                   {(() => {
-                    const plain = t.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+                    const plain = tpl.body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
                     return plain.length > 160 ? `${plain.slice(0, 160)}…` : plain;
                   })()}
                 </p>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setEditing(t)} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
-                    <Pencil size={12} /> Επεξεργασία
+                  <button onClick={() => setEditing(tpl)} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
+                    <Pencil size={12} /> {t("Επεξεργασία")}
                   </button>
-                  <button onClick={() => handleDuplicate(t)} disabled={busyId === t.id} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
-                    <Copy size={12} /> Αντιγραφή
+                  <button onClick={() => handleDuplicate(tpl)} disabled={busyId === tpl.id} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.ink }}>
+                    <Copy size={12} /> {t("Αντιγραφή")}
                   </button>
-                  <button onClick={() => handleDelete(t)} disabled={busyId === t.id} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium ml-auto" style={{ color: C.coral }}>
-                    <Trash2 size={12} /> Διαγραφή
+                  <button onClick={() => handleDelete(tpl)} disabled={busyId === tpl.id} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium ml-auto" style={{ color: C.coral }}>
+                    <Trash2 size={12} /> {t("Διαγραφή")}
                   </button>
                 </div>
               </Card>
@@ -2201,7 +2201,7 @@ function NewOfferModal({ contacts, onClose, onCreate }) {
       });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία προσφοράς.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η δημιουργία προσφοράς."));
     } finally {
       setBusy(false);
     }
@@ -2211,19 +2211,19 @@ function NewOfferModal({ contacts, onClose, onCreate }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέα προσφορά</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Νέα προσφορά")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <select required value={contactId} onChange={(e) => setContactId(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }}>
-            <option value="">Επιλέξε επαφή…</option>
+            <option value="">{t("Επιλέξε επαφή…")}</option>
             {contacts.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.email})</option>)}
           </select>
-          <input required placeholder="Τίτλος προσφοράς" value={title} onChange={(e) => setTitle(e.target.value)}
+          <input required placeholder={t("Τίτλος προσφοράς")} value={title} onChange={(e) => setTitle(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div className="flex gap-2">
-            <input type="number" min={0} step="0.01" placeholder="Αξία" value={value} onChange={(e) => setValue(e.target.value)}
+            <input type="number" min={0} step="0.01" placeholder={t("Αξία")} value={value} onChange={(e) => setValue(e.target.value)}
               className="flex-1 rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
             <select value={currency} onChange={(e) => setCurrency(e.target.value)}
               className="w-24 rounded-lg px-2 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }}>
@@ -2231,11 +2231,11 @@ function NewOfferModal({ contacts, onClose, onCreate }) {
               <option value="USD">USD</option>
             </select>
           </div>
-          <textarea placeholder="Σημειώσεις (προαιρετικό)" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+          <textarea placeholder={t("Σημειώσεις (προαιρετικό)")} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Δημιουργία")}
           </button>
         </form>
       </Card>
@@ -2261,16 +2261,16 @@ function OfferOutcomeReasonModal({ status, onClose, onConfirm }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <h3 className="text-sm font-semibold mb-1" style={{ color: C.ink }}>
-          {status === "accepted" ? "Γιατί έγινε δεκτή;" : "Γιατί απορρίφθηκε;"}
+          {status === "accepted" ? t("Γιατί έγινε δεκτή;") : t("Γιατί απορρίφθηκε;")}
         </h3>
         <p className="text-xs mb-3" style={{ color: C.slate }}>
-          Προαιρετικό — τροφοδοτεί το CRM reporting (λόγοι έγκρισης/απόρριψης).
+          {t("Προαιρετικό — τροφοδοτεί το CRM reporting (λόγοι έγκρισης/απόρριψης).")}
         </p>
         <textarea
           autoFocus
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="π.χ. τιμή, timing, ανταγωνισμός…"
+          placeholder={t("π.χ. τιμή, timing, ανταγωνισμός…")}
           rows={3}
           className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none mb-3"
           style={{ borderColor: C.line, color: C.ink }}
@@ -2278,11 +2278,11 @@ function OfferOutcomeReasonModal({ status, onClose, onConfirm }) {
         <div className="flex items-center justify-end gap-2">
           <button type="button" disabled={busy} onClick={() => handleConfirm(true)}
             className="rounded-lg px-3 py-2 text-sm font-medium border" style={{ borderColor: C.line, color: C.slate }}>
-            Παράλειψη
+            {t("Παράλειψη")}
           </button>
           <button type="button" disabled={busy} onClick={() => handleConfirm(false)}
             className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Αποθήκευση")}
           </button>
         </div>
       </Card>
@@ -2316,7 +2316,7 @@ function OfferCard({ offer, onChangeStatus, onDelete, busy }) {
         className="w-full rounded-md px-2 py-1.5 text-xs border outline-none"
         style={{ borderColor: C.line, color: C.ink }}
       >
-        {OFFER_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+        {OFFER_STATUSES.map((s) => <option key={s.key} value={s.key}>{t(s.label)}</option>)}
       </select>
     </Card>
   );
@@ -2377,21 +2377,21 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Offers</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-            {offers.length} προσφορές · σύνολο ενεργών {fmtMoney(totalValue)}
+            {t("{n} προσφορές · σύνολο ενεργών {total}", { n: offers.length, total: fmtMoney(totalValue) })}
           </p>
         </div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky }}>
-          <Plus size={15} /> Νέα προσφορά
+          <Plus size={15} /> {t("Νέα προσφορά")}
         </button>
       </div>
       <div className="px-8 py-6">
         <ErrorNote message={error} onRetry={onReload} />
         {loading ? (
-          <Spinner label="Φόρτωση προσφορών…" />
+          <Spinner label={t("Φόρτωση προσφορών…")} />
         ) : offers.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
             <Handshake size={28} strokeWidth={1.5} />
-            Δεν υπάρχουν προσφορές ακόμα.
+            {t("Δεν υπάρχουν προσφορές ακόμα.")}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2399,7 +2399,7 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
               <div key={col.key}>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color }} />
-                  <span className="text-xs font-semibold" style={{ color: C.ink }}>{col.label}</span>
+                  <span className="text-xs font-semibold" style={{ color: C.ink }}>{t(col.label)}</span>
                   <span className="text-xs" style={{ color: C.slate }}>
                     {offers.filter((o) => o.status === col.key).length}
                   </span>
@@ -2449,7 +2449,7 @@ function TestSendModal({ defaultEmail, onClose, onSend, subjects = [] }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-sm p-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold" style={{ color: C.ink }}>Δοκιμαστική αποστολή</h3>
+          <h3 className="text-sm font-semibold" style={{ color: C.ink }}>{t("Δοκιμαστική αποστολή")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -2457,20 +2457,20 @@ function TestSendModal({ defaultEmail, onClose, onSend, subjects = [] }) {
             <select value={subject} onChange={(e) => setSubject(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
               {subjects.map((s, i) => (
-                <option key={i} value={s}>{i === 0 ? "A (κύριο)" : `Παραλλαγή ${String.fromCharCode(65 + i)}`} — {s}</option>
+                <option key={i} value={s}>{i === 0 ? t("A (κύριο)") : t("Παραλλαγή {v}", { v: String.fromCharCode(65 + i) })} — {s}</option>
               ))}
             </select>
           )}
           <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="email για δοκιμή"
+            placeholder={t("email για δοκιμή")}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           {result === "sent" ? (
-            <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.mint}14`, color: C.mint }}>Στάλθηκε! Έλεγξε το inbox σου.</p>
+            <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.mint}14`, color: C.mint }}>{t("Στάλθηκε! Έλεγξε το inbox σου.")}</p>
           ) : result ? (
             <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{result}</p>
           ) : null}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Αποστολή δοκιμής
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Αποστολή δοκιμής")}
           </button>
         </form>
       </Card>
@@ -2500,19 +2500,19 @@ function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown,
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
             <Clock size={12} />
-            {step.delayDays === 0 ? "Άμεση αποστολή" : `${step.delayDays} ημέρες μετά`}
+            {step.delayDays === 0 ? t("Άμεση αποστολή") : t("{n} ημέρες μετά", { n: step.delayDays })}
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setShowTestSend(true)} disabled={busy} className="rounded p-1" style={{ color: C.sky }} title="Δοκιμαστική αποστολή">
+            <button onClick={() => setShowTestSend(true)} disabled={busy} className="rounded p-1" style={{ color: C.sky }} title={t("Δοκιμαστική αποστολή")}>
               <Send size={13} />
             </button>
-            <button onClick={onMoveUp} disabled={!canMoveUp || busy} className="rounded p-1" style={{ opacity: canMoveUp ? 1 : 0.3, color: C.slate }} title="Μετακίνηση πάνω">
+            <button onClick={onMoveUp} disabled={!canMoveUp || busy} className="rounded p-1" style={{ opacity: canMoveUp ? 1 : 0.3, color: C.slate }} title={t("Μετακίνηση πάνω")}>
               <ArrowUp size={13} />
             </button>
-            <button onClick={onMoveDown} disabled={!canMoveDown || busy} className="rounded p-1" style={{ opacity: canMoveDown ? 1 : 0.3, color: C.slate }} title="Μετακίνηση κάτω">
+            <button onClick={onMoveDown} disabled={!canMoveDown || busy} className="rounded p-1" style={{ opacity: canMoveDown ? 1 : 0.3, color: C.slate }} title={t("Μετακίνηση κάτω")}>
               <ArrowDown size={13} />
             </button>
-            <button onClick={onDelete} disabled={busy} className="rounded p-1" style={{ color: C.coral }} title="Διαγραφή βήματος">
+            <button onClick={onDelete} disabled={busy} className="rounded p-1" style={{ color: C.coral }} title={t("Διαγραφή βήματος")}>
               <Trash2 size={13} />
             </button>
           </div>
@@ -2526,7 +2526,7 @@ function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown,
             <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2.5 border-t" style={{ borderColor: C.line }}>
               {step.conditions?.requireEvent && (
                 <span className="text-[10px] rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: `${C.amber}1A`, color: "#7A5206" }}>
-                  {EVENT_CONDITIONS.find((c) => c.key === step.conditions.requireEvent)?.label}
+                  {t(EVENT_CONDITIONS.find((c) => c.key === step.conditions.requireEvent)?.label || "")}
                 </span>
               )}
               {(step.conditions?.requireTags || []).map((t) => (
@@ -2583,7 +2583,7 @@ function StepFields({
               className="rounded-md px-2.5 py-1 text-[11px] font-medium"
               style={{ backgroundColor: mode === m ? C.sky : "transparent", color: mode === m ? "#fff" : C.slate }}
             >
-              {m === "inline" ? "Νέο κείμενο" : "Από template"}
+              {m === "inline" ? t("Νέο κείμενο") : t("Από template")}
             </button>
           ))}
         </div>
@@ -2591,12 +2591,12 @@ function StepFields({
       {mode === "template" ? (
         <select required value={templateId} onChange={(e) => setTemplateId(e.target.value)}
           className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-          <option value="">Επιλέξε template…</option>
-          {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          <option value="">{t("Επιλέξε template…")}</option>
+          {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
         </select>
       ) : (
         <div className="space-y-2">
-          <input required placeholder="Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})" value={subject}
+          <input required placeholder={t("Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})")} value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
 
@@ -2606,18 +2606,18 @@ function StepFields({
             <div className="rounded-lg border px-3 py-2 space-y-2" style={{ borderColor: C.line }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-medium" style={{ color: C.slate }}>
-                  A/B θέματος{variants.length > 0 ? ` · ${variants.length + 1} παραλλαγές` : ""}
+                  {t("A/B θέματος")}{variants.length > 0 ? t(" · {n} παραλλαγές", { n: variants.length + 1 }) : ""}
                 </span>
                 {variants.length < 4 && (
                   <button type="button" onClick={() => setSubjectVariants([...variants, ""])}
                     className="text-[11px] font-medium flex items-center gap-1" style={{ color: C.sky }}>
-                    <Plus size={11} /> Παραλλαγή θέματος
+                    <Plus size={11} /> {t("Παραλλαγή θέματος")}
                   </button>
                 )}
               </div>
               {variants.map((v, vi) => (
                 <div key={vi} className="flex items-center gap-2">
-                  <input placeholder={`Εναλλακτικό θέμα ${vi + 2}`} value={v}
+                  <input placeholder={t("Εναλλακτικό θέμα {n}", { n: vi + 2 })} value={v}
                     onChange={(e) => setSubjectVariants(variants.map((x, idx) => (idx === vi ? e.target.value : x)))}
                     className="flex-1 rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
                   <button type="button" onClick={() => setSubjectVariants(variants.filter((_, idx) => idx !== vi))} style={{ color: C.coral }}>
@@ -2626,18 +2626,18 @@ function StepFields({
                 </div>
               ))}
               {variants.length > 0 && (
-                <p className="text-[10px]" style={{ color: C.slate }}>Κάθε αποστολή διαλέγει τυχαία ένα θέμα. Αποτελέσματα: Analytics → A/B.</p>
+                <p className="text-[10px]" style={{ color: C.slate }}>{t("Κάθε αποστολή διαλέγει τυχαία ένα θέμα. Αποτελέσματα: Analytics → A/B.")}</p>
               )}
             </div>
           )}
 
           <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={90} />
           {!hasUnsubscribeLink(body) && body.length > 0 && (
-            <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής.</TipBanner>
+            <TipBanner>{t("Best practice: το email δεν έχει σύνδεσμο απεγγραφής.")}</TipBanner>
           )}
           {spamWords.length > 0 && (
             <p className="text-[11px] rounded-lg px-2.5 py-1.5" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
-              ⚠ Πιθανές spam λέξεις: {spamWords.join(", ")}
+              {t("⚠ Πιθανές spam λέξεις: {words}", { words: spamWords.join(", ") })}
             </p>
           )}
           <AutoTrackingPixelNote />
@@ -2651,12 +2651,12 @@ function StepFields({
           className="rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white"
           style={{ borderColor: C.line, color: C.ink }}
         >
-          {EVENT_CONDITIONS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+          {EVENT_CONDITIONS.map((c) => <option key={c.key} value={c.key}>{t(c.label)}</option>)}
         </select>
         <input
           value={tagsText}
           onChange={(e) => setTagsText(e.target.value)}
-          placeholder="Μόνο για tags (χωρισμένα με κόμμα)…"
+          placeholder={t("Μόνο για tags (χωρισμένα με κόμμα)…")}
           className="rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white"
           style={{ borderColor: C.line, color: C.ink }}
         />
@@ -2711,7 +2711,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
       await onCreate({ name, channel, linkedinConnectionNote: isLinkedin ? linkedinConnectionNote : undefined, steps: payloadSteps });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία sequence.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η δημιουργία sequence."));
     } finally {
       setBusy(false);
     }
@@ -2721,22 +2721,22 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-2xl p-5 max-h-[85vh] overflow-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέο sequence</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Νέο sequence")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
 
         {steps.length < 3 && (
           <TipBanner tone="warn">
-            Best practice: 3–5 follow-ups ανεβάζουν σημαντικά τα ποσοστά απάντησης. Σκέψου να προσθέσεις ακόμη βήματα πριν δημιουργήσεις το sequence.
+            {t("Best practice: 3–5 follow-ups ανεβάζουν σημαντικά τα ποσοστά απάντησης. Σκέψου να προσθέσεις ακόμη βήματα πριν δημιουργήσεις το sequence.")}
           </TipBanner>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input required placeholder="Όνομα sequence" value={name} onChange={(e) => setName(e.target.value)}
+          <input required placeholder={t("Όνομα sequence")} value={name} onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
 
           <div>
-            <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>Κανάλι</label>
+            <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>{t("Κανάλι")}</label>
             <div className="flex gap-2">
               {[["email", "Email", Mail], ["linkedin", "LinkedIn", Linkedin], ["linkedin_inmail", "InMail", Send]].map(([val, label, Icon]) => (
                 <button key={val} type="button" onClick={() => setChannel(val)}
@@ -2751,33 +2751,33 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
           {isLinkedin && (
             <>
               <TipBanner tone="info">
-                LinkedIn sequence: αν η επαφή δεν είναι ήδη σύνδεση, το 1ο βήμα στέλνει αίτημα σύνδεσης με το σημείωμα παρακάτω. Τα follow-up μηνύματα ξεκινούν όταν γίνει αποδεκτό το αίτημα. Ισχύει ημερήσιο όριο αιτημάτων για προστασία του λογαριασμού. Μόνο επαφές με LinkedIn URL θα εγγραφούν.
+                {t("LinkedIn sequence: αν η επαφή δεν είναι ήδη σύνδεση, το 1ο βήμα στέλνει αίτημα σύνδεσης με το σημείωμα παρακάτω. Τα follow-up μηνύματα ξεκινούν όταν γίνει αποδεκτό το αίτημα. Ισχύει ημερήσιο όριο αιτημάτων για προστασία του λογαριασμού. Μόνο επαφές με LinkedIn URL θα εγγραφούν.")}
               </TipBanner>
               <div>
-                <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>Σημείωμα αιτήματος σύνδεσης <span style={{ fontWeight: 400 }}>(προαιρετικό, max 300 χαρ.)</span></label>
+                <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>{t("Σημείωμα αιτήματος σύνδεσης")} <span style={{ fontWeight: 400 }}>{t("(προαιρετικό, max 300 χαρ.)")}</span></label>
                 <textarea value={linkedinConnectionNote} onChange={(e) => setLinkedinConnectionNote(e.target.value)} maxLength={300} rows={2}
-                  placeholder="π.χ. Γεια σου {{first_name}}, θα ήθελα να συνδεθούμε…"
+                  placeholder={t("π.χ. Γεια σου {{first_name}}, θα ήθελα να συνδεθούμε…")}
                   className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
               </div>
             </>
           )}
           {isInmail && (
             <TipBanner tone="info">
-              InMail sequence: κάθε βήμα στέλνει ένα InMail (με θέμα + μήνυμα) απευθείας, ακόμη και σε μη-συνδέσεις — δεν χρειάζεται αίτημα σύνδεσης. Απαιτεί premium LinkedIn και καταναλώνει InMail credits. Κάθε βήμα χρειάζεται θέμα και μήνυμα. Μόνο επαφές με LinkedIn URL θα εγγραφούν.
+              {t("InMail sequence: κάθε βήμα στέλνει ένα InMail (με θέμα + μήνυμα) απευθείας, ακόμη και σε μη-συνδέσεις — δεν χρειάζεται αίτημα σύνδεσης. Απαιτεί premium LinkedIn και καταναλώνει InMail credits. Κάθε βήμα χρειάζεται θέμα και μήνυμα. Μόνο επαφές με LinkedIn URL θα εγγραφούν.")}
             </TipBanner>
           )}
 
           {steps.map((step, i) => (
             <Card key={i} className="p-4" style={{ backgroundColor: C.pale }}>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold" style={{ color: C.navy }}>Βήμα {i + 1}</span>
+                <span className="text-xs font-semibold" style={{ color: C.navy }}>{t("Βήμα {n}", { n: i + 1 })}</span>
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-1.5 text-xs" style={{ color: C.slate }}>
                     <Clock size={12} />
                     <input type="number" min={0} max={60} value={step.delayDays}
                       onChange={(e) => updateStep(i, { delayDays: e.target.value })}
                       className="w-14 rounded-md px-1.5 py-1 text-xs border outline-none" style={{ borderColor: C.line }} />
-                    ημέρες μετά
+                    {t("ημέρες μετά")}
                   </label>
                   {steps.length > 1 && (
                     <button type="button" onClick={() => removeStep(i)} style={{ color: C.coral }}>
@@ -2803,12 +2803,12 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
           <button type="button" onClick={addStep}
             className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium border"
             style={{ borderColor: C.line, color: C.navy }}>
-            <Plus size={14} /> Προσθήκη βήματος {steps.length < SUGGESTED_DELAYS.length ? `(προτείνεται: ${SUGGESTED_DELAYS[steps.length]} ημέρες)` : ""}
+            <Plus size={14} /> {t("Προσθήκη βήματος")} {steps.length < SUGGESTED_DELAYS.length ? t("(προτείνεται: {n} ημέρες)", { n: SUGGESTED_DELAYS[steps.length] }) : ""}
           </button>
 
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία ({steps.length} βήματα)
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Δημιουργία ({n} βήματα)", { n: steps.length })}
           </button>
         </form>
       </Card>
@@ -2840,7 +2840,7 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
       await onAdd(payload);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η προσθήκη βήματος.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η προσθήκη βήματος."));
     } finally {
       setBusy(false);
     }
@@ -2850,7 +2850,7 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέο βήμα</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Νέο βήμα")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -2865,13 +2865,13 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
             templates={templates}
           />
           <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Καθυστέρηση (ημέρες)</label>
+            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Καθυστέρηση (ημέρες)")}</label>
             <input type="number" min={0} max={60} value={delayDays} onChange={(e) => setDelayDays(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Προσθήκη
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Προσθήκη")}
           </button>
         </form>
       </Card>
@@ -2937,9 +2937,9 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
           <button onClick={() => setShowNew(true)} className="rounded-lg p-1.5" style={{ backgroundColor: C.pale }}><Plus size={15} style={{ color: C.navy }} /></button>
         </div>
         <div className="flex-1 overflow-auto px-3 py-2">
-          {loading && <Spinner label="Φόρτωση…" />}
+          {loading && <Spinner label={t("Φόρτωση…")} />}
           {!loading && sequences.length === 0 && (
-            <p className="text-sm text-center py-8" style={{ color: C.slate }}>Δεν υπάρχουν sequences ακόμα.</p>
+            <p className="text-sm text-center py-8" style={{ color: C.slate }}>{t("Δεν υπάρχουν sequences ακόμα.")}</p>
           )}
           {sequences.map((s) => (
             <button
@@ -2953,7 +2953,7 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.active ? C.mint : C.slate }} />
               </div>
               <div className="text-xs mt-1" style={{ color: C.slate }}>
-                {s.steps.length} βήματα · {s.stats?.sent ?? 0} αποστολές
+                {t("{steps} βήματα · {sent} αποστολές", { steps: s.steps.length, sent: s.stats?.sent ?? 0 })}
               </div>
             </button>
           ))}
@@ -2968,17 +2968,17 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
               <div>
                 <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{active.name}</h1>
                 <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-                  {active.stats?.sent ?? 0} στάλθηκαν · {active.stats?.opened ?? 0} ανοίχτηκαν · {active.stats?.replied ?? 0} απαντήσεις
+                  {t("{sent} στάλθηκαν · {opened} ανοίχτηκαν · {replied} απαντήσεις", { sent: active.stats?.sent ?? 0, opened: active.stats?.opened ?? 0, replied: active.stats?.replied ?? 0 })}
                 </p>
               </div>
               <button onClick={() => setShowAddStep(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
-                <Plus size={14} /> Προσθήκη βήματος
+                <Plus size={14} /> {t("Προσθήκη βήματος")}
               </button>
             </div>
             <div className="px-8 py-8 max-w-2xl">
               {active.steps.length < 3 && (
                 <TipBanner tone="warn">
-                  Αυτό το sequence έχει {active.steps.length} {active.steps.length === 1 ? "βήμα" : "βήματα"}. Best practice: 3–5 follow-ups δίνουν σημαντικά καλύτερα reply rates.
+                  {t("Αυτό το sequence έχει {n} βήματα. Best practice: 3–5 follow-ups δίνουν σημαντικά καλύτερα reply rates.", { n: active.steps.length })}
                 </TipBanner>
               )}
               {active.steps.map((step, i) => (
@@ -3000,7 +3000,7 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
             </div>
           </>
         ) : (
-          !loading && <div className="p-8 text-sm" style={{ color: C.slate }}>Διάλεξε ή φτιάξε ένα sequence.</div>
+          !loading && <div className="p-8 text-sm" style={{ color: C.slate }}>{t("Διάλεξε ή φτιάξε ένα sequence.")}</div>
         )}
       </div>
     </div>
@@ -3015,24 +3015,24 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Απεσταλμένα")}</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Όλα τα emails που στάλθηκαν — sequences και χειροκίνητα. Πάτησε ένα για το trace.</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Όλα τα emails που στάλθηκαν — sequences και χειροκίνητα. Πάτησε ένα για το trace.")}</p>
         </div>
         <button
           onClick={() => setComposeOpen(true)}
           className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white"
           style={{ backgroundColor: C.sky }}
         >
-          <Pencil size={15} /> Σύνταξη
+          <Pencil size={15} /> {t("Σύνταξη")}
         </button>
       </div>
       <div className="px-8 py-4">
         <ErrorNote message={error} onRetry={onReload} />
         {loading ? (
-          <Spinner label="Φόρτωση…" />
+          <Spinner label={t("Φόρτωση…")} />
         ) : activity.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
             <MailCheck size={28} strokeWidth={1.5} />
-            Δεν έχει σταλεί κανένα email ακόμα.
+            {t("Δεν έχει σταλεί κανένα email ακόμα.")}
           </div>
         ) : (
           activity.map((m) => {
@@ -3050,7 +3050,7 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{m.subject}</div>
                       <div className="text-xs truncate" style={{ color: C.slate }}>
-                        προς {m.toName || m.to}{m.sequenceName ? ` · ${m.sequenceName}` : " · χειροκίνητο"}
+                        {t("προς {who}", { who: m.toName || m.to })}{m.sequenceName ? ` · ${m.sequenceName}` : t(" · χειροκίνητο")}
                       </div>
                     </div>
                   </div>
@@ -3085,16 +3085,16 @@ function DashboardView({ dashboard, loading, error, onReload, onSelectContact })
     <div className="h-full overflow-auto">
       <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Σήμερα")}</h1>
-        <p className="text-sm mt-0.5" style={{ color: C.slate }}>Ό,τι είναι εκκρεμές ή έληξε σήμερα — follow-ups και αυτόματα sequence sends.</p>
+        <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Ό,τι είναι εκκρεμές ή έληξε σήμερα — follow-ups και αυτόματα sequence sends.")}</p>
       </div>
       <div className="px-8 py-4 space-y-6">
         <ErrorNote message={error} onRetry={onReload} />
         {loading ? (
-          <Spinner label="Φόρτωση…" />
+          <Spinner label={t("Φόρτωση…")} />
         ) : followUps.length === 0 && sends.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
             <CalendarClock size={28} strokeWidth={1.5} />
-            Τίποτα εκκρεμές για σήμερα.
+            {t("Τίποτα εκκρεμές για σήμερα.")}
           </div>
         ) : (
           <>
@@ -3103,7 +3103,7 @@ function DashboardView({ dashboard, loading, error, onReload, onSelectContact })
                 <StickyNote size={14} /> Follow-ups ({followUps.length})
               </h2>
               {followUps.length === 0 ? (
-                <p className="text-sm" style={{ color: C.slate }}>Κανένα follow-up εκκρεμές.</p>
+                <p className="text-sm" style={{ color: C.slate }}>{t("Κανένα follow-up εκκρεμές.")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {followUps.map((f) => (
@@ -3118,7 +3118,7 @@ function DashboardView({ dashboard, loading, error, onReload, onSelectContact })
                         <div className="text-xs truncate" style={{ color: C.slate }}>{f.contactCompany || f.contactEmail}</div>
                       </div>
                       <span className="text-xs shrink-0 ml-3" style={{ color: f.overdue ? C.coral : C.slate }}>
-                        {f.overdue ? "εκπρόθεσμο" : "σήμερα"} · {fmtDate(f.dueAt)}
+                        {f.overdue ? t("εκπρόθεσμο") : t("σήμερα")} · {fmtDate(f.dueAt)}
                       </span>
                     </button>
                   ))}
@@ -3127,10 +3127,10 @@ function DashboardView({ dashboard, loading, error, onReload, onSelectContact })
             </div>
             <div>
               <h2 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: C.ink }}>
-                <Layers size={14} /> Αυτόματα sends ({sends.length})
+                <Layers size={14} /> {t("Αυτόματα sends")} ({sends.length})
               </h2>
               {sends.length === 0 ? (
-                <p className="text-sm" style={{ color: C.slate }}>Κανένα sequence send εκκρεμές.</p>
+                <p className="text-sm" style={{ color: C.slate }}>{t("Κανένα sequence send εκκρεμές.")}</p>
               ) : (
                 <div className="space-y-1.5">
                   {sends.map((s) => (
@@ -3147,7 +3147,7 @@ function DashboardView({ dashboard, loading, error, onReload, onSelectContact })
                         </div>
                       </div>
                       <span className="text-xs shrink-0 ml-3" style={{ color: s.overdue ? C.coral : C.slate }}>
-                        {s.overdue ? "εκπρόθεσμο" : "σήμερα"} · {fmtDate(s.dueAt)}
+                        {s.overdue ? t("εκπρόθεσμο") : t("σήμερα")} · {fmtDate(s.dueAt)}
                       </span>
                     </button>
                   ))}
@@ -3173,7 +3173,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
 
   async function handleSend(e) {
     e.preventDefault();
-    if (!contactId) { setError("Επίλεξε παραλήπτη."); return; }
+    if (!contactId) { setError(t("Επίλεξε παραλήπτη.")); return; }
     setError("");
     setBusy(true);
     try {
@@ -3182,15 +3182,15 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
       setTimeout(onClose, 900);
     } catch (err) {
       if (err instanceof ApiError && err.data?.error === "gmail_not_connected") {
-        setError("Δεν έχεις συνδέσει Gmail — σύνδεσε το από το μπάνερ στην κορυφή για να στείλεις.");
+        setError(t("Δεν έχεις συνδέσει Gmail — σύνδεσε το από το μπάνερ στην κορυφή για να στείλεις."));
       } else if (err instanceof ApiError && err.data?.error === "gmail_needs_reconnect") {
-        setError("Η σύνδεση Gmail διακόπηκε — συνδέσου ξανά από το μπάνερ στην κορυφή για να στείλεις.");
+        setError(t("Η σύνδεση Gmail διακόπηκε — συνδέσου ξανά από το μπάνερ στην κορυφή για να στείλεις."));
       } else if (err instanceof ApiError && err.data?.error === "contact_unsubscribed") {
-        setError("Η επαφή έχει κάνει unsubscribe — δεν επιτρέπεται αποστολή.");
+        setError(t("Η επαφή έχει κάνει unsubscribe — δεν επιτρέπεται αποστολή."));
       } else if (err instanceof ApiError && err.data?.error === "daily_send_cap_reached") {
-        setError(`Συμπληρώθηκε το ημερήσιο όριο emails (${err.data.limit}) για την εταιρεία σας — δοκίμασε ξανά αύριο.`);
+        setError(t("Συμπληρώθηκε το ημερήσιο όριο emails ({limit}) για την εταιρεία σας — δοκίμασε ξανά αύριο.", { limit: err.data.limit }));
       } else {
-        setError(err instanceof ApiError ? err.message : "Η αποστολή απέτυχε.");
+        setError(err instanceof ApiError ? err.message : t("Η αποστολή απέτυχε."));
       }
     } finally {
       setBusy(false);
@@ -3203,7 +3203,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
       style={{ borderColor: C.line, height: minimized ? 48 : 580, maxHeight: "90vh", zIndex: 50 }}
     >
       <div className="flex items-center justify-between px-4 py-3 rounded-t-xl" style={{ backgroundColor: C.navy }}>
-        <span className="text-sm font-medium text-white">Νέο μήνυμα</span>
+        <span className="text-sm font-medium text-white">{t("Νέο μήνυμα")}</span>
         <div className="flex items-center gap-3">
           <button onClick={() => setMinimized((m) => !m)} className="text-white/80 hover:text-white"><Minus size={15} /></button>
           <button onClick={onClose} className="text-white/80 hover:text-white"><X size={15} /></button>
@@ -3214,37 +3214,37 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
           <div className="px-4 py-2.5 border-b text-sm" style={{ borderColor: C.line, color: C.ink }}>
             <select required value={contactId} onChange={(e) => setContactId(e.target.value)}
               className="w-full outline-none bg-white" style={{ color: contactId ? C.ink : C.slate }}>
-              <option value="">Προς — επίλεξε επαφή…</option>
+              <option value="">{t("Προς — επίλεξε επαφή…")}</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>{c.name ? `${c.name} <${c.email}>` : c.email}</option>
               ))}
             </select>
           </div>
           <div className="px-4 py-2.5 border-b text-sm" style={{ borderColor: C.line, color: C.ink }}>
-            <input required placeholder="Θέμα" value={subject} onChange={(e) => setSubject(e.target.value)}
+            <input required placeholder={t("Θέμα")} value={subject} onChange={(e) => setSubject(e.target.value)}
               className="w-full outline-none" />
           </div>
           <div className="flex-1 px-4 py-3 overflow-auto">
             <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={160} />
             {!hasUnsubscribeLink(body) && body.length > 0 && (
-              <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής.</TipBanner>
+              <TipBanner>{t("Best practice: το email δεν έχει σύνδεσμο απεγγραφής.")}</TipBanner>
             )}
             <AutoTrackingPixelNote />
           </div>
           {!gmailConnected && (
             <div className="px-4 py-2 text-xs" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
-              Δεν έχεις συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό.
+              {t("Δεν έχεις συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό.")}
             </div>
           )}
           {error && <p className="px-4 py-2 text-xs" style={{ color: C.coral }}>{error}</p>}
           <div className="px-4 py-3 border-t flex items-center justify-end gap-2" style={{ borderColor: C.line }}>
             {sent ? (
-              <span className="text-sm font-medium" style={{ color: C.mint }}>Εστάλη ✓</span>
+              <span className="text-sm font-medium" style={{ color: C.mint }}>{t("Εστάλη ✓")}</span>
             ) : (
               <button type="submit" disabled={busy}
                 className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white"
                 style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-                {busy && <Loader2 size={14} className="animate-spin" />} Αποστολή
+                {busy && <Loader2 size={14} className="animate-spin" />} {t("Αποστολή")}
               </button>
             )}
           </div>
@@ -3327,7 +3327,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (selectedIds.size === 0) { setError("Επίλεξε τουλάχιστον 1 επαφή."); return; }
+    if (selectedIds.size === 0) { setError(t("Επίλεξε τουλάχιστον 1 επαφή.")); return; }
     setError("");
     setBusy(true);
     try {
@@ -3342,7 +3342,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
       });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία campaign.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η δημιουργία campaign."));
     } finally {
       setBusy(false);
     }
@@ -3352,23 +3352,23 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-4xl p-5 max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέο campaign</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Νέο campaign")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-3">
-            <input required placeholder="Όνομα campaign" value={name} onChange={(e) => setName(e.target.value)}
+            <input required placeholder={t("Όνομα campaign")} value={name} onChange={(e) => setName(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
 
             {templates.length > 0 && (
               <select defaultValue="" onChange={(e) => { if (e.target.value) loadFromTemplate(e.target.value); e.target.value = ""; }}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.slate }}>
-                <option value="">Φόρτωση περιεχομένου από template…</option>
-                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                <option value="">{t("Φόρτωση περιεχομένου από template…")}</option>
+                {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
               </select>
             )}
 
-            <input required placeholder="Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})" value={subject} onChange={(e) => setSubject(e.target.value)}
+            <input required placeholder={t("Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})")} value={subject} onChange={(e) => setSubject(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
 
             {/* A/B subject test — each recipient gets one of these at random;
@@ -3376,18 +3376,18 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
             <div className="rounded-lg border px-3 py-2 space-y-2" style={{ borderColor: C.line }}>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-medium" style={{ color: C.slate }}>
-                  A/B θέματος{subjectVariants.length > 0 ? ` · ${subjectVariants.length + 1} παραλλαγές` : ""}
+                  {t("A/B θέματος")}{subjectVariants.length > 0 ? t(" · {n} παραλλαγές", { n: subjectVariants.length + 1 }) : ""}
                 </span>
                 {subjectVariants.length < 4 && (
                   <button type="button" onClick={() => setSubjectVariants([...subjectVariants, ""])}
                     className="text-[11px] font-medium flex items-center gap-1" style={{ color: C.sky }}>
-                    <Plus size={11} /> Παραλλαγή θέματος
+                    <Plus size={11} /> {t("Παραλλαγή θέματος")}
                   </button>
                 )}
               </div>
               {subjectVariants.map((v, vi) => (
                 <div key={vi} className="flex items-center gap-2">
-                  <input placeholder={`Εναλλακτικό θέμα ${vi + 2}`} value={v}
+                  <input placeholder={t("Εναλλακτικό θέμα {n}", { n: vi + 2 })} value={v}
                     onChange={(e) => setSubjectVariants(subjectVariants.map((x, idx) => (idx === vi ? e.target.value : x)))}
                     className="flex-1 rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   <button type="button" onClick={() => setSubjectVariants(subjectVariants.filter((_, idx) => idx !== vi))} style={{ color: C.coral }}>
@@ -3398,7 +3398,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
             </div>
 
             <div className="flex gap-1.5 flex-wrap">
-              <span className="text-[11px] self-center" style={{ color: C.slate }}>Εισαγωγή token:</span>
+              <span className="text-[11px] self-center" style={{ color: C.slate }}>{t("Εισαγωγή token:")}</span>
               {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{gmb}}", "{{facebook}}", "{{instagram}}", "{{google_reviews}}", "{{report_link}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
@@ -3408,32 +3408,32 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
             </div>
             <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={160} />
             {!hasUnsubscribeLink(body) && body.length > 0 && (
-              <TipBanner>Best practice: το email δεν έχει σύνδεσμο απεγγραφής — ιδιαίτερα σημαντικό για μαζικές αποστολές σαν campaign.</TipBanner>
+              <TipBanner>{t("Best practice: το email δεν έχει σύνδεσμο απεγγραφής — ιδιαίτερα σημαντικό για μαζικές αποστολές σαν campaign.")}</TipBanner>
             )}
             <AutoTrackingPixelNote />
 
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Απόσταση μεταξύ αποστολών (λεπτά)</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Απόσταση μεταξύ αποστολών (λεπτά)")}</label>
               <input type="number" min={1} max={1440} value={intervalMinutes} onChange={(e) => setIntervalMinutes(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
               <p className="text-[11px] mt-1" style={{ color: C.slate }}>
-                Τα emails φεύγουν ένα-ένα, όχι όλα μαζί — π.χ. με 2 λεπτά, {selectedIds.size} επαφές θα χρειαστούν περίπου {Math.round((selectedIds.size - 1) * (Number(intervalMinutes) || 2))} λεπτά για να ολοκληρωθούν.
+                {t("Τα emails φεύγουν ένα-ένα, όχι όλα μαζί — π.χ. με 2 λεπτά, {n} επαφές θα χρειαστούν περίπου {mins} λεπτά για να ολοκληρωθούν.", { n: selectedIds.size, mins: Math.round((selectedIds.size - 1) * (Number(intervalMinutes) || 2)) })}
               </p>
             </div>
 
             {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
             <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-              {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία campaign (ως πρόχειρο)
+              {busy && <Loader2 size={14} className="animate-spin" />} {t("Δημιουργία campaign (ως πρόχειρο)")}
             </button>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium" style={{ color: C.slate }}>Παραλήπτες</label>
-              <span className="text-xs font-medium" style={{ color: C.sky }}>{selectedIds.size} επιλεγμένες</span>
+              <label className="text-xs font-medium" style={{ color: C.slate }}>{t("Παραλήπτες")}</label>
+              <span className="text-xs font-medium" style={{ color: C.sky }}>{t("{n} επιλεγμένες", { n: selectedIds.size })}</span>
             </div>
             <div className="flex gap-2">
-              <input placeholder="Αναζήτηση…" value={query} onChange={(e) => setQuery(e.target.value)}
+              <input placeholder={t("Αναζήτηση…")} value={query} onChange={(e) => setQuery(e.target.value)}
                 className="flex-1 rounded-lg px-3 py-1.5 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
                 className="rounded-lg px-2 py-1.5 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
@@ -3442,21 +3442,21 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
               </select>
               <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}
                 className="rounded-lg px-2 py-1.5 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-                <option value="all">Όλες οι ετικέτες</option>
-                {tags.map((t) => <option key={t} value={t}>{t}</option>)}
+                <option value="all">{t("Όλες οι ετικέτες")}</option>
+                {tags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
               </select>
             </div>
             <div className="flex gap-3">
               <button type="button" onClick={selectAllFiltered} className="text-xs font-medium underline" style={{ color: C.sky }}>
-                Επιλογή όλων ({filtered.length})
+                {t("Επιλογή όλων ({n})", { n: filtered.length })}
               </button>
               <button type="button" onClick={clearSelection} className="text-xs font-medium underline" style={{ color: C.slate }}>
-                Καθαρισμός
+                {t("Καθαρισμός")}
               </button>
             </div>
             <div className="rounded-lg border overflow-auto" style={{ borderColor: C.line, maxHeight: 420 }}>
               {filtered.length === 0 ? (
-                <p className="text-xs text-center py-6" style={{ color: C.slate }}>Καμία επαφή δεν ταιριάζει.</p>
+                <p className="text-xs text-center py-6" style={{ color: C.slate }}>{t("Καμία επαφή δεν ταιριάζει.")}</p>
               ) : (
                 filtered.map((c) => (
                   <label key={c.id} className="flex items-center gap-2.5 px-3 py-2 border-b cursor-pointer hover:bg-slate-50" style={{ borderColor: C.line }}>
@@ -3489,7 +3489,7 @@ function CampaignDetailDrawer({ campaignId, onClose, onLoad, onStart, onPause, o
     try {
       setDetail(await onLoad(campaignId));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στοιχεία campaign.");
+      setError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα στοιχεία campaign."));
     } finally {
       setLoading(false);
     }
@@ -3508,7 +3508,7 @@ function CampaignDetailDrawer({ campaignId, onClose, onLoad, onStart, onPause, o
   }
 
   async function handleDelete() {
-    if (!window.confirm("Διαγραφή αυτού του campaign; Δεν θα διαγραφούν τα emails που έχουν ήδη σταλεί.")) return;
+    if (!window.confirm(t("Διαγραφή αυτού του campaign; Δεν θα διαγραφούν τα emails που έχουν ήδη σταλεί."))) return;
     setBusy(true);
     try {
       await onDelete(campaignId);
@@ -3527,16 +3527,16 @@ function CampaignDetailDrawer({ campaignId, onClose, onLoad, onStart, onPause, o
             {detail && (detail.status === "draft" || detail.status === "paused") && (
               <button onClick={() => run(onStart)} disabled={busy}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.mint, opacity: busy ? 0.6 : 1 }}>
-                <Play size={13} /> {detail.status === "paused" ? "Συνέχεια" : "Εκκίνηση"}
+                <Play size={13} /> {detail.status === "paused" ? t("Συνέχεια") : t("Εκκίνηση")}
               </button>
             )}
             {detail && detail.status === "running" && (
               <button onClick={() => run(onPause)} disabled={busy}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.amber, opacity: busy ? 0.6 : 1 }}>
-                <Pause size={13} /> Παύση
+                <Pause size={13} /> {t("Παύση")}
               </button>
             )}
-            <button onClick={handleDelete} disabled={busy} className="text-slate-400 hover:text-coral-600" title="Διαγραφή">
+            <button onClick={handleDelete} disabled={busy} className="text-slate-400 hover:text-coral-600" title={t("Διαγραφή")}>
               <Trash2 size={16} />
             </button>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
@@ -3544,7 +3544,7 @@ function CampaignDetailDrawer({ campaignId, onClose, onLoad, onStart, onPause, o
         </div>
 
         {loading ? (
-          <Spinner label="Φόρτωση…" />
+          <Spinner label={t("Φόρτωση…")} />
         ) : error ? (
           <div className="p-6"><ErrorNote message={error} onRetry={load} /></div>
         ) : detail ? (
@@ -3552,25 +3552,25 @@ function CampaignDetailDrawer({ campaignId, onClose, onLoad, onStart, onPause, o
             <div className="flex items-center gap-2">
               <CampaignStatusBadge status={detail.status} />
               <span className="text-xs" style={{ color: C.slate }}>
-                {detail.intervalMinutes} λεπτά μεταξύ αποστολών · δημιουργήθηκε {fmtDate(detail.createdAt)}
+                {t("{n} λεπτά μεταξύ αποστολών · δημιουργήθηκε {d}", { n: detail.intervalMinutes, d: fmtDate(detail.createdAt) })}
               </span>
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <StatCard label="Σύνολο" value={detail.counts.total} sub="παραλήπτες" color={C.slate} />
-              <StatCard label="Στάλθηκαν" value={detail.counts.sent} sub={`από ${detail.counts.total}`} color={C.navy} />
-              <StatCard label="Εκκρεμούν" value={detail.counts.pending} sub="στην ουρά" color={C.amber} />
-              <StatCard label="Παραλείφθηκαν" value={detail.counts.skipped + detail.counts.failed} sub="unsubscribed / αποτυχία" color={C.coral} />
+              <StatCard label={t("Σύνολο")} value={detail.counts.total} sub={t("παραλήπτες")} color={C.slate} />
+              <StatCard label={t("Στάλθηκαν")} value={detail.counts.sent} sub={t("από {n}", { n: detail.counts.total })} color={C.navy} />
+              <StatCard label={t("Εκκρεμούν")} value={detail.counts.pending} sub={t("στην ουρά")} color={C.amber} />
+              <StatCard label={t("Παραλείφθηκαν")} value={detail.counts.skipped + detail.counts.failed} sub={t("unsubscribed / αποτυχία")} color={C.coral} />
             </div>
 
             <div>
-              <div className="text-sm font-medium mb-2" style={{ color: C.ink }}>Θέμα</div>
+              <div className="text-sm font-medium mb-2" style={{ color: C.ink }}>{t("Θέμα")}</div>
               <p className="text-sm" style={{ color: C.ink }}>{detail.subject}</p>
             </div>
 
             <div>
               <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
-                <Users size={14} /> Παραλήπτες ({detail.recipients.length})
+                <Users size={14} /> {t("Παραλήπτες")} ({detail.recipients.length})
               </div>
               <div className="space-y-2">
                 {detail.recipients.map((r) => {
@@ -3587,12 +3587,12 @@ function CampaignDetailDrawer({ campaignId, onClose, onLoad, onStart, onPause, o
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {r.status === "pending" && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.slate}1A`, color: C.slate }}>Εκκρεμεί</span>}
-                          {r.status === "sent" && r.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>Άνοιξε</span>}
-                          {r.status === "sent" && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.mint}1A`, color: C.mint }}>Στάλθηκε</span>}
+                          {r.status === "pending" && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.slate}1A`, color: C.slate }}>{t("Εκκρεμεί")}</span>}
+                          {r.status === "sent" && r.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>{t("Άνοιξε")}</span>}
+                          {r.status === "sent" && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.mint}1A`, color: C.mint }}>{t("Στάλθηκε")}</span>}
                           {(r.status === "skipped" || r.status === "failed") && (
                             <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.coral}1A`, color: C.coral }}>
-                              {r.status === "skipped" ? "Παραλείφθηκε" : "Αποτυχία"}
+                              {r.status === "skipped" ? t("Παραλείφθηκε") : t("Αποτυχία")}
                             </span>
                           )}
                         </div>
@@ -3601,7 +3601,7 @@ function CampaignDetailDrawer({ campaignId, onClose, onLoad, onStart, onPause, o
                         <div className="px-3 pb-2.5 pl-7">
                           {r.note && <p className="text-[11px] mb-1.5" style={{ color: C.coral }}>{r.note}</p>}
                           {r.sentAt ? <EventTrace sentAt={r.sentAt} events={r.events} /> : (
-                            <p className="text-[11px]" style={{ color: C.slate }}>Δεν έχει σταλεί ακόμα.</p>
+                            <p className="text-[11px]" style={{ color: C.slate }}>{t("Δεν έχει σταλεί ακόμα.")}</p>
                           )}
                         </div>
                       )}
@@ -3640,20 +3640,20 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Campaigns</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Ένα μήνυμα σε πολλές επαφές, ένα-ένα με απόσταση — όχι μαζική αποστολή.</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Ένα μήνυμα σε πολλές επαφές, ένα-ένα με απόσταση — όχι μαζική αποστολή.")}</p>
         </div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
-          <Megaphone size={15} /> Νέο campaign
+          <Megaphone size={15} /> {t("Νέο campaign")}
         </button>
       </div>
       <div className="px-8 py-6">
         <ErrorNote message={error} onRetry={onReload} />
         {loading ? (
-          <Spinner label="Φόρτωση…" />
+          <Spinner label={t("Φόρτωση…")} />
         ) : campaigns.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
             <Megaphone size={28} strokeWidth={1.5} />
-            Δεν έχεις δημιουργήσει campaign ακόμα.
+            {t("Δεν έχεις δημιουργήσει campaign ακόμα.")}
           </div>
         ) : (
           <>
@@ -3664,10 +3664,10 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
-                        <th className="font-medium px-4 py-2.5">Όνομα</th>
-                        <th className="font-medium px-4 py-2.5">Κατάσταση</th>
-                        <th className="font-medium px-4 py-2.5">Πρόοδος</th>
-                        <th className="font-medium px-4 py-2.5">Δημιουργήθηκε</th>
+                        <th className="font-medium px-4 py-2.5">{t("Όνομα")}</th>
+                        <th className="font-medium px-4 py-2.5">{t("Κατάσταση")}</th>
+                        <th className="font-medium px-4 py-2.5">{t("Πρόοδος")}</th>
+                        <th className="font-medium px-4 py-2.5">{t("Δημιουργήθηκε")}</th>
                         <th className="font-medium px-4 py-2.5"></th>
                       </tr>
                     </thead>
@@ -3681,12 +3681,12 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-2">
                               {(c.status === "draft" || c.status === "paused") && (
-                                <button onClick={() => run(c.id, onStart)} disabled={busyId === c.id} title="Εκκίνηση" style={{ color: C.mint }}>
+                                <button onClick={() => run(c.id, onStart)} disabled={busyId === c.id} title={t("Εκκίνηση")} style={{ color: C.mint }}>
                                   <Play size={15} />
                                 </button>
                               )}
                               {c.status === "running" && (
-                                <button onClick={() => run(c.id, onPause)} disabled={busyId === c.id} title="Παύση" style={{ color: C.amber }}>
+                                <button onClick={() => run(c.id, onPause)} disabled={busyId === c.id} title={t("Παύση")} style={{ color: C.amber }}>
                                   <Pause size={15} />
                                 </button>
                               )}
@@ -3711,12 +3711,12 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       {(c.status === "draft" || c.status === "paused") && (
-                        <button onClick={() => run(c.id, onStart)} disabled={busyId === c.id} title="Εκκίνηση" style={{ color: C.mint }}>
+                        <button onClick={() => run(c.id, onStart)} disabled={busyId === c.id} title={t("Εκκίνηση")} style={{ color: C.mint }}>
                           <Play size={15} />
                         </button>
                       )}
                       {c.status === "running" && (
-                        <button onClick={() => run(c.id, onPause)} disabled={busyId === c.id} title="Παύση" style={{ color: C.amber }}>
+                        <button onClick={() => run(c.id, onPause)} disabled={busyId === c.id} title={t("Παύση")} style={{ color: C.amber }}>
                           <Pause size={15} />
                         </button>
                       )}
@@ -3725,11 +3725,11 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
 
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span style={{ color: C.slate }}>Πρόοδος:</span>
+                      <span style={{ color: C.slate }}>{t("Πρόοδος:")}</span>
                       <span style={{ color: C.ink }}>{c.counts.sent} / {c.counts.total}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span style={{ color: C.slate }}>Δημιουργήθηκε:</span>
+                      <span style={{ color: C.slate }}>{t("Δημιουργήθηκε:")}</span>
                       <span style={{ color: C.ink, fontSize: "0.875rem" }}>{fmtDate(c.createdAt)}</span>
                     </div>
                   </div>
@@ -3759,7 +3759,7 @@ function NewTeammateModal({ onClose, onInvite }) {
       await onInvite({ email, password, name: name || undefined });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η πρόσκληση.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η πρόσκληση."));
     } finally {
       setBusy(false);
     }
@@ -3769,22 +3769,22 @@ function NewTeammateModal({ onClose, onInvite }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Πρόσκληση συνεργάτη</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Πρόσκληση συνεργάτη")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Όνομα (προαιρετικό)" value={name} onChange={(e) => setName(e.target.value)}
+          <input placeholder={t("Όνομα (προαιρετικό)")} value={name} onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={password} onChange={(e) => setPassword(e.target.value)}
+          <input required type="password" minLength={10} placeholder={t("Κωδικός (τουλάχιστον 10 χαρακτήρες)")} value={password} onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <p className="text-xs" style={{ color: C.slate }}>
-            Ο συνεργάτης θα βλέπει τις ίδιες επαφές, sequences, templates και campaigns με εσένα — μοιράζεστε το ίδιο workspace.
+            {t("Ο συνεργάτης θα βλέπει τις ίδιες επαφές, sequences, templates και campaigns με εσένα — μοιράζεστε το ίδιο workspace.")}
           </p>
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Πρόσκληση
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Πρόσκληση")}
           </button>
         </form>
       </Card>
@@ -3812,7 +3812,7 @@ function InviteExistingModal({ onClose, onInvite }) {
       await onInvite({ email, role });
       setSent(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η πρόσκληση.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η πρόσκληση."));
     } finally {
       setBusy(false);
     }
@@ -3822,32 +3822,32 @@ function InviteExistingModal({ onClose, onInvite }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Πρόσκληση υπάρχοντος χρήστη</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Πρόσκληση υπάρχοντος χρήστη")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         {sent ? (
           <div className="space-y-3">
-            <p className="text-sm" style={{ color: C.ink }}>Η πρόσκληση στάλθηκε. Θα εμφανιστεί στον λογαριασμό του/της την επόμενη φορά που θα συνδεθεί, και θα προστεθεί στην ομάδα μόνο αν την αποδεχτεί.</p>
-            <button onClick={onClose} className="w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky }}>Κλείσιμο</button>
+            <p className="text-sm" style={{ color: C.ink }}>{t("Η πρόσκληση στάλθηκε. Θα εμφανιστεί στον λογαριασμό του/της την επόμενη φορά που θα συνδεθεί, και θα προστεθεί στην ομάδα μόνο αν την αποδεχτεί.")}</p>
+            <button onClick={onClose} className="w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky }}>{t("Κλείσιμο")}</button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
-            <input required type="email" placeholder="Email υπάρχοντος λογαριασμού" value={email} onChange={(e) => setEmail(e.target.value)}
+            <input required type="email" placeholder={t("Email υπάρχοντος λογαριασμού")} value={email} onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Ρόλος</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Ρόλος")}</label>
               <select value={role} onChange={(e) => setRole(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-                <option value="member">Μέλος</option>
-                <option value="owner">Ιδιοκτήτης</option>
+                <option value="member">{t("Μέλος")}</option>
+                <option value="owner">{t("Ιδιοκτήτης")}</option>
               </select>
             </div>
             <p className="text-xs" style={{ color: C.slate }}>
-              Ο χρήστης πρέπει ήδη να έχει λογαριασμό SDLoop. Θα λάβει μια πρόσκληση που μπορεί να αποδεχτεί ή να απορρίψει — δεν προστίθεται αυτόματα.
+              {t("Ο χρήστης πρέπει ήδη να έχει λογαριασμό SDLoop. Θα λάβει μια πρόσκληση που μπορεί να αποδεχτεί ή να απορρίψει — δεν προστίθεται αυτόματα.")}
             </p>
             {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
             <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-              {busy && <Loader2 size={14} className="animate-spin" />} Αποστολή πρόσκλησης
+              {busy && <Loader2 size={14} className="animate-spin" />} {t("Αποστολή πρόσκλησης")}
             </button>
           </form>
         )}
@@ -3904,9 +3904,9 @@ function SendWindowCard({ isOwner }) {
       });
       setUnsubscribeSeed(saved.unsubscribeText);
       setS(saved);
-      setMsg("Αποθηκεύτηκε.");
+      setMsg(t("Αποθηκεύτηκε."));
     } catch (err) {
-      setMsg(err instanceof ApiError ? err.message : "Δεν αποθηκεύτηκε.");
+      setMsg(err instanceof ApiError ? err.message : t("Δεν αποθηκεύτηκε."));
     } finally {
       setSaving(false);
     }
@@ -3915,42 +3915,42 @@ function SendWindowCard({ isOwner }) {
   return (
     <Card className="p-4 mb-4">
       <div className="flex items-center justify-between mb-1">
-        <div className="text-sm font-medium" style={{ color: C.ink }}>Παράθυρο αποστολής</div>
+        <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Παράθυρο αποστολής")}</div>
         <label className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
           <input type="checkbox" disabled={!isOwner} checked={!!s.sendWindowEnabled}
             onChange={(e) => update({ sendWindowEnabled: e.target.checked })} />
-          Ενεργό
+          {t("Ενεργό")}
         </label>
       </div>
       <p className="text-xs mb-3" style={{ color: C.slate }}>
-        Τα αυτόματα emails (sequences & campaigns) φεύγουν μόνο μέσα σε αυτές τις ώρες/ημέρες. Ό,τι πέφτει εκτός, μετατίθεται για το επόμενο άνοιγμα.
+        {t("Τα αυτόματα emails (sequences & campaigns) φεύγουν μόνο μέσα σε αυτές τις ώρες/ημέρες. Ό,τι πέφτει εκτός, μετατίθεται για το επόμενο άνοιγμα.")}
       </p>
 
       <div className={`space-y-3 ${s.sendWindowEnabled ? "" : "opacity-50 pointer-events-none"}`}>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>Ημέρες</span>
+          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>{t("Ημέρες")}</span>
           {DAYS.map(([d, label]) => (
             <button key={d} type="button" disabled={!isOwner} onClick={() => toggleDay(d)}
               className="rounded-md px-2 py-1 text-[11px] font-medium border"
               style={{ borderColor: C.line, backgroundColor: days.includes(d) ? C.sky : "#fff", color: days.includes(d) ? "#fff" : C.slate }}>
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>Ώρες</span>
+          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>{t("Ώρες")}</span>
           <select disabled={!isOwner} value={s.sendWindowStart} onChange={(e) => update({ sendWindowStart: Number(e.target.value) })}
             className="rounded-md px-2 py-1 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }}>
             {startOpts.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
           </select>
-          <span className="text-xs" style={{ color: C.slate }}>έως</span>
+          <span className="text-xs" style={{ color: C.slate }}>{t("έως")}</span>
           <select disabled={!isOwner} value={s.sendWindowEnd} onChange={(e) => update({ sendWindowEnd: Number(e.target.value) })}
             className="rounded-md px-2 py-1 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }}>
             {endOpts.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
           </select>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>Ζώνη ώρας</span>
+          <span className="text-xs w-20 shrink-0" style={{ color: C.slate }}>{t("Ζώνη ώρας")}</span>
           <input disabled={!isOwner} value={s.sendTimezone || ""} onChange={(e) => update({ sendTimezone: e.target.value })}
             placeholder="Europe/Athens"
             className="rounded-md px-2 py-1 text-xs border bg-white flex-1 min-w-[160px]" style={{ borderColor: C.line, color: C.ink }} />
@@ -3964,13 +3964,13 @@ function SendWindowCard({ isOwner }) {
           <label className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
             <input type="checkbox" disabled={!isOwner} checked={s.emailTrackingEnabled !== false}
               onChange={(e) => update({ emailTrackingEnabled: e.target.checked })} />
-            Ενεργό
+            {t("Ενεργό")}
           </label>
         </div>
         <p className="text-xs" style={{ color: C.slate }}>
           {s.emailTrackingEnabled !== false
-            ? "Καταγράφονται opens & clicks (open pixel + rewriting των links)."
-            : "Clean αποστολή — χωρίς open pixel και χωρίς rewriting των links, για καλύτερο deliverability. Δεν θα υπάρχουν στατιστικά open/click."}
+            ? t("Καταγράφονται opens & clicks (open pixel + rewriting των links).")
+            : t("Clean αποστολή — χωρίς open pixel και χωρίς rewriting των links, για καλύτερο deliverability. Δεν θα υπάρχουν στατιστικά open/click.")}
         </p>
       </div>
 
@@ -3981,35 +3981,35 @@ function SendWindowCard({ isOwner }) {
           <label className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
             <input type="checkbox" disabled={!isOwner} checked={s.unsubscribeEnabled !== false}
               onChange={(e) => update({ unsubscribeEnabled: e.target.checked })} />
-            Ενεργό
+            {t("Ενεργό")}
           </label>
         </div>
         <p className="text-xs" style={{ color: C.slate }}>
           {s.unsubscribeEnabled !== false
-            ? "Προστίθεται List-Unsubscribe header + ο σύνδεσμος {{unsubscribe_link}} λειτουργεί. Συνιστάται για deliverability."
-            : "Χωρίς List-Unsubscribe header· το {{unsubscribe_link}} αφαιρείται από το κείμενο — 100% clean 1:1 αποστολή. Πρόσεξε τη συμμόρφωση (σε bulk απαιτείται unsubscribe)."}
+            ? t("Προστίθεται List-Unsubscribe header + ο σύνδεσμος {{unsubscribe_link}} λειτουργεί. Συνιστάται για deliverability.")
+            : t("Χωρίς List-Unsubscribe header· το {{unsubscribe_link}} αφαιρείται από το κείμενο — 100% clean 1:1 αποστολή. Πρόσεξε τη συμμόρφωση (σε bulk απαιτείται unsubscribe).")}
         </p>
 
         {s.unsubscribeEnabled !== false && (
           <div className="mt-3 space-y-3">
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
-                Κείμενο unsubscribe στο email <span style={{ fontWeight: 400 }}>— seed σε νέα emails· πρέπει να περιέχει {"{{unsubscribe_link}}"}</span>
+                {t("Κείμενο unsubscribe στο email")} <span style={{ fontWeight: 400 }}>{t("— seed σε νέα emails· πρέπει να περιέχει {{unsubscribe_link}}")}</span>
               </label>
               <textarea disabled={!isOwner} value={s.unsubscribeText || ""} onChange={(e) => update({ unsubscribeText: e.target.value })}
                 rows={3}
                 className="w-full rounded-md px-2 py-1.5 text-xs border bg-white font-mono" style={{ borderColor: C.line, color: C.ink }} />
               {(s.unsubscribeText || "").indexOf("{{unsubscribe_link}}") === -1 && (
-                <p className="text-[11px] mt-1" style={{ color: C.amber }}>⚠ Λείπει το {"{{unsubscribe_link}}"} — ο σύνδεσμος δεν θα λειτουργεί.</p>
+                <p className="text-[11px] mt-1" style={{ color: C.amber }}>{t("⚠ Λείπει το {{unsubscribe_link}} — ο σύνδεσμος δεν θα λειτουργεί.")}</p>
               )}
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Σελίδα επιβεβαίωσης — τίτλος</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Σελίδα επιβεβαίωσης — τίτλος")}</label>
               <input disabled={!isOwner} value={s.unsubscribeConfirmTitle || ""} onChange={(e) => update({ unsubscribeConfirmTitle: e.target.value })}
                 className="w-full rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Σελίδα επιβεβαίωσης — μήνυμα</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Σελίδα επιβεβαίωσης — μήνυμα")}</label>
               <input disabled={!isOwner} value={s.unsubscribeConfirmMessage || ""} onChange={(e) => update({ unsubscribeConfirmMessage: e.target.value })}
                 className="w-full rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
             </div>
@@ -4022,7 +4022,7 @@ function SendWindowCard({ isOwner }) {
           <button onClick={save} disabled={saving}
             className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold text-white"
             style={{ backgroundColor: C.sky, opacity: saving ? 0.7 : 1 }}>
-            {saving && <Loader2 size={13} className="animate-spin" />} Αποθήκευση
+            {saving && <Loader2 size={13} className="animate-spin" />} {t("Αποθήκευση")}
           </button>
           {msg && <span className="text-xs" style={{ color: C.slate }}>{msg}</span>}
         </div>
@@ -4055,7 +4055,7 @@ function UnipileSettingsCard({ onSaved }) {
       setInmailApi(s.inmailApi || "classic");
       setOpen(!s.unipileConfigured); // auto-expand if not set up yet
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Δεν φορτώθηκε.");
+      setErr(e instanceof ApiError ? e.message : t("Δεν φορτώθηκε."));
     } finally {
       setLoading(false);
     }
@@ -4073,7 +4073,7 @@ function UnipileSettingsCard({ onSaved }) {
       await load();
       onSaved && onSaved();
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Η αποθήκευση απέτυχε.");
+      setErr(e instanceof ApiError ? e.message : t("Η αποθήκευση απέτυχε."));
     } finally {
       setBusy(false);
     }
@@ -4083,25 +4083,25 @@ function UnipileSettingsCard({ onSaved }) {
     <Card className="p-4 mb-4">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium flex items-center gap-1.5" style={{ color: C.ink }}>
-          <Linkedin size={15} /> Ρυθμίσεις Unipile
+          <Linkedin size={15} /> {t("Ρυθμίσεις Unipile")}
           {state && (
             <span className="ml-1 text-xs font-medium px-2 py-0.5 rounded-md"
               style={state.unipileConfigured ? { backgroundColor: `${C.mint}18`, color: C.mint } : { backgroundColor: C.pale, color: C.slate }}>
-              {state.unipileConfigured ? "Ρυθμισμένο ✓" : "Δεν έχει ρυθμιστεί"}
+              {state.unipileConfigured ? t("Ρυθμισμένο ✓") : t("Δεν έχει ρυθμιστεί")}
             </span>
           )}
         </div>
         <button type="button" onClick={() => setOpen((o) => !o)} className="text-xs font-medium" style={{ color: C.sky }}>
-          {open ? "Απόκρυψη" : "Επεξεργασία"}
+          {open ? t("Απόκρυψη") : t("Επεξεργασία")}
         </button>
       </div>
       {open && (
         loading ? (
-          <div className="mt-3"><Spinner label="Φόρτωση…" /></div>
+          <div className="mt-3"><Spinner label={t("Φόρτωση…")} /></div>
         ) : (
           <form onSubmit={save} className="space-y-3 mt-3">
             <p className="text-xs" style={{ color: C.slate }}>
-              Access token και DSN για το Unipile API. Το token αποθηκεύεται κρυπτογραφημένο και δεν εμφανίζεται ποτέ ξανά.
+              {t("Access token και DSN για το Unipile API. Το token αποθηκεύεται κρυπτογραφημένο και δεν εμφανίζεται ποτέ ξανά.")}
             </p>
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Unipile DSN (base URL)</label>
@@ -4111,14 +4111,14 @@ function UnipileSettingsCard({ onSaved }) {
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
-                Access token {state?.unipileAccessTokenSet && <span style={{ color: C.mint, fontWeight: 400 }}>— έχει οριστεί (κενό = ίδιο)</span>}
+                {t("Access token")} {state?.unipileAccessTokenSet && <span style={{ color: C.mint, fontWeight: 400 }}>{t("— έχει οριστεί (κενό = ίδιο)")}</span>}
               </label>
               <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off"
-                placeholder={state?.unipileAccessTokenSet ? "••••••••  (άφησε κενό για να μη το αλλάξεις)" : "X-API-KEY access token"}
+                placeholder={state?.unipileAccessTokenSet ? t("••••••••  (άφησε κενό για να μη το αλλάξεις)") : "X-API-KEY access token"}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>InMail API tier <span style={{ fontWeight: 400 }}>— ανάλογα με το premium seat σου</span></label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("InMail API tier")} <span style={{ fontWeight: 400 }}>{t("— ανάλογα με το premium seat σου")}</span></label>
               <select value={inmailApi} onChange={(e) => setInmailApi(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
                 <option value="classic">Classic (Premium / Sales Navigator)</option>
@@ -4130,9 +4130,9 @@ function UnipileSettingsCard({ onSaved }) {
             <div className="flex items-center gap-3">
               <button type="submit" disabled={busy}
                 className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-                {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+                {busy && <Loader2 size={14} className="animate-spin" />} {t("Αποθήκευση")}
               </button>
-              {saved && <span className="text-xs" style={{ color: C.mint }}>Αποθηκεύτηκε ✓</span>}
+              {saved && <span className="text-xs" style={{ color: C.mint }}>{t("Αποθηκεύτηκε ✓")}</span>}
             </div>
           </form>
         )
@@ -4156,7 +4156,7 @@ function LinkedInAccountCard({ refreshKey }) {
     try {
       setData(await api.get("/linkedin/account"));
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Δεν φορτώθηκε.");
+      setErr(e instanceof ApiError ? e.message : t("Δεν φορτώθηκε."));
     } finally {
       setLoading(false);
     }
@@ -4168,9 +4168,9 @@ function LinkedInAccountCard({ refreshKey }) {
     try {
       const r = await api.post("/linkedin/connect");
       if (r.url) window.open(r.url, "_blank", "noopener");
-      else setErr("Δεν επιστράφηκε σύνδεσμος σύνδεσης.");
+      else setErr(t("Δεν επιστράφηκε σύνδεσμος σύνδεσης."));
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Η σύνδεση απέτυχε.");
+      setErr(e instanceof ApiError ? e.message : t("Η σύνδεση απέτυχε."));
     } finally {
       setBusy("");
     }
@@ -4178,21 +4178,21 @@ function LinkedInAccountCard({ refreshKey }) {
   async function doAction(kind, path) {
     setBusy(kind); setErr("");
     try { await api.post(path); await load(); }
-    catch (e) { setErr(e instanceof ApiError ? e.message : "Η ενέργεια απέτυχε."); }
+    catch (e) { setErr(e instanceof ApiError ? e.message : t("Η ενέργεια απέτυχε.")); }
     finally { setBusy(""); }
   }
   async function disconnect() {
-    if (!window.confirm("Αποσύνδεση του LinkedIn λογαριασμού;")) return;
+    if (!window.confirm(t("Αποσύνδεση του LinkedIn λογαριασμού;"))) return;
     setBusy("disconnect"); setErr("");
     try { await api.del("/linkedin/account"); await load(); }
-    catch (e) { setErr(e instanceof ApiError ? e.message : "Η αποσύνδεση απέτυχε."); }
+    catch (e) { setErr(e instanceof ApiError ? e.message : t("Η αποσύνδεση απέτυχε.")); }
     finally { setBusy(""); }
   }
 
   const acc = data?.account;
   const configured = data?.configured;
   const statusColor = acc?.status === "ok" ? C.mint : acc?.status === "error" ? C.coral : C.amber;
-  const statusLabel = { ok: "Ενεργός", checkpoint_needed: "Χρειάζεται επαλήθευση (checkpoint)", error: "Σφάλμα", paused: "Σε παύση" }[acc?.status] || acc?.status;
+  const statusLabel = { ok: t("Ενεργός"), checkpoint_needed: t("Χρειάζεται επαλήθευση (checkpoint)"), error: t("Σφάλμα"), paused: t("Σε παύση") }[acc?.status] || acc?.status;
 
   return (
     <Card className="p-4 mb-4">
@@ -4203,29 +4203,29 @@ function LinkedInAccountCard({ refreshKey }) {
         {!acc && configured && (
           <button onClick={connect} disabled={!!busy}
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}>
-            {busy === "connect" ? <Loader2 size={13} className="animate-spin" /> : <Linkedin size={13} />} Σύνδεση λογαριασμού
+            {busy === "connect" ? <Loader2 size={13} className="animate-spin" /> : <Linkedin size={13} />} {t("Σύνδεση λογαριασμού")}
           </button>
         )}
       </div>
 
       {loading ? (
-        <Spinner label="Φόρτωση…" />
+        <Spinner label={t("Φόρτωση…")} />
       ) : !configured ? (
         <p className="text-xs" style={{ color: C.slate }}>
-          Το LinkedIn outreach δεν έχει ρυθμιστεί ακόμα από τον διαχειριστή πλατφόρμας (Unipile access token). Επικοινώνησε μαζί του για να ενεργοποιηθεί.
+          {t("Το LinkedIn outreach δεν έχει ρυθμιστεί ακόμα από τον διαχειριστή πλατφόρμας (Unipile access token). Επικοινώνησε μαζί του για να ενεργοποιηθεί.")}
         </p>
       ) : !acc ? (
         <p className="text-xs" style={{ color: C.slate }}>
-          Σύνδεσε τον προσωπικό σου LinkedIn λογαριασμό για να στέλνεις αιτήματα σύνδεσης και μηνύματα μέσω sequences. Η σύνδεση γίνεται σε νέα καρτέλα (login + τυχόν 2FA).
+          {t("Σύνδεσε τον προσωπικό σου LinkedIn λογαριασμό για να στέλνεις αιτήματα σύνδεσης και μηνύματα μέσω sequences. Η σύνδεση γίνεται σε νέα καρτέλα (login + τυχόν 2FA).")}
         </p>
       ) : (
         <>
           <div className="flex items-center justify-between rounded-lg px-3 py-2 mb-2" style={{ backgroundColor: C.pale }}>
             <div className="text-sm" style={{ color: C.ink }}>
               <span className="font-medium" style={{ color: statusColor }}>{statusLabel}</span>
-              {acc.paused && <span className="ml-2 text-xs" style={{ color: C.amber }}>· σε παύση</span>}
+              {acc.paused && <span className="ml-2 text-xs" style={{ color: C.amber }}>{t("· σε παύση")}</span>}
               <span className="ml-2 text-xs" style={{ color: C.slate }}>
-                {acc.connectionsSentToday}/{acc.maxConnectionsPerDay} αιτήματα · {acc.messagesSentToday}/{acc.maxMessagesPerDay} μηνύματα · {acc.inmailsSentToday ?? 0}/{acc.maxInmailsPerDay ?? 0} InMail σήμερα
+                {t("{cs}/{cm} αιτήματα · {ms}/{mm} μηνύματα · {is}/{im} InMail σήμερα", { cs: acc.connectionsSentToday, cm: acc.maxConnectionsPerDay, ms: acc.messagesSentToday, mm: acc.maxMessagesPerDay, is: acc.inmailsSentToday ?? 0, im: acc.maxInmailsPerDay ?? 0 })}
               </span>
             </div>
           </div>
@@ -4233,26 +4233,26 @@ function LinkedInAccountCard({ refreshKey }) {
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => doAction("refresh", "/linkedin/account/refresh")} disabled={!!busy}
               className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
-              {busy === "refresh" ? "Ανανέωση…" : "Ανανέωση status"}
+              {busy === "refresh" ? t("Ανανέωση…") : t("Ανανέωση status")}
             </button>
             {acc.paused ? (
               <button onClick={() => doAction("resume", "/linkedin/account/resume")} disabled={!!busy}
                 className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.mint }}>
-                {busy === "resume" ? "…" : "Επανεκκίνηση"}
+                {busy === "resume" ? "…" : t("Επανεκκίνηση")}
               </button>
             ) : (
               <button onClick={() => doAction("pause", "/linkedin/account/pause")} disabled={!!busy}
                 className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.amber }}>
-                {busy === "pause" ? "…" : "Παύση (kill-switch)"}
+                {busy === "pause" ? "…" : t("Παύση (kill-switch)")}
               </button>
             )}
             <button onClick={connect} disabled={!!busy}
               className="rounded-lg px-3 py-1.5 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
-              Επανασύνδεση
+              {t("Επανασύνδεση")}
             </button>
             <button onClick={disconnect} disabled={!!busy}
               className="rounded-lg px-3 py-1.5 text-xs font-medium border ml-auto" style={{ borderColor: C.line, color: C.coral }}>
-              <Trash2 size={12} className="inline" /> Αποσύνδεση
+              <Trash2 size={12} className="inline" /> {t("Αποσύνδεση")}
             </button>
           </div>
         </>
@@ -4273,7 +4273,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
   const [linkedinRefresh, setLinkedinRefresh] = useState(0);
 
   async function handleRemove(m) {
-    if (!window.confirm(`Αφαίρεση του/της ${m.name || m.email} από την ομάδα;`)) return;
+    if (!window.confirm(t("Αφαίρεση του/της {who} από την ομάδα;", { who: m.name || m.email }))) return;
     setBusyId(m.id);
     try {
       await onRemove(m.id);
@@ -4283,13 +4283,13 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
   }
 
   async function handleDisconnectMailbox(acc) {
-    if (!window.confirm(`Αποσύνδεση του mailbox ${acc.email}; Οι αποστολές που το χρησιμοποιούσαν θα περάσουν στα υπόλοιπα συνδεδεμένα mailbox.`)) return;
+    if (!window.confirm(t("Αποσύνδεση του mailbox {email}; Οι αποστολές που το χρησιμοποιούσαν θα περάσουν στα υπόλοιπα συνδεδεμένα mailbox.", { email: acc.email }))) return;
     setMailboxError("");
     setMailboxBusyId(acc.id);
     try {
       await onDisconnectMailbox(acc.id);
     } catch (err) {
-      setMailboxError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποσύνδεση.");
+      setMailboxError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αποσύνδεση."));
     } finally {
       setMailboxBusyId(null);
     }
@@ -4301,7 +4301,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
     try {
       await onExport();
     } catch (err) {
-      setExportError(err instanceof ApiError ? err.message : "Η εξαγωγή απέτυχε.");
+      setExportError(err instanceof ApiError ? err.message : t("Η εξαγωγή απέτυχε."));
     } finally {
       setExporting(false);
     }
@@ -4314,18 +4314,18 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Ομάδα")}</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Οι συνεργάτες στο workspace σου — μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Οι συνεργάτες στο workspace σου — μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.")}</p>
         </div>
         {isOwner && (
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border" style={{ borderColor: C.line, color: C.ink, opacity: exporting ? 0.7 : 1 }}>
-              {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Εξαγωγή δεδομένων
+              {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} {t("Εξαγωγή δεδομένων")}
             </button>
             <button onClick={() => setShowExisting(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium border" style={{ borderColor: C.line, color: C.ink }}>
-              <UserPlus size={15} /> Υπάρχων χρήστης
+              <UserPlus size={15} /> {t("Υπάρχων χρήστης")}
             </button>
             <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white" style={{ backgroundColor: C.sky }}>
-              <UserPlus size={15} /> Πρόσκληση
+              <UserPlus size={15} /> {t("Πρόσκληση")}
             </button>
           </div>
         )}
@@ -4336,14 +4336,14 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
         <SendWindowCard isOwner={isOwner} />
         {isOwner && invites?.length > 0 && (
           <Card className="p-4 mb-4">
-            <div className="text-sm font-medium mb-3" style={{ color: C.ink }}>Εκκρεμείς προσκλήσεις</div>
+            <div className="text-sm font-medium mb-3" style={{ color: C.ink }}>{t("Εκκρεμείς προσκλήσεις")}</div>
             <div className="space-y-2">
               {invites.map((inv) => (
                 <div key={inv.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
                   <div className="text-sm" style={{ color: C.ink }}>
-                    {inv.email} <span style={{ color: C.slate }}>— {inv.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"} · {fmtDate(inv.createdAt)}</span>
+                    {inv.email} <span style={{ color: C.slate }}>— {inv.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")} · {fmtDate(inv.createdAt)}</span>
                   </div>
-                  <button onClick={() => onRevokeInvite(inv.id)} title="Ανάκληση" style={{ color: C.coral }}>
+                  <button onClick={() => onRevokeInvite(inv.id)} title={t("Ανάκληση")} style={{ color: C.coral }}>
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -4354,21 +4354,21 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
         {isOwner && (
           <Card className="p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-medium" style={{ color: C.ink }}>Συνδεδεμένα mailbox</div>
+              <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Συνδεδεμένα mailbox")}</div>
               <a
                 href={`${API_URL}/auth/google`}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
                 style={{ backgroundColor: C.sky }}
               >
-                <Mail size={13} /> Σύνδεση mailbox
+                <Mail size={13} /> {t("Σύνδεση mailbox")}
               </a>
             </div>
             <p className="text-xs mb-3" style={{ color: C.slate }}>
-              Οι αποστολές μοιράζονται αυτόματα ανάμεσα σε όλα τα συνδεδεμένα mailbox — περισσότερα mailbox σημαίνουν μεγαλύτερη ημερήσια χωρητικότητα αποστολών.
+              {t("Οι αποστολές μοιράζονται αυτόματα ανάμεσα σε όλα τα συνδεδεμένα mailbox — περισσότερα mailbox σημαίνουν μεγαλύτερη ημερήσια χωρητικότητα αποστολών.")}
             </p>
             <ErrorNote message={mailboxError} />
             {(!gmailAccounts || gmailAccounts.length === 0) ? (
-              <p className="text-sm" style={{ color: C.slate }}>Δεν έχει συνδεθεί κανένα mailbox ακόμα.</p>
+              <p className="text-sm" style={{ color: C.slate }}>{t("Δεν έχει συνδεθεί κανένα mailbox ακόμα.")}</p>
             ) : (
               <div className="space-y-1.5">
                 {gmailAccounts.map((acc) => (
@@ -4376,13 +4376,13 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
                     <div className="text-sm" style={{ color: C.ink }}>
                       {acc.email}
                       <span className="ml-2 text-xs" style={{ color: acc.needsReconnect ? C.coral : C.slate }}>
-                        {acc.needsReconnect ? "χρειάζεται επανασύνδεση" : `${acc.sentToday}/${acc.dailyCap} σήμερα`}
+                        {acc.needsReconnect ? t("χρειάζεται επανασύνδεση") : t("{sent}/{cap} σήμερα", { sent: acc.sentToday, cap: acc.dailyCap })}
                       </span>
                     </div>
                     <button
                       disabled={mailboxBusyId === acc.id}
                       onClick={() => handleDisconnectMailbox(acc)}
-                      title="Αποσύνδεση"
+                      title={t("Αποσύνδεση")}
                       style={{ color: C.coral, opacity: mailboxBusyId === acc.id ? 0.6 : 1 }}
                     >
                       <Trash2 size={13} />
@@ -4400,17 +4400,17 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
           </>
         )}
         {loading ? (
-          <Spinner label="Φόρτωση ομάδας…" />
+          <Spinner label={t("Φόρτωση ομάδας…")} />
         ) : (
           <Card className="p-0 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
-                    <th className="font-medium px-4 py-2.5">Συνεργάτης</th>
-                    <th className="font-medium px-4 py-2.5">Ρόλος</th>
-                    <th className="font-medium px-4 py-2.5">Εγγραφή</th>
-                    {isOwner && <th className="font-medium px-4 py-2.5 text-right">Ενέργειες</th>}
+                    <th className="font-medium px-4 py-2.5">{t("Συνεργάτης")}</th>
+                    <th className="font-medium px-4 py-2.5">{t("Ρόλος")}</th>
+                    <th className="font-medium px-4 py-2.5">{t("Εγγραφή")}</th>
+                    {isOwner && <th className="font-medium px-4 py-2.5 text-right">{t("Ενέργειες")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -4422,16 +4422,16 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
                       </td>
                       <td className="px-4 py-3">
                         {m.role === "owner" ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.navy }}><ShieldCheck size={13} /> Ιδιοκτήτης</span>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.navy }}><ShieldCheck size={13} /> {t("Ιδιοκτήτης")}</span>
                         ) : (
-                          <span className="text-xs" style={{ color: C.slate }}>Μέλος</span>
+                          <span className="text-xs" style={{ color: C.slate }}>{t("Μέλος")}</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(m.createdAt)}</td>
                       {isOwner && (
                         <td className="px-4 py-3 text-right">
                           {m.role !== "owner" && m.id !== currentUserId && (
-                            <button disabled={busyId === m.id} onClick={() => handleRemove(m)} title="Αφαίρεση"
+                            <button disabled={busyId === m.id} onClick={() => handleRemove(m)} title={t("Αφαίρεση")}
                               className="rounded-md p-1.5" style={{ color: C.coral }}>
                               <Trash2 size={14} />
                             </button>
@@ -4491,29 +4491,29 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
       await onCreateWebhook(newWebhookName.trim());
       setNewWebhookName("");
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία.");
+      setActionError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η δημιουργία."));
     } finally {
       setBusy(false);
     }
   }
 
   async function handleRotate(id) {
-    if (!window.confirm("Η παλιά διεύθυνση θα σταματήσει να δουλεύει — θα χρειαστεί να ενημερώσεις τη φόρμα/plugin με τη νέα. Συνέχεια;")) return;
+    if (!window.confirm(t("Η παλιά διεύθυνση θα σταματήσει να δουλεύει — θα χρειαστεί να ενημερώσεις τη φόρμα/plugin με τη νέα. Συνέχεια;"))) return;
     setActionError("");
     try {
       await onRotateWebhook(id);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η ανανέωση.");
+      setActionError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η ανανέωση."));
     }
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Διαγραφή αυτού του webhook; Η φόρμα/plugin που το χρησιμοποιεί θα σταματήσει να στέλνει leads.")) return;
+    if (!window.confirm(t("Διαγραφή αυτού του webhook; Η φόρμα/plugin που το χρησιμοποιεί θα σταματήσει να στέλνει leads."))) return;
     setActionError("");
     try {
       await onDeleteWebhook(id);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η διαγραφή.");
+      setActionError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η διαγραφή."));
     }
   }
 
@@ -4526,19 +4526,19 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
       await onConnectMeta(metaForm);
       setMetaForm({ pageId: "", pageName: "", pageAccessToken: "" });
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η σύνδεση.");
+      setActionError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η σύνδεση."));
     } finally {
       setBusy(false);
     }
   }
 
   async function handleDisconnectMeta(id) {
-    if (!window.confirm("Αποσύνδεση αυτής της σελίδας Meta; Νέα leads από αυτήν δεν θα καταγράφονται πια.")) return;
+    if (!window.confirm(t("Αποσύνδεση αυτής της σελίδας Meta; Νέα leads από αυτήν δεν θα καταγράφονται πια."))) return;
     setActionError("");
     try {
       await onDisconnectMeta(id);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποσύνδεση.");
+      setActionError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αποσύνδεση."));
     }
   }
 
@@ -4551,19 +4551,19 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
       await onFinalizeLinkedIn(linkedinForm);
       setLinkedinForm({ organizationUrn: "", organizationName: "" });
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η ολοκλήρωση της σύνδεσης.");
+      setActionError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η ολοκλήρωση της σύνδεσης."));
     } finally {
       setBusy(false);
     }
   }
 
   async function handleDisconnectLinkedIn(id) {
-    if (!window.confirm("Αποσύνδεση αυτού του LinkedIn organization; Νέα leads από αυτό δεν θα καταγράφονται πια.")) return;
+    if (!window.confirm(t("Αποσύνδεση αυτού του LinkedIn organization; Νέα leads από αυτό δεν θα καταγράφονται πια."))) return;
     setActionError("");
     try {
       await onDisconnectLinkedIn(id);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποσύνδεση.");
+      setActionError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αποσύνδεση."));
     }
   }
 
@@ -4580,7 +4580,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
         </div>
         <div className="px-8 py-16 flex flex-col items-center gap-2 text-sm" style={{ color: C.slate }}>
           <ShieldCheck size={28} strokeWidth={1.5} />
-          Μόνο ο ιδιοκτήτης της εταιρείας μπορεί να διαχειριστεί τα integrations.
+          {t("Μόνο ο ιδιοκτήτης της εταιρείας μπορεί να διαχειριστεί τα integrations.")}
         </div>
       </div>
     );
@@ -4590,20 +4590,20 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
     <div className="h-full overflow-auto">
       <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Integrations</h1>
-        <p className="text-sm mt-0.5" style={{ color: C.slate }}>Αυτόματη εισαγωγή επαφών από WordPress, φόρμες leadgen και Meta Lead Ads.</p>
+        <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Αυτόματη εισαγωγή επαφών από WordPress, φόρμες leadgen και Meta Lead Ads.")}</p>
       </div>
       <div className="px-8 py-4 space-y-6 max-w-3xl">
         <ErrorNote message={error || actionError} onRetry={error ? onReload : undefined} />
 
         <Card className="p-5">
           <div className="flex items-center justify-between mb-1">
-            <div className="text-sm font-semibold" style={{ color: C.ink }}>Γενικό webhook (WordPress / φόρμες / Zapier)</div>
+            <div className="text-sm font-semibold" style={{ color: C.ink }}>{t("Γενικό webhook (WordPress / φόρμες / Zapier)")}</div>
           </div>
           <p className="text-xs mb-3" style={{ color: C.slate }}>
-            Δημιούργησε μία διεύθυνση ανά φόρμα/site και βάλε την ως "webhook URL" στο plugin σου (π.χ. WP Webhooks, Gravity Forms, Fluent Forms, Zapier/Make). Κάθε POST με email δημιουργεί ή ενημερώνει μια επαφή.
+            {t("Δημιούργησε μία διεύθυνση ανά φόρμα/site και βάλε την ως \"webhook URL\" στο plugin σου (π.χ. WP Webhooks, Gravity Forms, Fluent Forms, Zapier/Make). Κάθε POST με email δημιουργεί ή ενημερώνει μια επαφή.")}
           </p>
           {loading ? (
-            <Spinner label="Φόρτωση…" />
+            <Spinner label={t("Φόρτωση…")} />
           ) : (
             <>
               {webhooks.length > 0 && (
@@ -4611,23 +4611,23 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
                   {webhooks.map((w) => (
                     <div key={w.id} className="rounded-lg px-3 py-2.5" style={{ backgroundColor: C.pale }}>
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{w.name || "Χωρίς όνομα"}</div>
+                        <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{w.name || t("Χωρίς όνομα")}</div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => copyUrl(w.id, w.token)} title="Αντιγραφή URL" className="rounded-md p-1.5" style={{ color: C.sky }}>
+                          <button onClick={() => copyUrl(w.id, w.token)} title={t("Αντιγραφή URL")} className="rounded-md p-1.5" style={{ color: C.sky }}>
                             <Copy size={14} />
                           </button>
-                          <button onClick={() => handleRotate(w.id)} title="Ανανέωση token" className="rounded-md p-1.5" style={{ color: C.slate }}>
+                          <button onClick={() => handleRotate(w.id)} title={t("Ανανέωση token")} className="rounded-md p-1.5" style={{ color: C.slate }}>
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => handleDelete(w.id)} title="Διαγραφή" className="rounded-md p-1.5" style={{ color: C.coral }}>
+                          <button onClick={() => handleDelete(w.id)} title={t("Διαγραφή")} className="rounded-md p-1.5" style={{ color: C.coral }}>
                             <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
                       <div className="text-xs mt-1 font-mono truncate" style={{ color: C.slate }}>{webhookUrl(w.token)}</div>
-                      {copiedId === w.id && <div className="text-xs mt-1" style={{ color: C.sky }}>Αντιγράφηκε!</div>}
+                      {copiedId === w.id && <div className="text-xs mt-1" style={{ color: C.sky }}>{t("Αντιγράφηκε!")}</div>}
                       <div className="text-xs mt-1" style={{ color: C.slate }}>
-                        {w.receivedCount} leads {w.lastReceivedAt ? `· τελευταίο ${fmtDate(w.lastReceivedAt)}` : "· κανένα ακόμα"}
+                        {w.receivedCount} leads {w.lastReceivedAt ? t("· τελευταίο {d}", { d: fmtDate(w.lastReceivedAt) }) : t("· κανένα ακόμα")}
                       </div>
                     </div>
                   ))}
@@ -4637,7 +4637,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
                 <input
                   value={newWebhookName}
                   onChange={(e) => setNewWebhookName(e.target.value)}
-                  placeholder="Ετικέτα (π.χ. WordPress site)"
+                  placeholder={t("Ετικέτα (π.χ. WordPress site)")}
                   className="flex-1 rounded-lg border px-3 py-2 text-sm"
                   style={{ borderColor: C.line }}
                 />
@@ -4647,7 +4647,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
                   className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white shrink-0"
                   style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}
                 >
-                  <Plus size={14} /> Νέο webhook
+                  <Plus size={14} /> {t("Νέο webhook")}
                 </button>
               </form>
             </>
@@ -4657,7 +4657,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
         <Card className="p-5">
           <div className="text-sm font-semibold mb-1" style={{ color: C.ink }}>Meta Lead Ads</div>
           <p className="text-xs mb-3" style={{ color: C.slate }}>
-            Απευθείας σύνδεση σελίδας Facebook/Instagram μέσω Graph API. Χρειάζεται το Page ID και ένα Page Access Token με δικαίωμα leads_retrieval — δες το SETUP.md για τα βήματα δημιουργίας Meta App.
+            {t("Απευθείας σύνδεση σελίδας Facebook/Instagram μέσω Graph API. Χρειάζεται το Page ID και ένα Page Access Token με δικαίωμα leads_retrieval — δες το SETUP.md για τα βήματα δημιουργίας Meta App.")}
           </p>
           {metaConnections.length > 0 && (
             <div className="space-y-2 mb-4">
@@ -4666,10 +4666,10 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{c.pageName || c.pageId}</div>
                     <div className="text-xs" style={{ color: C.slate }}>
-                      {c.receivedCount} leads {c.lastReceivedAt ? `· τελευταίο ${fmtDate(c.lastReceivedAt)}` : "· κανένα ακόμα"}
+                      {c.receivedCount} leads {c.lastReceivedAt ? t("· τελευταίο {d}", { d: fmtDate(c.lastReceivedAt) }) : t("· κανένα ακόμα")}
                     </div>
                   </div>
-                  <button onClick={() => handleDisconnectMeta(c.id)} title="Αποσύνδεση" className="rounded-md p-1.5 shrink-0" style={{ color: C.coral }}>
+                  <button onClick={() => handleDisconnectMeta(c.id)} title={t("Αποσύνδεση")} className="rounded-md p-1.5 shrink-0" style={{ color: C.coral }}>
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -4687,7 +4687,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
             <input
               value={metaForm.pageName}
               onChange={(e) => setMetaForm({ ...metaForm, pageName: e.target.value })}
-              placeholder="Όνομα σελίδας (προαιρετικό)"
+              placeholder={t("Όνομα σελίδας (προαιρετικό)")}
               className="w-full rounded-lg border px-3 py-2 text-sm"
               style={{ borderColor: C.line }}
             />
@@ -4705,7 +4705,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white"
               style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}
             >
-              <Plus size={14} /> Σύνδεση σελίδας
+              <Plus size={14} /> {t("Σύνδεση σελίδας")}
             </button>
           </form>
         </Card>
@@ -4713,7 +4713,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
         <Card className="p-5">
           <div className="text-sm font-semibold mb-1" style={{ color: C.ink }}>LinkedIn Lead Gen Forms</div>
           <p className="text-xs mb-3" style={{ color: C.slate }}>
-            Απευθείας σύνδεση μέσω LinkedIn's Lead Sync API. Χρειάζεται έγκριση από το LinkedIn (Lead Sync API access) πριν λειτουργήσει για πραγματικά organizations — δες το SETUP.md. Μέχρι τότε η σύνδεση αποθηκεύεται αλλά δεν θα λαμβάνει leads.
+            {t("Απευθείας σύνδεση μέσω LinkedIn's Lead Sync API. Χρειάζεται έγκριση από το LinkedIn (Lead Sync API access) πριν λειτουργήσει για πραγματικά organizations — δες το SETUP.md. Μέχρι τότε η σύνδεση αποθηκεύεται αλλά δεν θα λαμβάνει leads.")}
           </p>
           {linkedinConnections.length > 0 && (
             <div className="space-y-2 mb-4">
@@ -4723,11 +4723,11 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
                     <div className="text-sm font-medium truncate" style={{ color: C.ink }}>{c.organizationName || c.organizationUrn}</div>
                     <div className="text-xs" style={{ color: c.needsReconnect ? C.coral : C.slate }}>
                       {c.needsReconnect
-                        ? "χρειάζεται επανασύνδεση"
-                        : `${c.receivedCount} leads ${c.lastReceivedAt ? `· τελευταίο ${fmtDate(c.lastReceivedAt)}` : "· κανένα ακόμα"}`}
+                        ? t("χρειάζεται επανασύνδεση")
+                        : `${c.receivedCount} leads ${c.lastReceivedAt ? t("· τελευταίο {d}", { d: fmtDate(c.lastReceivedAt) }) : t("· κανένα ακόμα")}`}
                     </div>
                   </div>
-                  <button onClick={() => handleDisconnectLinkedIn(c.id)} title="Αποσύνδεση" className="rounded-md p-1.5 shrink-0" style={{ color: C.coral }}>
+                  <button onClick={() => handleDisconnectLinkedIn(c.id)} title={t("Αποσύνδεση")} className="rounded-md p-1.5 shrink-0" style={{ color: C.coral }}>
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -4736,18 +4736,18 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
           )}
           {linkedinPendingConnect ? (
             <form onSubmit={handleFinalizeLinkedIn} className="space-y-2">
-              <p className="text-xs" style={{ color: C.sky }}>Η σύνδεση με το LinkedIn έγινε — πρόσθεσε το Organization URN για να ολοκληρωθεί.</p>
+              <p className="text-xs" style={{ color: C.sky }}>{t("Η σύνδεση με το LinkedIn έγινε — πρόσθεσε το Organization URN για να ολοκληρωθεί.")}</p>
               <input
                 value={linkedinForm.organizationUrn}
                 onChange={(e) => setLinkedinForm({ ...linkedinForm, organizationUrn: e.target.value })}
-                placeholder="Organization URN (π.χ. urn:li:organization:12345)"
+                placeholder={t("Organization URN (π.χ. urn:li:organization:12345)")}
                 className="w-full rounded-lg border px-3 py-2 text-sm"
                 style={{ borderColor: C.line }}
               />
               <input
                 value={linkedinForm.organizationName}
                 onChange={(e) => setLinkedinForm({ ...linkedinForm, organizationName: e.target.value })}
-                placeholder="Όνομα (προαιρετικό)"
+                placeholder={t("Όνομα (προαιρετικό)")}
                 className="w-full rounded-lg border px-3 py-2 text-sm"
                 style={{ borderColor: C.line }}
               />
@@ -4757,7 +4757,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
                 className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white"
                 style={{ backgroundColor: C.sky, opacity: busy ? 0.6 : 1 }}
               >
-                <Plus size={14} /> Ολοκλήρωση σύνδεσης
+                <Plus size={14} /> {t("Ολοκλήρωση σύνδεσης")}
               </button>
             </form>
           ) : (
@@ -4766,7 +4766,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white w-fit"
               style={{ backgroundColor: C.sky }}
             >
-              <Globe size={14} /> Σύνδεση LinkedIn
+              <Globe size={14} /> {t("Σύνδεση LinkedIn")}
             </a>
           )}
         </Card>
@@ -4774,12 +4774,12 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
         <div>
           <button onClick={toggleRecent} className="text-sm font-medium flex items-center gap-1.5" style={{ color: C.sky }}>
             <ChevronRight size={14} style={{ transform: showRecent ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
-            Πρόσφατα leads (debug)
+            {t("Πρόσφατα leads (debug)")}
           </button>
           {showRecent && (
             <div className="mt-2 space-y-1">
               {(!recentLeads || recentLeads.length === 0) ? (
-                <p className="text-sm" style={{ color: C.slate }}>Δεν έχει καταγραφεί κανένα lead ακόμα.</p>
+                <p className="text-sm" style={{ color: C.slate }}>{t("Δεν έχει καταγραφεί κανένα lead ακόμα.")}</p>
               ) : (
                 recentLeads.map((l) => (
                   <div key={l.id} className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: C.pale, color: C.ink }}>
@@ -4810,7 +4810,7 @@ function InviteResponseModal({ invites, onAccept, onDecline, onDismiss }) {
     try {
       await fn(id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Η ενέργεια απέτυχε.");
+      setError(err instanceof ApiError ? err.message : t("Η ενέργεια απέτυχε."));
     } finally {
       setBusyId(null);
     }
@@ -4820,17 +4820,17 @@ function InviteResponseModal({ invites, onAccept, onDecline, onDismiss }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Προσκλήσεις σε εταιρείες</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Προσκλήσεις σε εταιρείες")}</h3>
           <button onClick={onDismiss} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
-        <p className="text-xs mb-4" style={{ color: C.slate }}>Κάποιος σε προσκάλεσε να μπεις στην ομάδα τους.</p>
+        <p className="text-xs mb-4" style={{ color: C.slate }}>{t("Κάποιος σε προσκάλεσε να μπεις στην ομάδα τους.")}</p>
         {error && <p className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
         <div className="space-y-2">
           {invites.map((inv) => (
             <div key={inv.id} className="rounded-lg px-3 py-3" style={{ backgroundColor: C.pale }}>
               <div className="text-sm font-medium" style={{ color: C.ink }}>{inv.companyName}</div>
               <div className="text-xs mt-0.5" style={{ color: C.slate }}>
-                Ρόλος: {inv.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"}{inv.invitedByName ? ` · από ${inv.invitedByName}` : ""}
+                {t("Ρόλος:")} {inv.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")}{inv.invitedByName ? t(" · από {who}", { who: inv.invitedByName }) : ""}
               </div>
               <div className="flex items-center gap-2 mt-2">
                 <button
@@ -4839,7 +4839,7 @@ function InviteResponseModal({ invites, onAccept, onDecline, onDismiss }) {
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
                   style={{ backgroundColor: C.mint, opacity: busyId === inv.id ? 0.7 : 1 }}
                 >
-                  <CircleCheck size={13} /> Αποδοχή
+                  <CircleCheck size={13} /> {t("Αποδοχή")}
                 </button>
                 <button
                   disabled={busyId === inv.id}
@@ -4847,13 +4847,13 @@ function InviteResponseModal({ invites, onAccept, onDecline, onDismiss }) {
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border"
                   style={{ borderColor: C.line, color: C.slate }}
                 >
-                  <CircleX size={13} /> Απόρριψη
+                  <CircleX size={13} /> {t("Απόρριψη")}
                 </button>
               </div>
             </div>
           ))}
         </div>
-        <button onClick={onDismiss} className="w-full text-center text-xs mt-4" style={{ color: C.slate }}>Αργότερα</button>
+        <button onClick={onDismiss} className="w-full text-center text-xs mt-4" style={{ color: C.slate }}>{t("Αργότερα")}</button>
       </Card>
     </div>
   );
@@ -4944,7 +4944,7 @@ export default function App() {
       const res = await api.get("/contacts?pageSize=200");
       setContacts(Array.isArray(res) ? res : res.contacts || []);
     } catch (err) {
-      setContactsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι επαφές.");
+      setContactsError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν οι επαφές."));
     } finally {
       setContactsLoading(false);
     }
@@ -4958,7 +4958,7 @@ export default function App() {
       const statsById = Object.fromEntries((ov.perSequence || []).map((s) => [s.id, s]));
       setSequences(seqs.map((s) => ({ ...s, stats: statsById[s.id] || { sent: 0, opened: 0, clicked: 0, replied: 0 } })));
     } catch (err) {
-      setSequencesError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα sequences.");
+      setSequencesError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα sequences."));
     } finally {
       setSequencesLoading(false);
     }
@@ -4977,7 +4977,7 @@ export default function App() {
       setTimeline(tl);
       setCrmOverview(crm);
     } catch (err) {
-      setAnalyticsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα analytics.");
+      setAnalyticsError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα analytics."));
     } finally {
       setAnalyticsLoading(false);
     }
@@ -4989,7 +4989,7 @@ export default function App() {
     try {
       setActivity(await api.get("/analytics/activity"));
     } catch (err) {
-      setActivityError(err instanceof ApiError ? err.message : "Δεν φορτώθηκε η δραστηριότητα.");
+      setActivityError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκε η δραστηριότητα."));
     } finally {
       setActivityLoading(false);
     }
@@ -5001,7 +5001,7 @@ export default function App() {
     try {
       setDashboard(await api.get("/dashboard/due-today"));
     } catch (err) {
-      setDashboardError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα σημερινά.");
+      setDashboardError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα σημερινά."));
     } finally {
       setDashboardLoading(false);
     }
@@ -5024,7 +5024,7 @@ export default function App() {
     try {
       setIntegrations(await api.get("/integrations"));
     } catch (err) {
-      setIntegrationsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα integrations.");
+      setIntegrationsError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα integrations."));
     } finally {
       setIntegrationsLoading(false);
     }
@@ -5080,7 +5080,7 @@ export default function App() {
     try {
       setTemplates(await api.get("/templates"));
     } catch (err) {
-      setTemplatesError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα templates.");
+      setTemplatesError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα templates."));
     } finally {
       setTemplatesLoading(false);
     }
@@ -5100,7 +5100,7 @@ export default function App() {
         setTeamInvites([]);
       }
     } catch (err) {
-      setTeamError(err instanceof ApiError ? err.message : "Δεν φορτώθηκε η ομάδα.");
+      setTeamError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκε η ομάδα."));
     } finally {
       setTeamLoading(false);
     }
@@ -5115,7 +5115,7 @@ export default function App() {
       const res = await api.get("/offers?pageSize=200");
       setOffers(Array.isArray(res) ? res : res.offers || []);
     } catch (err) {
-      setOffersError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι προσφορές.");
+      setOffersError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν οι προσφορές."));
     } finally {
       setOffersLoading(false);
     }
@@ -5131,7 +5131,7 @@ export default function App() {
       const res = await api.get("/campaigns?pageSize=200");
       setCampaigns(Array.isArray(res) ? res : res.campaigns || []);
     } catch (err) {
-      setCampaignsError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα campaigns.");
+      setCampaignsError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα campaigns."));
     } finally {
       setCampaignsLoading(false);
     }
@@ -5157,7 +5157,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const gmailConnected = params.get("gmail_connected");
     if (gmailConnected !== null) {
-      setGmailNotice(gmailConnected === "1" ? "Το Gmail συνδέθηκε." : "Η σύνδεση Gmail απέτυχε ή ακυρώθηκε.");
+      setGmailNotice(gmailConnected === "1" ? t("Το Gmail συνδέθηκε.") : t("Η σύνδεση Gmail απέτυχε ή ακυρώθηκε."));
       params.delete("gmail_connected");
       params.delete("reason");
       const clean = window.location.pathname + (params.toString() ? `?${params}` : "");
@@ -5175,7 +5175,7 @@ export default function App() {
         setLinkedinPendingConnect(true);
         setView("integrations");
       } else if (linkedinConnected === "0") {
-        setLinkedinNotice("Η σύνδεση LinkedIn απέτυχε ή ακυρώθηκε.");
+        setLinkedinNotice(t("Η σύνδεση LinkedIn απέτυχε ή ακυρώθηκε."));
       }
       params.delete("linkedin_connected");
       params.delete("reason");
@@ -5299,7 +5299,7 @@ export default function App() {
       await api.post("/auth/switch-company", { companyId });
       window.location.reload();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αλλαγή εταιρείας.");
+      window.alert(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αλλαγή εταιρείας."));
     }
   }
 
@@ -5544,7 +5544,7 @@ export default function App() {
   if (authState === "loading") {
     return (
       <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC" }}>
-        <Spinner label="Φόρτωση…" />
+        <Spinner label={t("Φόρτωση…")} />
       </div>
     );
   }
@@ -5764,7 +5764,7 @@ export default function App() {
             />
           )}
           {view === "analytics" && (
-            <Suspense fallback={<Spinner label="Φόρτωση analytics…" />}>
+            <Suspense fallback={<Spinner label={t("Φόρτωση analytics…")} />}>
               <AnalyticsView overview={overview} timeline={timeline} crmOverview={crmOverview} loading={analyticsLoading} error={analyticsError} onReload={loadAnalytics} />
             </Suspense>
           )}

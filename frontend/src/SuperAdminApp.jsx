@@ -29,7 +29,7 @@ function NewAdminUserModal({ onClose, onCreate, companies }) {
       await onCreate({ email, password, name: name || undefined, isAdmin, companyId: companyId || undefined });
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία χρήστη.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η δημιουργία χρήστη."));
     } finally {
       setBusy(false);
     }
@@ -39,21 +39,21 @@ function NewAdminUserModal({ onClose, onCreate, companies }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέος χρήστης</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Νέος χρήστης")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
           <input required type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Όνομα (προαιρετικό)" value={name} onChange={(e) => setName(e.target.value)}
+          <input placeholder={t("Όνομα (προαιρετικό)")} value={name} onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={password} onChange={(e) => setPassword(e.target.value)}
+          <input required type="password" minLength={10} placeholder={t("Κωδικός (τουλάχιστον 10 χαρακτήρες)")} value={password} onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Εταιρεία</label>
+            <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Εταιρεία")}</label>
             <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-              <option value="">— χωρίς εταιρεία (θα οριστεί αργότερα) —</option>
+              <option value="">{t("— χωρίς εταιρεία (θα οριστεί αργότερα) —")}</option>
               {(companies || []).map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -61,11 +61,11 @@ function NewAdminUserModal({ onClose, onCreate, companies }) {
           </div>
           <label className="flex items-center gap-2 text-sm" style={{ color: C.ink }}>
             <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
-            Δικαιώματα admin
+            {t("Δικαιώματα admin")}
           </label>
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία χρήστη
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Δημιουργία χρήστη")}
           </button>
         </form>
       </Card>
@@ -103,7 +103,7 @@ function NewCompanyModal({ onClose, onCreate, users }) {
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η δημιουργία εταιρείας.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η δημιουργία εταιρείας."));
     } finally {
       setBusy(false);
     }
@@ -113,55 +113,55 @@ function NewCompanyModal({ onClose, onCreate, users }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Νέα εταιρεία</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Νέα εταιρεία")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <input required placeholder="Όνομα εταιρείας" value={companyName} onChange={(e) => setCompanyName(e.target.value)}
+          <input required placeholder={t("Όνομα εταιρείας")} value={companyName} onChange={(e) => setCompanyName(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
 
           <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: C.pale }}>
             <button type="button" onClick={() => setOwnerMode("new")}
               className="flex-1 rounded-md py-1.5 text-xs font-medium"
               style={{ backgroundColor: ownerMode === "new" ? "white" : "transparent", color: ownerMode === "new" ? C.ink : C.slate }}>
-              Νέος ιδιοκτήτης
+              {t("Νέος ιδιοκτήτης")}
             </button>
             <button type="button" onClick={() => setOwnerMode("existing")}
               className="flex-1 rounded-md py-1.5 text-xs font-medium"
               style={{ backgroundColor: ownerMode === "existing" ? "white" : "transparent", color: ownerMode === "existing" ? C.ink : C.slate }}>
-              Υπάρχων χρήστης
+              {t("Υπάρχων χρήστης")}
             </button>
           </div>
 
           {ownerMode === "existing" ? (
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Ιδιοκτήτης</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Ιδιοκτήτης")}</label>
               <select required value={existingOwnerUserId} onChange={(e) => setExistingOwnerUserId(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-                <option value="">— επίλεξε χρήστη —</option>
+                <option value="">{t("— επίλεξε χρήστη —")}</option>
                 {(users || []).map((u) => (
                   <option key={u.id} value={u.id}>{u.name ? `${u.name} (${u.email})` : u.email}</option>
                 ))}
               </select>
               <p className="text-xs mt-1" style={{ color: C.slate }}>
-                Ο χρήστης θα γίνει ιδιοκτήτης της νέας εταιρείας, χωρίς να αγγίξει τις υπόλοιπες εταιρείες του.
+                {t("Ο χρήστης θα γίνει ιδιοκτήτης της νέας εταιρείας, χωρίς να αγγίξει τις υπόλοιπες εταιρείες του.")}
               </p>
             </div>
           ) : (
             <>
-              <p className="text-xs font-medium pt-1" style={{ color: C.slate }}>Πρώτος χρήστης (ιδιοκτήτης)</p>
+              <p className="text-xs font-medium pt-1" style={{ color: C.slate }}>{t("Πρώτος χρήστης (ιδιοκτήτης)")}</p>
               <input required type="email" placeholder="Email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-              <input placeholder="Όνομα (προαιρετικό)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
+              <input placeholder={t("Όνομα (προαιρετικό)")} value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-              <input required type="password" minLength={10} placeholder="Κωδικός (τουλάχιστον 10 χαρακτήρες)" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)}
+              <input required type="password" minLength={10} placeholder={t("Κωδικός (τουλάχιστον 10 χαρακτήρες)")} value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
             </>
           )}
 
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Δημιουργία εταιρείας
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Δημιουργία εταιρείας")}
           </button>
         </form>
       </Card>
@@ -199,7 +199,7 @@ function EditCompanyModal({ company, onClose, onSave }) {
       await onSave(company.id, form);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αποθήκευση.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αποθήκευση."));
     } finally {
       setBusy(false);
     }
@@ -209,33 +209,33 @@ function EditCompanyModal({ company, onClose, onSave }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5 max-h-[85vh] overflow-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Στοιχεία εταιρείας</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Στοιχεία εταιρείας")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">
-          <input required autoFocus placeholder="Όνομα εταιρείας" value={form.name} onChange={set("name")}
+          <input required autoFocus placeholder={t("Όνομα εταιρείας")} value={form.name} onChange={set("name")}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Επωνυμία (νομική, προαιρετικό)" value={form.legalName} onChange={set("legalName")}
+          <input placeholder={t("Επωνυμία (νομική, προαιρετικό)")} value={form.legalName} onChange={set("legalName")}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div className="grid grid-cols-2 gap-3">
-            <input placeholder="ΑΦΜ" value={form.taxId} onChange={set("taxId")}
+            <input placeholder={t("ΑΦΜ")} value={form.taxId} onChange={set("taxId")}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-            <input placeholder="ΔΟΥ" value={form.taxOffice} onChange={set("taxOffice")}
+            <input placeholder={t("ΔΟΥ")} value={form.taxOffice} onChange={set("taxOffice")}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
-          <input placeholder="ΓΕΜΗ" value={form.gemhNumber} onChange={set("gemhNumber")}
+          <input placeholder={t("ΓΕΜΗ")} value={form.gemhNumber} onChange={set("gemhNumber")}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder="Διεύθυνση" value={form.address} onChange={set("address")}
+          <input placeholder={t("Διεύθυνση")} value={form.address} onChange={set("address")}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div className="grid grid-cols-2 gap-3">
-            <input placeholder="Τηλέφωνο" value={form.phone} onChange={set("phone")}
+            <input placeholder={t("Τηλέφωνο")} value={form.phone} onChange={set("phone")}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-            <input placeholder="Email επικοινωνίας" value={form.email} onChange={set("email")}
+            <input placeholder={t("Email επικοινωνίας")} value={form.email} onChange={set("email")}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
-            {busy && <Loader2 size={14} className="animate-spin" />} Αποθήκευση
+            {busy && <Loader2 size={14} className="animate-spin" />} {t("Αποθήκευση")}
           </button>
         </form>
       </Card>
@@ -268,7 +268,7 @@ function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
       setCompanyId("");
       setRole("member");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η προσθήκη.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η προσθήκη."));
     } finally {
       setBusy(false);
     }
@@ -280,7 +280,7 @@ function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
     try {
       await onRemove(user.id, m.companyId);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Δεν ήταν δυνατή η αφαίρεση.");
+      setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αφαίρεση."));
     } finally {
       setBusy(false);
     }
@@ -290,21 +290,21 @@ function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: "rgba(16,25,43,0.45)" }}>
       <Card className="w-full max-w-md p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-base font-semibold" style={{ color: C.ink }}>Εταιρείες χρήστη</h3>
+          <h3 className="text-base font-semibold" style={{ color: C.ink }}>{t("Εταιρείες χρήστη")}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
         </div>
         <p className="text-xs mb-4" style={{ color: C.slate }}>{user.email}</p>
 
         {memberships.length === 0 ? (
-          <p className="text-sm mb-4" style={{ color: C.slate }}>Δεν ανήκει σε καμία εταιρεία ακόμα.</p>
+          <p className="text-sm mb-4" style={{ color: C.slate }}>{t("Δεν ανήκει σε καμία εταιρεία ακόμα.")}</p>
         ) : (
           <div className="space-y-1.5 mb-4">
             {memberships.map((m) => (
               <div key={m.companyId} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
                 <div className="text-sm" style={{ color: C.ink }}>
-                  {m.companyName} <span style={{ color: C.slate }}>— {m.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"}</span>
+                  {m.companyName} <span style={{ color: C.slate }}>— {m.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")}</span>
                 </div>
-                <button disabled={busy} onClick={() => handleRemove(m)} title="Αφαίρεση" style={{ color: C.coral }}>
+                <button disabled={busy} onClick={() => handleRemove(m)} title={t("Αφαίρεση")} style={{ color: C.coral }}>
                   <Trash2 size={13} />
                 </button>
               </div>
@@ -317,10 +317,10 @@ function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
         {availableCompanies.length > 0 && (
           <form onSubmit={handleAdd} className="flex items-end gap-2 pt-3 border-t" style={{ borderColor: C.line }}>
             <div className="flex-1">
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>Προσθήκη σε εταιρεία</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Προσθήκη σε εταιρεία")}</label>
               <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
                 className="w-full rounded-lg px-2.5 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-                <option value="">— επίλεξε —</option>
+                <option value="">{t("— επίλεξε —")}</option>
                 {availableCompanies.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -328,11 +328,11 @@ function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
             </div>
             <select value={role} onChange={(e) => setRole(e.target.value)}
               className="rounded-lg px-2.5 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-              <option value="member">Μέλος</option>
-              <option value="owner">Ιδιοκτήτης</option>
+              <option value="member">{t("Μέλος")}</option>
+              <option value="owner">{t("Ιδιοκτήτης")}</option>
             </select>
             <button type="submit" disabled={busy || !companyId} className="rounded-lg px-3 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky, opacity: busy || !companyId ? 0.6 : 1 }}>
-              Προσθήκη
+              {t("Προσθήκη")}
             </button>
           </form>
         )}
@@ -379,40 +379,40 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
         <EditCompanyModal company={editCompany} onClose={() => setEditCompany(null)} onSave={onEditCompany} />
       )}
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <div className="text-sm font-medium" style={{ color: C.ink }}>Εταιρείες</div>
+        <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Εταιρείες")}</div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2 rounded-lg px-3 py-1.5" style={{ backgroundColor: C.pale }}>
             <Search size={13} style={{ color: C.slate }} />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Αναζήτηση εταιρείας…"
+              placeholder={t("Αναζήτηση εταιρείας…")}
               className="bg-transparent outline-none text-xs w-40"
               style={{ color: C.ink }}
             />
           </div>
           <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white" style={{ backgroundColor: C.sky }}>
-            <Building2 size={13} /> Νέα εταιρεία
+            <Building2 size={13} /> {t("Νέα εταιρεία")}
           </button>
         </div>
       </div>
       <ErrorNote message={error} onRetry={onReload} />
       {loading ? (
-        <Spinner label="Φόρτωση εταιρειών…" />
+        <Spinner label={t("Φόρτωση εταιρειών…")} />
       ) : companies.length === 0 ? (
-        <p className="text-sm" style={{ color: C.slate }}>Δεν υπάρχουν ακόμα εταιρείες.</p>
+        <p className="text-sm" style={{ color: C.slate }}>{t("Δεν υπάρχουν ακόμα εταιρείες.")}</p>
       ) : filtered.length === 0 ? (
-        <p className="text-sm" style={{ color: C.slate }}>Καμία εταιρεία δεν ταιριάζει με «{query}».</p>
+        <p className="text-sm" style={{ color: C.slate }}>{t("Καμία εταιρεία δεν ταιριάζει με «{query}».", { query })}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left" style={{ color: C.slate }}>
-                <th className="font-medium pb-2">Εταιρεία</th>
-                <th className="font-medium pb-2">Κατάσταση</th>
-                <th className="font-medium pb-2">Χρήστες</th>
-                <th className="font-medium pb-2">Επαφές</th>
-                <th className="font-medium pb-2 text-right">Ενέργειες</th>
+                <th className="font-medium pb-2">{t("Εταιρεία")}</th>
+                <th className="font-medium pb-2">{t("Κατάσταση")}</th>
+                <th className="font-medium pb-2">{t("Χρήστες")}</th>
+                <th className="font-medium pb-2">{t("Επαφές")}</th>
+                <th className="font-medium pb-2 text-right">{t("Ενέργειες")}</th>
               </tr>
             </thead>
             <tbody>
@@ -422,7 +422,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
                   className="border-t cursor-pointer hover:bg-slate-50"
                   style={{ borderColor: C.line }}
                   onClick={() => setStatsCompany(c)}
-                  title="Στατιστικά εταιρείας"
+                  title={t("Στατιστικά εταιρείας")}
                 >
                   <td className="py-2.5 font-medium" style={{ color: C.ink }}>
                     <span className="inline-flex items-center gap-1.5">
@@ -430,7 +430,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
                       <button
                         onClick={(e) => { e.stopPropagation(); setEditCompany(c); }}
                         className="text-slate-300 hover:text-slate-500"
-                        title="Επεξεργασία στοιχείων"
+                        title={t("Επεξεργασία στοιχείων")}
                       >
                         <Pencil size={12} />
                       </button>
@@ -438,9 +438,9 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
                   </td>
                   <td className="py-2.5">
                     {c.status === "suspended" ? (
-                      <span className="text-xs font-medium" style={{ color: C.coral }}>Ανεσταλμένη</span>
+                      <span className="text-xs font-medium" style={{ color: C.coral }}>{t("Ανεσταλμένη")}</span>
                     ) : (
-                      <span className="text-xs font-medium" style={{ color: C.mint }}>Ενεργή</span>
+                      <span className="text-xs font-medium" style={{ color: C.mint }}>{t("Ενεργή")}</span>
                     )}
                   </td>
                   <td className="py-2.5" style={{ color: C.ink }}>{c.userCount ?? "—"}</td>
@@ -449,12 +449,12 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
                     {c.status === "suspended" ? (
                       <button disabled={busyId === c.id} onClick={() => run(c.id, onActivate)}
                         className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.mint }}>
-                        Επανενεργοποίηση
+                        {t("Επανενεργοποίηση")}
                       </button>
                     ) : (
                       <button disabled={busyId === c.id} onClick={() => run(c.id, onSuspend)}
                         className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.coral }}>
-                        Αναστολή
+                        {t("Αναστολή")}
                       </button>
                     )}
                   </td>
@@ -487,7 +487,7 @@ function CompanyStatsModal({ company, onClose }) {
         if (alive) setStats(s);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν τα στατιστικά.");
+        if (alive) setError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν τα στατιστικά."));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -507,7 +507,7 @@ function CompanyStatsModal({ company, onClose }) {
           <div>
             <div className="text-sm font-semibold" style={{ color: C.ink }}>{company.name}</div>
             <div className="text-xs mt-0.5" style={{ color: company.status === "suspended" ? C.coral : C.mint }}>
-              {company.status === "suspended" ? "Ανεσταλμένη" : "Ενεργή"}
+              {company.status === "suspended" ? t("Ανεσταλμένη") : t("Ενεργή")}
             </div>
           </div>
           <button onClick={onClose} style={{ color: C.slate }}>
@@ -515,19 +515,19 @@ function CompanyStatsModal({ company, onClose }) {
           </button>
         </div>
 
-        {loading && <Spinner label="Φόρτωση στατιστικών…" />}
+        {loading && <Spinner label={t("Φόρτωση στατιστικών…")} />}
         <ErrorNote message={error} />
 
         {stats && (
           <div className="space-y-5">
             <div className="flex flex-wrap gap-3">
-              <StatCard label="Χρήστες" value={stats.users.length} color={C.navy} />
-              <StatCard label="Επαφές" value={stats.contacts.total} color={C.sky} />
-              <StatCard label="Sequences" value={`${stats.sequences.active}/${stats.sequences.total}`} sub="ενεργά / σύνολο" color={C.mint} />
+              <StatCard label={t("Χρήστες")} value={stats.users.length} color={C.navy} />
+              <StatCard label={t("Επαφές")} value={stats.contacts.total} color={C.sky} />
+              <StatCard label="Sequences" value={`${stats.sequences.active}/${stats.sequences.total}`} sub={t("ενεργά / σύνολο")} color={C.mint} />
               <StatCard label="Templates" value={stats.templates.total} color={C.slate} />
               <StatCard label="Campaigns" value={stats.campaigns.total} color={C.amber} />
               <StatCard label="Emails" value={stats.emails.sent} sub={`${stats.emails.opened} opens · ${stats.emails.clicked} clicks`} color={C.navy} />
-              <StatCard label="Προσφορές" value={stats.offers.total} sub={fmtMoney(stats.offers.value)} color={C.mint} />
+              <StatCard label={t("Προσφορές")} value={stats.offers.total} sub={fmtMoney(stats.offers.value)} color={C.mint} />
             </div>
 
             <div>
@@ -535,12 +535,12 @@ function CompanyStatsModal({ company, onClose }) {
                 Gmail {stats.gmailAccounts?.length > 1 ? `(${stats.gmailAccounts.length} mailbox)` : ""}
               </div>
               {!stats.gmailAccounts || stats.gmailAccounts.length === 0 ? (
-                <p className="text-sm" style={{ color: C.ink }}>Δεν έχει συνδεθεί ακόμα.</p>
+                <p className="text-sm" style={{ color: C.ink }}>{t("Δεν έχει συνδεθεί ακόμα.")}</p>
               ) : (
                 <div className="space-y-1">
                   {stats.gmailAccounts.map((g, i) => (
                     <p key={i} className="text-sm" style={{ color: g.needsReconnect ? C.coral : C.ink }}>
-                      {g.needsReconnect ? `${g.email} — χρειάζεται επανασύνδεση` : g.email}
+                      {g.needsReconnect ? t("{email} — χρειάζεται επανασύνδεση", { email: g.email }) : g.email}
                     </p>
                   ))}
                 </div>
@@ -549,7 +549,7 @@ function CompanyStatsModal({ company, onClose }) {
 
             {Object.keys(stats.contacts.byStatus).length > 0 && (
               <div>
-                <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>Επαφές ανά κατάσταση</div>
+                <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>{t("Επαφές ανά κατάσταση")}</div>
                 <div className="flex flex-wrap gap-2 text-xs" style={{ color: C.ink }}>
                   {Object.entries(stats.contacts.byStatus).map(([k, v]) => (
                     <span key={k} className="px-2 py-1 rounded-md" style={{ backgroundColor: C.pale }}>{k}: {v}</span>
@@ -559,22 +559,22 @@ function CompanyStatsModal({ company, onClose }) {
             )}
 
             <div>
-              <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>Μέλη ομάδας</div>
+              <div className="text-xs font-medium mb-2" style={{ color: C.slate }}>{t("Μέλη ομάδας")}</div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left" style={{ color: C.slate }}>
                     <th className="font-medium pb-1.5">Email</th>
-                    <th className="font-medium pb-1.5">Ρόλος</th>
-                    <th className="font-medium pb-1.5">Κατάσταση</th>
+                    <th className="font-medium pb-1.5">{t("Ρόλος")}</th>
+                    <th className="font-medium pb-1.5">{t("Κατάσταση")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {stats.users.map((u) => (
                     <tr key={u.id} className="border-t" style={{ borderColor: C.line }}>
                       <td className="py-1.5" style={{ color: C.ink }}>{u.email}</td>
-                      <td className="py-1.5" style={{ color: C.slate }}>{u.role === "owner" ? "Ιδιοκτήτης" : "Μέλος"}</td>
+                      <td className="py-1.5" style={{ color: C.slate }}>{u.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")}</td>
                       <td className="py-1.5" style={{ color: u.approved ? C.mint : C.amber }}>
-                        {u.approved ? "Εγκεκριμένος" : "Εκκρεμεί"}
+                        {u.approved ? t("Εγκεκριμένος") : t("Εκκρεμεί")}
                       </td>
                     </tr>
                   ))}
@@ -613,7 +613,7 @@ function TeamPerformanceCard({ companies }) {
         if (alive) setOverview(o);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκε η απόδοση ομάδας.");
+        if (alive) setError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκε η απόδοση ομάδας."));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -626,41 +626,41 @@ function TeamPerformanceCard({ companies }) {
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between mb-4">
-        <div className="text-sm font-medium" style={{ color: C.ink }}>Απόδοση ομάδας</div>
+        <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Απόδοση ομάδας")}</div>
         <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
           className="rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-          <option value="">Όλες οι εταιρείες</option>
+          <option value="">{t("Όλες οι εταιρείες")}</option>
           {(companies || []).map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
       </div>
 
-      {loading && <Spinner label="Φόρτωση…" />}
+      {loading && <Spinner label={t("Φόρτωση…")} />}
       <ErrorNote message={error} />
 
       {overview && (
         <>
           <div className="flex flex-wrap gap-4 mb-4">
-            <StatCard label="Επαφές" value={overview.totals.contacts} sub="σύνολο team" color={C.sky} />
-            <StatCard label="Στάλθηκαν" value={overview.totals.sent} sub="emails, όλοι" color={C.navy} />
-            <StatCard label="Προσφορές" value={overview.totals.offers} sub={fmtMoney(overview.totals.offersValue)} color={C.mint} />
+            <StatCard label={t("Επαφές")} value={overview.totals.contacts} sub={t("σύνολο team")} color={C.sky} />
+            <StatCard label={t("Στάλθηκαν")} value={overview.totals.sent} sub={t("emails, όλοι")} color={C.navy} />
+            <StatCard label={t("Προσφορές")} value={overview.totals.offers} sub={fmtMoney(overview.totals.offersValue)} color={C.mint} />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left" style={{ color: C.slate }}>
-                  <th className="font-medium pb-2">Χρήστης</th>
-                  <th className="font-medium pb-2">Επαφές</th>
-                  <th className="font-medium pb-2">Στάλθηκαν</th>
-                  <th className="font-medium pb-2">Προσφορές</th>
+                  <th className="font-medium pb-2">{t("Χρήστης")}</th>
+                  <th className="font-medium pb-2">{t("Επαφές")}</th>
+                  <th className="font-medium pb-2">{t("Στάλθηκαν")}</th>
+                  <th className="font-medium pb-2">{t("Προσφορές")}</th>
                   <th className="font-medium pb-2">Win rate</th>
                 </tr>
               </thead>
               <tbody>
                 {overview.perUser.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-3 text-sm" style={{ color: C.slate }}>Δεν υπάρχουν χρήστες σε αυτή την εταιρεία.</td>
+                    <td colSpan={5} className="py-3 text-sm" style={{ color: C.slate }}>{t("Δεν υπάρχουν χρήστες σε αυτή την εταιρεία.")}</td>
                   </tr>
                 ) : (
                   overview.perUser.map((u) => (
@@ -704,7 +704,7 @@ function AuditLogCard({ companies }) {
         if (alive) setLogs(l);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof ApiError ? err.message : "Δεν φορτώθηκε το ιστορικό ενεργειών.");
+        if (alive) setError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκε το ιστορικό ενεργειών."));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -717,17 +717,17 @@ function AuditLogCard({ companies }) {
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between mb-4">
-        <div className="text-sm font-medium" style={{ color: C.ink }}>Ιστορικό ενεργειών</div>
+        <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Ιστορικό ενεργειών")}</div>
         <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
           className="rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-          <option value="">Όλες οι εταιρείες</option>
+          <option value="">{t("Όλες οι εταιρείες")}</option>
           {(companies || []).map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
       </div>
 
-      {loading && <Spinner label="Φόρτωση…" />}
+      {loading && <Spinner label={t("Φόρτωση…")} />}
       <ErrorNote message={error} />
 
       {logs && (
@@ -735,15 +735,15 @@ function AuditLogCard({ companies }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left" style={{ color: C.slate }}>
-                <th className="font-medium pb-2">Πότε</th>
-                <th className="font-medium pb-2">Ενέργεια</th>
-                <th className="font-medium pb-2">Εταιρεία</th>
+                <th className="font-medium pb-2">{t("Πότε")}</th>
+                <th className="font-medium pb-2">{t("Ενέργεια")}</th>
+                <th className="font-medium pb-2">{t("Εταιρεία")}</th>
               </tr>
             </thead>
             <tbody>
               {logs.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="py-3 text-sm" style={{ color: C.slate }}>Δεν υπάρχουν καταγεγραμμένες ενέργειες.</td>
+                  <td colSpan={3} className="py-3 text-sm" style={{ color: C.slate }}>{t("Δεν υπάρχουν καταγεγραμμένες ενέργειες.")}</td>
                 </tr>
               ) : (
                 logs.map((l) => (
@@ -790,17 +790,14 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
 
   function ownerlessAlert(err) {
     if (err instanceof ApiError && err.data?.error === "would_leave_company_ownerless") {
-      window.alert(
-        "Δεν μπορείς να αφαιρέσεις/υποβαθμίσεις τον μοναδικό ιδιοκτήτη αυτής της εταιρείας. " +
-        "Ανάθεσε πρώτα σε κάποιον άλλον τον ρόλο ιδιοκτήτη."
-      );
+      window.alert(t("Δεν μπορείς να αφαιρέσεις/υποβαθμίσεις τον μοναδικό ιδιοκτήτη αυτής της εταιρείας. Ανάθεσε πρώτα σε κάποιον άλλον τον ρόλο ιδιοκτήτη."));
       return true;
     }
     return false;
   }
 
   async function handleDelete(u) {
-    if (!window.confirm(`Διαγραφή του χρήστη ${u.email}; Θα διαγραφούν και όλα τα δεδομένα του (επαφές, sequences, κτλ).`)) return;
+    if (!window.confirm(t("Διαγραφή του χρήστη {email}; Θα διαγραφούν και όλα τα δεδομένα του (επαφές, sequences, κτλ).", { email: u.email }))) return;
     setBusyId(u.id);
     try {
       await onDeleteUser(u.id);
@@ -816,11 +813,11 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
       {showNew && <NewAdminUserModal onClose={() => setShowNew(false)} onCreate={onCreateUser} companies={companies} />}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Διαχείριση πρόσβασης</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>Έγκριση νέων λογαριασμών και διαχείριση δικαιωμάτων admin</p>
+          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Διαχείριση πρόσβασης")}</h1>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Έγκριση νέων λογαριασμών και διαχείριση δικαιωμάτων admin")}</p>
         </div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
-          <UserPlus size={15} /> Νέος χρήστης
+          <UserPlus size={15} /> {t("Νέος χρήστης")}
         </button>
       </div>
       <div className="px-8 py-6 space-y-6">
@@ -867,13 +864,13 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
         <AuditLogCard companies={companies} />
 
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="text-sm font-medium" style={{ color: C.ink }}>Χρήστες</div>
+          <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Χρήστες")}</div>
           <div className="flex items-center gap-2 rounded-lg px-3 py-1.5" style={{ backgroundColor: C.pale }}>
             <Search size={13} style={{ color: C.slate }} />
             <input
               value={userQuery}
               onChange={(e) => setUserQuery(e.target.value)}
-              placeholder="Αναζήτηση ονόματος ή email…"
+              placeholder={t("Αναζήτηση ονόματος ή email…")}
               className="bg-transparent outline-none text-xs w-48"
               style={{ color: C.ink }}
             />
@@ -881,11 +878,11 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
         </div>
 
         {loading ? (
-          <Spinner label="Φόρτωση χρηστών…" />
+          <Spinner label={t("Φόρτωση χρηστών…")} />
         ) : filteredUsers.length === 0 ? (
           <Card className="p-5">
             <p className="text-sm" style={{ color: C.slate }}>
-              {users.length === 0 ? "Δεν υπάρχουν ακόμα χρήστες." : `Κανένας χρήστης δεν ταιριάζει με «${userQuery}».`}
+              {users.length === 0 ? t("Δεν υπάρχουν ακόμα χρήστες.") : t("Κανένας χρήστης δεν ταιριάζει με «{q}».", { q: userQuery })}
             </p>
           </Card>
         ) : (
@@ -894,12 +891,12 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left" style={{ color: C.slate, backgroundColor: C.pale }}>
-                  <th className="font-medium px-4 py-2.5">Χρήστης</th>
-                  <th className="font-medium px-4 py-2.5">Κατάσταση</th>
-                  <th className="font-medium px-4 py-2.5">Ρόλος</th>
-                  <th className="font-medium px-4 py-2.5">Εταιρείες</th>
-                  <th className="font-medium px-4 py-2.5">Εγγραφή</th>
-                  <th className="font-medium px-4 py-2.5 text-right">Ενέργειες</th>
+                  <th className="font-medium px-4 py-2.5">{t("Χρήστης")}</th>
+                  <th className="font-medium px-4 py-2.5">{t("Κατάσταση")}</th>
+                  <th className="font-medium px-4 py-2.5">{t("Ρόλος")}</th>
+                  <th className="font-medium px-4 py-2.5">{t("Εταιρείες")}</th>
+                  <th className="font-medium px-4 py-2.5">{t("Εγγραφή")}</th>
+                  <th className="font-medium px-4 py-2.5 text-right">{t("Ενέργειες")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -911,16 +908,16 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                     </td>
                     <td className="px-4 py-3">
                       {u.approved ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.mint }}><UserCheck size={13} /> Εγκεκριμένος</span>
+                        <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.mint }}><UserCheck size={13} /> {t("Εγκεκριμένος")}</span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.amber }}><UserX size={13} /> Εκκρεμεί</span>
+                        <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.amber }}><UserX size={13} /> {t("Εκκρεμεί")}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       {u.isAdmin ? (
                         <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: C.navy }}><ShieldCheck size={13} /> Admin</span>
                       ) : (
-                        <span className="text-xs" style={{ color: C.slate }}>Χρήστης</span>
+                        <span className="text-xs" style={{ color: C.slate }}>{t("Χρήστης")}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -930,10 +927,10 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                         style={{ borderColor: C.line, color: C.ink }}
                       >
                         {(u.memberships || []).length === 0
-                          ? "— καμία —"
+                          ? t("— καμία —")
                           : u.memberships.length === 1
                           ? u.memberships[0].companyName
-                          : `${u.memberships.length} εταιρείες`}
+                          : t("{n} εταιρείες", { n: u.memberships.length })}
                       </button>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: C.slate }}>{fmtDate(u.createdAt)}</td>
@@ -942,29 +939,29 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                         {!u.approved && (
                           <button disabled={busyId === u.id} onClick={() => run(u.id, onApprove)}
                             className="rounded-md px-2.5 py-1 text-xs font-medium text-white" style={{ backgroundColor: C.mint }}>
-                            Έγκριση
+                            {t("Έγκριση")}
                           </button>
                         )}
                         {u.approved && u.id !== currentUserId && (
                           <button disabled={busyId === u.id} onClick={() => run(u.id, onRevoke)}
                             className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.coral }}>
-                            Ανάκληση
+                            {t("Ανάκληση")}
                           </button>
                         )}
                         {!u.isAdmin && (
                           <button disabled={busyId === u.id} onClick={() => run(u.id, onPromote)}
                             className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.navy }}>
-                            Ανάδειξη σε admin
+                            {t("Ανάδειξη σε admin")}
                           </button>
                         )}
                         {u.isAdmin && u.id !== currentUserId && (
                           <button disabled={busyId === u.id} onClick={() => run(u.id, onDemote)}
                             className="rounded-md px-2.5 py-1 text-xs font-medium border" style={{ borderColor: C.line, color: C.slate }}>
-                            Αφαίρεση admin
+                            {t("Αφαίρεση admin")}
                           </button>
                         )}
                         {u.id !== currentUserId && !(u.isAdmin && adminCount <= 1) && (
-                          <button disabled={busyId === u.id} onClick={() => handleDelete(u)} title="Διαγραφή χρήστη"
+                          <button disabled={busyId === u.id} onClick={() => handleDelete(u)} title={t("Διαγραφή χρήστη")}
                             className="rounded-md p-1.5" style={{ color: C.coral }}>
                             <Trash2 size={14} />
                           </button>
@@ -1016,7 +1013,7 @@ export function SuperAdminApp() {
       const res = await api.get("/admin/users?pageSize=200");
       setAdminUsers(Array.isArray(res) ? res : res.users || []);
     } catch (err) {
-      setAdminError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι χρήστες.");
+      setAdminError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν οι χρήστες."));
     } finally {
       setAdminLoading(false);
     }
@@ -1028,7 +1025,7 @@ export function SuperAdminApp() {
     try {
       setCompanies(await api.get("/admin/companies"));
     } catch (err) {
-      setCompaniesError(err instanceof ApiError ? err.message : "Δεν φορτώθηκαν οι εταιρείες.");
+      setCompaniesError(err instanceof ApiError ? err.message : t("Δεν φορτώθηκαν οι εταιρείες."));
     } finally {
       setCompaniesLoading(false);
     }
@@ -1127,7 +1124,7 @@ export function SuperAdminApp() {
   if (authState === "loading") {
     return (
       <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC" }}>
-        <Spinner label="Φόρτωση…" />
+        <Spinner label={t("Φόρτωση…")} />
       </div>
     );
   }
@@ -1148,13 +1145,13 @@ export function SuperAdminApp() {
       <div className="flex h-screen w-full items-center justify-center px-6" style={{ backgroundColor: "#F7F9FC" }}>
         <div className="max-w-sm text-center space-y-3">
           <ShieldCheck size={28} style={{ color: C.slate, margin: "0 auto" }} />
-          <div className="text-sm font-medium" style={{ color: C.ink }}>Δεν έχεις πρόσβαση σε αυτή τη σελίδα.</div>
+          <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Δεν έχεις πρόσβαση σε αυτή τη σελίδα.")}</div>
           <p className="text-xs" style={{ color: C.slate }}>
-            Ο λογαριασμός {user?.email} δεν έχει δικαιώματα διαχειριστή πλατφόρμας.
+            {t("Ο λογαριασμός {email} δεν έχει δικαιώματα διαχειριστή πλατφόρμας.", { email: user?.email })}
           </p>
           <div className="flex items-center justify-center gap-3 pt-2">
-            <a href="/" className="text-xs font-medium" style={{ color: C.sky }}>Πίσω στην εφαρμογή</a>
-            <button onClick={handleLogout} className="text-xs font-medium" style={{ color: C.slate }}>Αποσύνδεση</button>
+            <a href="/" className="text-xs font-medium" style={{ color: C.sky }}>{t("Πίσω στην εφαρμογή")}</a>
+            <button onClick={handleLogout} className="text-xs font-medium" style={{ color: C.slate }}>{t("Αποσύνδεση")}</button>
           </div>
         </div>
       </div>

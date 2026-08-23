@@ -6,6 +6,7 @@
 // templates/campaigns/analytics/etc.), which used to ship to every visitor
 // regardless of which screen they actually landed on.
 import { Loader2, AlertTriangle, PhoneCall, RefreshCw } from "lucide-react";
+import { t } from "./i18n.jsx";
 
 // ---------- Design tokens ----------
 // Color: navy #163B73 (primary), sky #2E6EE8 (accent/action), pale #EEF3FC (tint bg),
@@ -50,7 +51,7 @@ export function Spinner({ label }) {
   return (
     <div className="flex items-center justify-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
       <Loader2 size={16} className="animate-spin" />
-      {label || "Φόρτωση…"}
+      {label || t("Φόρτωση…")}
     </div>
   );
 }
@@ -65,7 +66,7 @@ export function ErrorNote({ message, onRetry }) {
       <AlertTriangle size={15} />
       <span className="flex-1">{message}</span>
       {onRetry && (
-        <button onClick={onRetry} className="font-medium underline shrink-0">Δοκίμασε ξανά</button>
+        <button onClick={onRetry} className="font-medium underline shrink-0">{t("Δοκίμασε ξανά")}</button>
       )}
     </div>
   );
@@ -133,7 +134,7 @@ export function CampaignStatusBadge({ status }) {
   const meta = CAMPAIGN_STATUS_META[status] || CAMPAIGN_STATUS_META.draft;
   return (
     <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium" style={{ backgroundColor: `${meta.color}1A`, color: meta.color }}>
-      {meta.label}
+      {t(meta.label)}
     </span>
   );
 }

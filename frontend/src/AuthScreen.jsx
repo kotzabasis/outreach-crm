@@ -39,13 +39,13 @@ export function AuthScreen({ onAuthenticated }) {
         // exists (see auth.js) — nothing to branch on here, just show its
         // message and drop back to the login tab.
         const result = await api.post("/auth/forgot-password", { email });
-        setInfo(result?.message || "Αν υπάρχει λογαριασμός με αυτό το email, στάλθηκε σύνδεσμος επαναφοράς.");
+        setInfo(result?.message || t("Αν υπάρχει λογαριασμός με αυτό το email, στάλθηκε σύνδεσμος επαναφοράς."));
         setMode("login");
       } else {
         const result = await api.post("/auth/register", { email, password, name: name || undefined });
         if (result && result.pending) {
           // Access is invite/approval-gated — new accounts wait for an admin.
-          setInfo(result.message || "Ο λογαριασμός δημιουργήθηκε. Περιμένει έγκριση από διαχειριστή.");
+          setInfo(result.message || t("Ο λογαριασμός δημιουργήθηκε. Περιμένει έγκριση από διαχειριστή."));
           setMode("login");
         } else {
           onAuthenticated(result);
@@ -53,11 +53,11 @@ export function AuthScreen({ onAuthenticated }) {
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 403 && err.data?.error === "account_pending_approval") {
-        setError("Ο λογαριασμός σου εκκρεμεί έγκρισης από διαχειριστή. Δοκίμασε ξανά αργότερα.");
+        setError(t("Ο λογαριασμός σου εκκρεμεί έγκρισης από διαχειριστή. Δοκίμασε ξανά αργότερα."));
       } else if (err instanceof ApiError && err.status === 403 && err.data?.error === "company_suspended") {
-        setError("Το workspace της εταιρείας σου έχει ανασταλεί. Επικοινώνησε με τον διαχειριστή.");
+        setError(t("Το workspace της εταιρείας σου έχει ανασταλεί. Επικοινώνησε με τον διαχειριστή."));
       } else {
-        setError(err instanceof ApiError ? err.message : "Κάτι πήγε στραβά. Δοκίμασε ξανά.");
+        setError(err instanceof ApiError ? err.message : t("Κάτι πήγε στραβά. Δοκίμασε ξανά."));
       }
     } finally {
       // Never leave the password sitting in memory longer than necessary,

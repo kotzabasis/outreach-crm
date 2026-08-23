@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { C, Card, Spinner, ErrorNote, StatCard, fmtMoney, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
 import { api } from "./lib/api";
+import { t } from "./lib/i18n.jsx";
 
 function pct(numerator, denominator) {
   if (!denominator) return "0%";
@@ -54,7 +55,7 @@ function AbTestCard({ title, subtitle, variants }) {
 
 function CrmReportingSection({ crm }) {
   if (!crm) return null;
-  const OFFER_STATUS_LABELS = { draft: "Πρόχειρες", sent: "Στάλθηκαν", accepted: "Έγιναν δεκτές", declined: "Απορρίφθηκαν" };
+  const OFFER_STATUS_LABELS = { draft: t("Πρόχειρες"), sent: t("Στάλθηκαν"), accepted: t("Έγιναν δεκτές"), declined: t("Απορρίφθηκαν") };
   const pipelineData = ["draft", "sent", "accepted", "declined"].map((key) => ({
     name: OFFER_STATUS_LABELS[key],
     value: crm.offersByStatus?.[key] ?? 0,
@@ -64,15 +65,15 @@ function CrmReportingSection({ crm }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-4">
-        <StatCard label="Επικοινωνήθηκαν" value={crm.contactsContacted} sub={`από ${crm.contactsTotal} επαφές`} color={C.sky} />
-        <StatCard label="Προσφορές" value={crm.offersTotal} sub="σύνολο" color={C.navy} />
-        <StatCard label="Win rate" value={crm.winRate == null ? "—" : `${Math.round(crm.winRate * 100)}%`} sub="αποδεκτές / αποφασισμένες" color={C.mint} />
-        <StatCard label="Αξία σε εξέλιξη" value={fmtMoney((crm.valueByStatus?.sent || 0) + (crm.valueByStatus?.draft || 0))} sub="draft + sent" color={C.amber} />
+        <StatCard label={t("Επικοινωνήθηκαν")} value={crm.contactsContacted} sub={t("από {n} επαφές", { n: crm.contactsTotal })} color={C.sky} />
+        <StatCard label={t("Προσφορές")} value={crm.offersTotal} sub={t("σύνολο")} color={C.navy} />
+        <StatCard label={t("Win rate")} value={crm.winRate == null ? "—" : `${Math.round(crm.winRate * 100)}%`} sub={t("αποδεκτές / αποφασισμένες")} color={C.mint} />
+        <StatCard label={t("Αξία σε εξέλιξη")} value={fmtMoney((crm.valueByStatus?.sent || 0) + (crm.valueByStatus?.draft || 0))} sub="draft + sent" color={C.amber} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-5">
-          <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Pipeline προσφορών</div>
+          <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Pipeline προσφορών")}</div>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={pipelineData} layout="vertical" margin={{ left: 20 }}>
               <XAxis type="number" hide />
@@ -86,7 +87,7 @@ function CrmReportingSection({ crm }) {
         </Card>
 
         <Card className="p-5">
-          <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Αξία ανά κατάσταση</div>
+          <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Αξία ανά κατάσταση")}</div>
           <div className="space-y-2.5">
             {["draft", "sent", "accepted", "declined"].map((key) => (
               <div key={key} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
@@ -99,9 +100,9 @@ function CrmReportingSection({ crm }) {
       </div>
 
       <Card className="p-5">
-        <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Συχνότερες αιτίες αποδοχής/απόρριψης</div>
+        <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Συχνότερες αιτίες αποδοχής/απόρριψης")}</div>
         {(!crm.declineReasons || crm.declineReasons.length === 0) ? (
-          <p className="text-sm py-6 text-center" style={{ color: C.slate }}>Δεν έχουν καταχωρηθεί αιτίες ακόμα.</p>
+          <p className="text-sm py-6 text-center" style={{ color: C.slate }}>{t("Δεν έχουν καταχωρηθεί αιτίες ακόμα.")}</p>
         ) : (
           <div className="space-y-2">
             {crm.declineReasons.map((r, i) => (
@@ -120,21 +121,21 @@ function CrmReportingSection({ crm }) {
 function AbTestsResults({ data, loading }) {
   const seqs = data?.sequences || [];
   const camps = data?.campaigns || [];
-  if (loading && !data) return <Spinner label="Φόρτωση A/B…" />;
+  if (loading && !data) return <Spinner label={t("Φόρτωση A/B…")} />;
   if (seqs.length === 0 && camps.length === 0) {
     return (
       <p className="text-sm py-16 text-center" style={{ color: C.slate }}>
-        Δεν υπάρχουν ακόμα A/B tests. Πρόσθεσε εναλλακτικά θέματα σε ένα βήμα sequence ή σε ένα campaign για να ξεκινήσεις.
+        {t("Δεν υπάρχουν ακόμα A/B tests. Πρόσθεσε εναλλακτικά θέματα σε ένα βήμα sequence ή σε ένα campaign για να ξεκινήσεις.")}
       </p>
     );
   }
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {seqs.map((t) => (
-        <AbTestCard key={t.stepId} title={t.sequenceName} subtitle={`Sequence · Βήμα ${t.stepOrder + 1}`} variants={t.variants} />
+      {seqs.map((item) => (
+        <AbTestCard key={item.stepId} title={item.sequenceName} subtitle={t("Sequence · Βήμα {n}", { n: item.stepOrder + 1 })} variants={item.variants} />
       ))}
-      {camps.map((t) => (
-        <AbTestCard key={t.campaignId} title={t.name} subtitle="Campaign" variants={t.variants} />
+      {camps.map((item) => (
+        <AbTestCard key={item.campaignId} title={item.name} subtitle="Campaign" variants={item.variants} />
       ))}
     </div>
   );
@@ -159,10 +160,10 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
   }, [tab]);
   const totals = overview?.totals || { sent: 0, opened: 0, clicked: 0, replied: 0 };
   const funnelData = [
-    { name: "Στάλθηκαν", value: totals.sent, fill: C.navy },
-    { name: "Ανοίχτηκαν", value: totals.opened, fill: C.sky },
-    { name: "Κλικ", value: totals.clicked, fill: C.amber },
-    { name: "Απαντήσεις", value: totals.replied, fill: C.mint },
+    { name: t("Στάλθηκαν"), value: totals.sent, fill: C.navy },
+    { name: t("Ανοίχτηκαν"), value: totals.opened, fill: C.sky },
+    { name: t("Κλικ"), value: totals.clicked, fill: C.amber },
+    { name: t("Απαντήσεις"), value: totals.replied, fill: C.mint },
   ];
 
   return (
@@ -172,10 +173,10 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
             {tab === "email"
-              ? "Απόδοση όλων των αποστολών — sequences και χειροκίνητα emails"
+              ? t("Απόδοση όλων των αποστολών — sequences και χειροκίνητα emails")
               : tab === "crm"
-              ? "CRM reporting — pipeline & αποτελέσματα"
-              : "A/B θεμάτων — ποια γραμμή θέματος ανοίγεται περισσότερο"}
+              ? t("CRM reporting — pipeline & αποτελέσματα")
+              : t("A/B θεμάτων — ποια γραμμή θέματος ανοίγεται περισσότερο")}
           </p>
         </div>
         <div className="flex rounded-lg p-0.5" style={{ backgroundColor: C.pale }}>
@@ -194,23 +195,23 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
         {tab === "abtests" ? (
           <AbTestsResults data={abTests} loading={abLoading} />
         ) : loading ? (
-          <Spinner label="Φόρτωση analytics…" />
+          <Spinner label={t("Φόρτωση analytics…")} />
         ) : tab === "crm" ? (
           <CrmReportingSection crm={crmOverview} />
         ) : (
           <>
             <div className="flex flex-wrap gap-4">
-              <StatCard label="Open rate" value={pct(totals.opened, totals.sent)} sub={`${totals.sent} αποστολές`} color={C.mint} />
-              <StatCard label="Click rate" value={pct(totals.clicked, totals.sent)} sub="σε σχέση με αποστολές" color={C.mint} />
-              <StatCard label="Reply rate" value={pct(totals.replied, totals.sent)} sub="σε σχέση με αποστολές" color={C.coral} />
-              <StatCard label="Sequences" value={overview?.perSequence?.length ?? 0} sub="ενεργά + ανενεργά" color={C.slate} />
+              <StatCard label="Open rate" value={pct(totals.opened, totals.sent)} sub={t("{n} αποστολές", { n: totals.sent })} color={C.mint} />
+              <StatCard label="Click rate" value={pct(totals.clicked, totals.sent)} sub={t("σε σχέση με αποστολές")} color={C.mint} />
+              <StatCard label="Reply rate" value={pct(totals.replied, totals.sent)} sub={t("σε σχέση με αποστολές")} color={C.coral} />
+              <StatCard label="Sequences" value={overview?.perSequence?.length ?? 0} sub={t("ενεργά + ανενεργά")} color={C.slate} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="p-5">
-                <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Τάση εμπλοκής</div>
+                <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Τάση εμπλοκής")}</div>
                 {timeline.length === 0 ? (
-                  <p className="text-sm py-16 text-center" style={{ color: C.slate }}>Δεν υπάρχουν ακόμα events.</p>
+                  <p className="text-sm py-16 text-center" style={{ color: C.slate }}>{t("Δεν υπάρχουν ακόμα events.")}</p>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={timeline}>
@@ -218,15 +219,15 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                       <XAxis dataKey="day" tick={{ fontSize: 11, fill: C.slate }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: C.slate }} axisLine={false} tickLine={false} />
                       <Tooltip />
-                      <Line type="monotone" dataKey="opens" stroke={C.sky} strokeWidth={2} dot={false} name="Ανοίγματα" />
-                      <Line type="monotone" dataKey="clicks" stroke={C.amber} strokeWidth={2} dot={false} name="Κλικ" />
+                      <Line type="monotone" dataKey="opens" stroke={C.sky} strokeWidth={2} dot={false} name={t("Ανοίγματα")} />
+                      <Line type="monotone" dataKey="clicks" stroke={C.amber} strokeWidth={2} dot={false} name={t("Κλικ")} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
               </Card>
 
               <Card className="p-5">
-                <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Funnel αποστολών</div>
+                <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Funnel αποστολών")}</div>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={funnelData} layout="vertical" margin={{ left: 20 }}>
                     <XAxis type="number" hide />
@@ -241,12 +242,12 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
             </div>
 
             <Card className="p-5">
-              <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Απόδοση ανά sequence</div>
+              <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Απόδοση ανά sequence")}</div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left" style={{ color: C.slate }}>
                     <th className="font-medium pb-2">Sequence</th>
-                    <th className="font-medium pb-2">Στάλθηκαν</th>
+                    <th className="font-medium pb-2">{t("Στάλθηκαν")}</th>
                     <th className="font-medium pb-2">Open rate</th>
                     <th className="font-medium pb-2">Reply rate</th>
                   </tr>
@@ -261,20 +262,20 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                     </tr>
                   ))}
                   {(!overview?.perSequence || overview.perSequence.length === 0) && (
-                    <tr><td colSpan={4} className="py-6 text-center text-sm" style={{ color: C.slate }}>Καμία δραστηριότητα ακόμα.</td></tr>
+                    <tr><td colSpan={4} className="py-6 text-center text-sm" style={{ color: C.slate }}>{t("Καμία δραστηριότητα ακόμα.")}</td></tr>
                   )}
                 </tbody>
               </table>
             </Card>
 
             <Card className="p-5">
-              <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>Απόδοση ανά campaign</div>
+              <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Απόδοση ανά campaign")}</div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left" style={{ color: C.slate }}>
                     <th className="font-medium pb-2">Campaign</th>
-                    <th className="font-medium pb-2">Κατάσταση</th>
-                    <th className="font-medium pb-2">Στάλθηκαν</th>
+                    <th className="font-medium pb-2">{t("Κατάσταση")}</th>
+                    <th className="font-medium pb-2">{t("Στάλθηκαν")}</th>
                     <th className="font-medium pb-2">Open rate</th>
                     <th className="font-medium pb-2">Reply rate</th>
                   </tr>
@@ -290,7 +291,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                     </tr>
                   ))}
                   {(!overview?.perCampaign || overview.perCampaign.length === 0) && (
-                    <tr><td colSpan={5} className="py-6 text-center text-sm" style={{ color: C.slate }}>Κανένα campaign ακόμα.</td></tr>
+                    <tr><td colSpan={5} className="py-6 text-center text-sm" style={{ color: C.slate }}>{t("Κανένα campaign ακόμα.")}</td></tr>
                   )}
                 </tbody>
               </table>

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 import { Sentry } from "./lib/sentry"; // side-effect: initializes Sentry if VITE_SENTRY_DSN is set (no-op otherwise)
 import { Brand, C, Card } from "./lib/ui.jsx";
+import { t } from "./lib/i18n.jsx";
 
 // /superadmin is a separate area for platform-admin-only work (creating
 // companies, managing every user across companies) — deliberately kept out
@@ -59,14 +60,14 @@ function ErrorFallback() {
           <Brand size={30} textSize="text-base" />
         </div>
         <p className="text-sm" style={{ color: C.ink }}>
-          Κάτι πήγε στραβά. Δοκίμασε να ανανεώσεις τη σελίδα.
+          {t("Κάτι πήγε στραβά. Δοκίμασε να ανανεώσεις τη σελίδα.")}
         </p>
         <button
           onClick={() => window.location.reload()}
           className="w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white"
           style={{ backgroundColor: C.sky }}
         >
-          Ανανέωση σελίδας
+          {t("Ανανέωση σελίδας")}
         </button>
       </Card>
     </div>
@@ -97,7 +98,7 @@ function WakingIndicator() {
       display: "flex", alignItems: "center", gap: 8,
     }}>
       <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#F5A524", display: "inline-block" }} />
-      Ο server ξυπνά, λίγα δευτερόλεπτα…
+      {t("Ο server ξυπνά, λίγα δευτερόλεπτα…")}
     </div>
   );
 }
