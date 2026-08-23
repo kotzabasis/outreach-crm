@@ -213,6 +213,10 @@ router.get("/:id", async (req, res) => {
       },
       offers: { orderBy: { updatedAt: "desc" } },
       notes: { orderBy: { createdAt: "desc" } },
+      // LinkedIn touches (connection requests, messages, InMail) for the unified
+      // conversation timeline — so a contact's email and LinkedIn history read as
+      // one thread instead of two disconnected views.
+      linkedinActions: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!contact) return res.status(404).json({ error: "not_found" });
@@ -232,8 +236,31 @@ router.get("/:id", async (req, res) => {
     events: log.events.map((e) => ({ type: e.type, occurredAt: e.occurredAt, isBot: e.isBot, url: e.url })),
   }));
 
-  const { emailLogs, ...rest } = contact;
-  res.json({ ...rest, timeline });
+  // Unified conversation: email sends + LinkedIn touches, newest first, so the
+  // drawer can show one chronological thread across channels.
+  const conversation = [
+    ...contact.emailLogs.map((log) => ({
+      kind: "email",
+      id: `e-${log.id}`,
+      at: log.sentAt,
+      subject: log.subject,
+      source: log.source,
+      sequenceName: log.enrollment?.sequence?.name || log.campaign?.name || null,
+      opened: log.events.some((e) => e.type === "open" && !e.isBot),
+      clicked: log.events.some((e) => e.type === "click"),
+      events: log.events.map((e) => ({ type: e.type, occurredAt: e.occurredAt, isBot: e.isBot, url: e.url })),
+    })),
+    ...(contact.linkedinActions || []).map((a) => ({
+      kind: a.type === "connection_request" ? "linkedin_connection" : a.type === "inmail" ? "linkedin_inmail" : "linkedin_message",
+      id: `l-${a.id}`,
+      at: a.sentAt || a.createdAt,
+      text: a.text,
+      status: a.status,
+    })),
+  ].sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
+
+  const { emailLogs, linkedinActions, ...rest } = contact;
+  res.json({ ...rest, timeline, conversation });
 });
 
 router.post("/", async (req, res) => {

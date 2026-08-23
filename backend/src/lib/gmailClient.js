@@ -316,10 +316,26 @@ async function sendTrackedEmail({ gmailAccount, contact, subject, body, tracking
   // vast majority of sends. Callers may also pass it in to skip the lookup.
   let resolvedBooking = bookingLink;
   if (resolvedBooking == null && /\{\{booking_link\}\}/.test(`${body}${subject}`)) {
-    const company = gmailAccount.companyId
-      ? await prisma.company.findUnique({ where: { id: gmailAccount.companyId }, select: { bookingLink: true } }).catch(() => null)
-      : null;
-    resolvedBooking = company?.bookingLink || "";
+    resolvedBooking = "";
+    if (gmailAccount.companyId) {
+      const company = await prisma.company
+        .findUnique({ where: { id: gmailAccount.companyId }, select: { bookingLink: true, bookingLinks: true, bookingLinkCursor: true } })
+        .catch(() => null);
+      if (company) {
+        const extras = Array.isArray(company.bookingLinks) ? company.bookingLinks.filter((s) => typeof s === "string" && s.trim()) : [];
+        const pool = [company.bookingLink, ...extras].filter((s) => s && s.trim());
+        if (pool.length > 0) {
+          const cursor = Number(company.bookingLinkCursor) || 0;
+          resolvedBooking = pool[cursor % pool.length];
+          // Advance the round-robin pointer for the next booking-link send.
+          if (pool.length > 1) {
+            await prisma.company
+              .update({ where: { id: gmailAccount.companyId }, data: { bookingLinkCursor: cursor + 1 } })
+              .catch(() => {});
+          }
+        }
+      }
+    }
   }
 
   const renderedSubject = renderTemplate(subject, contact, { asHtml: false, bookingLink: resolvedBooking || "" });

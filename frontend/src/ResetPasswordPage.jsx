@@ -45,7 +45,7 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
+    <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: C.canvas, fontFamily: "Inter, sans-serif" }}>
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center mb-3">
           <Brand size={38} textSize="text-2xl" />

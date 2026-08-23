@@ -14,7 +14,7 @@ const live = [];
 function push(message, type = "info", opts = {}) {
   if (!message) return;
   const id = ++seq;
-  const item = { id, message, type, duration: opts.duration ?? 3800 };
+  const item = { id, message, type, duration: opts.duration ?? 3800, action: opts.action || null };
   live.push(item);
   listeners.forEach((fn) => fn([...live]));
   if (item.duration > 0) {
@@ -39,6 +39,24 @@ toast.success = (m, o) => push(m, "success", o);
 toast.error = (m, o) => push(m, "error", o);
 toast.info = (m, o) => push(m, "info", o);
 toast.dismiss = dismiss;
+
+// Deferred destructive action with an Undo affordance. Instead of committing
+// immediately, we show a toast with an "Undo" button and only run `commit`
+// after the toast's lifetime elapses (unless the user undoes it). This gives a
+// real safety net without needing server-side soft-delete. `undo` is optional
+// (e.g. to restore optimistic UI). Labels are passed in so callers localize.
+export function toastUndo(message, commit, { undoLabel = "Undo", duration = 5000, undo } = {}) {
+  let undone = false;
+  const id = push(message, "info", {
+    duration,
+    action: {
+      label: undoLabel,
+      onClick: () => { undone = true; dismiss(id); if (undo) undo(); },
+    },
+  });
+  setTimeout(() => { if (!undone) { try { commit(); } catch (_) { /* swallow */ } } }, duration);
+  return id;
+}
 
 const META = {
   success: { Icon: CheckCircle2, color: C.mint },
@@ -66,6 +84,15 @@ export function Toaster() {
           >
             <Icon size={17} style={{ color }} className="shrink-0" />
             <span className="flex-1 min-w-0" style={{ color: C.ink }}>{it.message}</span>
+            {it.action && (
+              <button
+                onClick={it.action.onClick}
+                className="shrink-0 text-xs font-semibold rounded-md px-2 py-1"
+                style={{ color: C.sky, backgroundColor: `${C.sky}14` }}
+              >
+                {it.action.label}
+              </button>
+            )}
             <button onClick={() => dismiss(it.id)} className="shrink-0 text-slate-400 hover:text-slate-600">
               <X size={14} />
             </button>

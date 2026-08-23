@@ -119,25 +119,70 @@ function CrmReportingSection({ crm }) {
   );
 }
 
+// Body A/B card: like AbTestCard but each row is a body variant (A/B/C), and
+// the winner (highest open rate among sent) is highlighted.
+function BodyAbCard({ title, subtitle, variants, winner }) {
+  return (
+    <Card className="p-5">
+      <div className="text-sm font-medium" style={{ color: C.ink }}>{title}</div>
+      <div className="text-xs mb-3" style={{ color: C.slate }}>{subtitle}</div>
+      <div className="space-y-2">
+        {variants.map((v) => {
+          const isWinner = winner === v.index && v.sent > 0;
+          return (
+            <div key={v.index} className="rounded-lg px-3 py-2" style={{ backgroundColor: isWinner ? `${C.mint}12` : C.pale }}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold" style={{ color: isWinner ? C.mint : C.ink }}>
+                  {t("Κείμενο {v}", { v: v.label })}{v.isPrimary ? t(" (κύριο)") : ""}{isWinner ? t(" · νικητής ✓") : ""}
+                </span>
+                <span className="text-sm font-bold tabular-nums" style={{ color: isWinner ? C.mint : C.ink }}>{v.openRate}%</span>
+              </div>
+              <div className="text-[11px] mt-0.5" style={{ color: C.slate }}>{t("{sent} στάλθηκαν · {opened} ανοίγματα", { sent: v.sent, opened: v.opened })}</div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function AbTestsResults({ data, loading }) {
   const seqs = data?.sequences || [];
   const camps = data?.campaigns || [];
+  const bodyTests = data?.bodyTests || [];
   if (loading && !data) return <Spinner label={t("Φόρτωση A/B…")} />;
-  if (seqs.length === 0 && camps.length === 0) {
+  if (seqs.length === 0 && camps.length === 0 && bodyTests.length === 0) {
     return (
       <p className="text-sm py-16 text-center" style={{ color: C.slate }}>
-        {t("Δεν υπάρχουν ακόμα A/B tests. Πρόσθεσε εναλλακτικά θέματα σε ένα βήμα sequence ή σε ένα campaign για να ξεκινήσεις.")}
+        {t("Δεν υπάρχουν ακόμα A/B tests. Πρόσθεσε εναλλακτικά θέματα ή κείμενα σε ένα βήμα sequence ή σε ένα campaign για να ξεκινήσεις.")}
       </p>
     );
   }
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {seqs.map((item) => (
-        <AbTestCard key={item.stepId} title={item.sequenceName} subtitle={t("Sequence · Βήμα {n}", { n: item.stepOrder + 1 })} variants={item.variants} />
-      ))}
-      {camps.map((item) => (
-        <AbTestCard key={item.campaignId} title={item.name} subtitle="Campaign" variants={item.variants} />
-      ))}
+    <div className="space-y-6">
+      {(seqs.length > 0 || camps.length > 0) && (
+        <div>
+          <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{t("A/B θέματος")}</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {seqs.map((item) => (
+              <AbTestCard key={item.stepId} title={item.sequenceName} subtitle={t("Sequence · Βήμα {n}", { n: item.stepOrder + 1 })} variants={item.variants} />
+            ))}
+            {camps.map((item) => (
+              <AbTestCard key={item.campaignId} title={item.name} subtitle="Campaign" variants={item.variants} />
+            ))}
+          </div>
+        </div>
+      )}
+      {bodyTests.length > 0 && (
+        <div>
+          <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{t("A/B κειμένου")}</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {bodyTests.map((item) => (
+              <BodyAbCard key={item.stepId} title={item.sequenceName} subtitle={t("Sequence · Βήμα {n}", { n: item.stepOrder + 1 })} variants={item.variants} winner={item.winner} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -319,7 +364,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
 
             <Card className="p-5">
               <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Απόδοση ανά sequence")}</div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm min-w-[420px]">
                 <thead>
                   <tr className="text-left" style={{ color: C.slate }}>
                     <th className="font-medium pb-2">Sequence</th>
@@ -341,12 +386,12 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                     <tr><td colSpan={4} className="py-6 text-center text-sm" style={{ color: C.slate }}>{t("Καμία δραστηριότητα ακόμα.")}</td></tr>
                   )}
                 </tbody>
-              </table>
+              </table></div>
             </Card>
 
             <Card className="p-5">
               <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Απόδοση ανά campaign")}</div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm min-w-[420px]">
                 <thead>
                   <tr className="text-left" style={{ color: C.slate }}>
                     <th className="font-medium pb-2">Campaign</th>
@@ -370,7 +415,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                     <tr><td colSpan={5} className="py-6 text-center text-sm" style={{ color: C.slate }}>{t("Κανένα campaign ακόμα.")}</td></tr>
                   )}
                 </tbody>
-              </table>
+              </table></div>
             </Card>
           </>
         )}

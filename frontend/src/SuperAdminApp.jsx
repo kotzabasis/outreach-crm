@@ -1123,7 +1123,7 @@ export function SuperAdminApp() {
 
   if (authState === "loading") {
     return (
-      <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC" }}>
+      <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: C.canvas }}>
         <Spinner label={t("Φόρτωση…")} />
       </div>
     );
@@ -1142,7 +1142,7 @@ export function SuperAdminApp() {
 
   if (authState === "forbidden") {
     return (
-      <div className="flex h-screen w-full items-center justify-center px-6" style={{ backgroundColor: "#F7F9FC" }}>
+      <div className="flex h-screen w-full items-center justify-center px-6" style={{ backgroundColor: C.canvas }}>
         <div className="max-w-sm text-center space-y-3">
           <ShieldCheck size={28} style={{ color: C.slate, margin: "0 auto" }} />
           <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Δεν έχεις πρόσβαση σε αυτή τη σελίδα.")}</div>
@@ -1159,7 +1159,7 @@ export function SuperAdminApp() {
   }
 
   return (
-    <div className="h-screen w-full flex flex-col" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
+    <div className="h-screen w-full flex flex-col" style={{ backgroundColor: C.canvas, fontFamily: "Inter, sans-serif" }}>
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white shrink-0" style={{ borderColor: C.line }}>
         <div className="flex items-center gap-3">
           <Brand size={28} textSize="text-sm" />

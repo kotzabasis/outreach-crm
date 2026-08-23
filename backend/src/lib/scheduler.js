@@ -55,6 +55,16 @@ function pickSubject(primary, variants) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+// Body A/B counterpart to pickSubject: uniform-random pick from
+// [primaryBody, ...bodyVariants]. Returns { body, index } so the chosen index
+// can be recorded on EmailLog.bodyVariant for per-variant open-rate analytics.
+function pickBody(primary, variants) {
+  const extra = Array.isArray(variants) ? variants.filter((v) => typeof v === "string" && v.trim()) : [];
+  const pool = [primary, ...extra];
+  const index = Math.floor(Math.random() * pool.length);
+  return { body: pool[index], index };
+}
+
 async function processDueEnrollments() {
   const due = await prisma.enrollment.findMany({
     where: {
@@ -200,9 +210,11 @@ async function sendNextStep(enrollment) {
   const gmailAccount = await pickSendableMailbox(sequence.companyId);
   if (!gmailAccount) return false;
 
-  // A/B: pick the subject line for this send; the same chosen line is both
-  // sent and logged, so per-variant open rates line up.
+  // A/B: pick the subject line AND the body variant for this send; the exact
+  // subject/body chosen is what's sent and logged, so per-variant open rates
+  // line up.
   const chosenSubject = pickSubject(step.subject, step.subjectVariants);
+  const { body: chosenBody, index: chosenBodyVariant } = pickBody(step.body, step.bodyVariants);
   const trackingId = uuid();
 
   // Claim before the Gmail call: advance the enrollment NOW, so that if the
@@ -219,7 +231,7 @@ async function sendNextStep(enrollment) {
       gmailAccount,
       contact,
       subject: chosenSubject,
-      body: step.body,
+      body: chosenBody,
       trackingId,
       attachments: Array.isArray(step.attachments) ? step.attachments : [],
       trackingEnabled: sequence.company?.emailTrackingEnabled !== false,
@@ -241,6 +253,7 @@ async function sendNextStep(enrollment) {
         userId: sequence.userId,
         companyId: sequence.companyId,
         subject: chosenSubject,
+        bodyVariant: chosenBodyVariant,
         source: "sequence",
         gmailMessageId,
         trackingId,

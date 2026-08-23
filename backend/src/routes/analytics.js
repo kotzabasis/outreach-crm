@@ -127,6 +127,50 @@ router.get("/overview", async (req, res) => {
   res.json({ totals: totalStats, perSequence, perCampaign });
 });
 
+// Per-step funnel for one sequence — "where do people fall off". For each step
+// in order: how many emails were sent from it, and how many were opened/clicked.
+// Sent-per-step is the drop-off curve (fewer contacts reach later steps as they
+// reply, unsubscribe, or the sequence completes); open rate per step shows
+// which message is landing. Scoped to the caller's company.
+router.get("/sequence/:id/steps", async (req, res) => {
+  const seq = await prisma.sequence.findFirst({
+    where: { id: req.params.id, companyId: req.user.companyId },
+    select: { id: true, name: true },
+  });
+  if (!seq) return res.status(404).json({ error: "not_found" });
+
+  const rows = await prisma.$queryRaw`
+    SELECT
+      ss.id,
+      ss."order",
+      ss.subject,
+      ss.channel,
+      COUNT(DISTINCT el.id) as sent,
+      COUNT(DISTINCT CASE WHEN te.type = 'open' AND te."isBot" = false THEN el.id END) as opened,
+      COUNT(DISTINCT CASE WHEN te.type = 'click' THEN el.id END) as clicked
+    FROM "SequenceStep" ss
+    LEFT JOIN "EmailLog" el ON el."stepId" = ss.id
+    LEFT JOIN "TrackingEvent" te ON te."emailLogId" = el.id
+    WHERE ss."sequenceId" = ${seq.id}
+    GROUP BY ss.id, ss."order", ss.subject, ss.channel
+    ORDER BY ss."order" ASC
+  `;
+
+  res.json({
+    id: seq.id,
+    name: seq.name,
+    steps: rows.map((r) => ({
+      id: r.id,
+      order: Number(r.order),
+      subject: r.subject,
+      channel: r.channel,
+      sent: Number(r.sent || 0),
+      opened: Number(r.opened || 0),
+      clicked: Number(r.clicked || 0),
+    })),
+  });
+});
+
 // Recent sends — manual and sequence-driven alike — for the "Sent" / inbox
 // view. companyId is denormalized directly onto EmailLog now, so this no
 // longer needs to go through the enrollment/contact chain, and every
@@ -254,7 +298,7 @@ router.get("/ab-tests", async (req, res) => {
   const [allSteps, allCampaigns] = await Promise.all([
     prisma.sequenceStep.findMany({
       where: { sequence: { companyId } },
-      select: { id: true, order: true, subject: true, subjectVariants: true, sequence: { select: { id: true, name: true } } },
+      select: { id: true, order: true, subject: true, subjectVariants: true, bodyVariants: true, sequence: { select: { id: true, name: true } } },
     }),
     prisma.campaign.findMany({
       where: { companyId },
@@ -301,6 +345,48 @@ router.get("/ab-tests", async (req, res) => {
       };
     });
 
+  // Body A/B: steps with body variants, counted by EmailLog.bodyVariant (the
+  // index recorded at send time). Labelled A/B/C… and the highest-open-rate
+  // variant that actually has sends is flagged as the winner.
+  const bodySteps = allSteps.filter((s) => asArr(s.bodyVariants).length > 0);
+  async function countsByBodyVariant(ids) {
+    if (ids.length === 0) return new Map();
+    const rows = await prisma.$queryRaw`
+      SELECT el."stepId" AS step, el."bodyVariant" AS variant,
+        COUNT(DISTINCT el.id)::int AS sent,
+        COUNT(DISTINCT CASE WHEN te.type = 'open' AND te."isBot" = false THEN el.id END)::int AS opened
+      FROM "EmailLog" el
+      LEFT JOIN "TrackingEvent" te ON te."emailLogId" = el.id
+      WHERE el."stepId" IN (${Prisma.join(ids)})
+      GROUP BY el."stepId", el."bodyVariant"`;
+    const map = new Map();
+    for (const r of rows) {
+      if (!map.has(r.step)) map.set(r.step, {});
+      map.get(r.step)[Number(r.variant)] = { sent: r.sent, opened: r.opened };
+    }
+    return map;
+  }
+  const bodyCounts = await countsByBodyVariant(bodySteps.map((s) => s.id));
+  const LABELS = ["A", "B", "C", "D"];
+  const bodyTests = bodySteps.map((s) => {
+    const n = 1 + asArr(s.bodyVariants).length;
+    const counts = bodyCounts.get(s.id) || {};
+    const variants = Array.from({ length: n }, (_, i) => {
+      const c = counts[i] || { sent: 0, opened: 0 };
+      return {
+        label: LABELS[i] || `#${i + 1}`,
+        index: i,
+        isPrimary: i === 0,
+        sent: c.sent,
+        opened: c.opened,
+        openRate: c.sent > 0 ? Math.round((c.opened / c.sent) * 1000) / 10 : 0,
+      };
+    });
+    const contended = variants.filter((v) => v.sent > 0);
+    const winner = contended.length ? contended.reduce((a, b) => (b.openRate > a.openRate ? b : a)).index : null;
+    return { sequenceId: s.sequence.id, sequenceName: s.sequence.name, stepId: s.id, stepOrder: s.order, winner, variants };
+  });
+
   res.json({
     sequences: steps.map((s) => ({
       sequenceId: s.sequence.id,
@@ -314,6 +400,7 @@ router.get("/ab-tests", async (req, res) => {
       name: c.name,
       variants: buildVariants(c.subject, c.subjectVariants, campaignCounts.get(c.id)),
     })),
+    bodyTests,
   });
 });
 

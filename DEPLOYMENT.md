@@ -101,37 +101,61 @@ Optional integrations (leave blank to disable — see `backend/SETUP.md`):
 
 ## Shipping a database (schema) change
 
-**Schema changes are applied automatically on every deploy.** The Render
-**Build Command** (set in the dashboard, not in this repo) is:
+This project uses **Prisma Migrations** (`prisma migrate`) — a reviewable,
+version-controlled migration history under `backend/prisma/migrations/`. This
+replaces the old `prisma db push --accept-data-loss` build step, which was
+destructive (it silently dropped any table not in the schema — that's what kept
+dropping the connect-pg-simple `session` table and breaking login).
+
+**Schema changes are applied automatically on every deploy.** Set the Render
+**Build Command** (dashboard, not in this repo) to:
 
 ```
-npm install && npx prisma generate && npx prisma db push --accept-data-loss
+npm install && npm run build
 ```
 
-So `prisma db push` runs against Neon as part of each build, using the
-`DATABASE_URL` Render injects at build time. Any new table/column/index in
-`backend/prisma/schema.prisma` is created the moment that commit deploys — no
-manual step. (This repo does not use Prisma's migration workflow; there's no
-migration history, just one hand-written index file. `db push` is the source of
-truth.)
+where `npm run build` = `prisma generate && prisma migrate deploy`. On each
+deploy, `migrate deploy` applies any *new, unapplied* migration files to Neon —
+and only those. It never drops anything that isn't part of an explicit
+migration, so unmanaged tables (like `session`) are always safe.
 
-### ⚠️ The `--accept-data-loss` flag — know this
-That flag means **destructive** schema changes are applied automatically too,
-not blocked. If you remove or rename a column in `schema.prisma`, the next
-deploy will drop the old column (and its data) without asking. Additive changes
-(new tables/columns/indexes) are always safe; be deliberate about removals and
-renames, and take a Neon backup/branch first if a change might lose data.
+### Making a schema change (the normal loop)
+1. Edit `backend/prisma/schema.prisma`.
+2. Generate a migration locally against a dev/branch DB (supply the URL; there's
+   no committed `.env`):
+   ```bash
+   cd backend
+   DATABASE_URL="postgresql://…neon-branch…" npx prisma migrate dev --name describe_change
+   ```
+   This writes a new folder under `prisma/migrations/` — **commit it**.
+3. Push. The deploy runs `prisma migrate deploy` and applies it to prod.
 
-### Applying a schema change without a full deploy (local)
-Rarely needed, but if you want to push the schema by hand, supply the Neon URL
-yourself — there's no local `.env` (copy it from Render → Environment →
-`DATABASE_URL`):
+Additive changes (new tables/columns/indexes) are safe. For a **destructive**
+change (drop/rename a column), Prisma writes the `DROP`/`ALTER` into the
+migration SQL where you can review it before committing — no more silent data
+loss on deploy. Take a Neon backup/branch first when a change might lose data.
+
+### ⚠️ One-time baseline (migrating an existing db-push database)
+The production DB was previously managed by `db push`, so it has tables but **no
+migration history**. Before the first `migrate deploy` can run, baseline it once
+(run locally, with the prod `DATABASE_URL` from Render → Environment):
+
 ```bash
 cd backend
-DATABASE_URL="postgresql://…neon…" npm run prisma:push   # == npx prisma db push
+# 1. Snapshot the CURRENT schema as the initial migration (SQL only, not applied):
+mkdir -p prisma/migrations/0_init
+DATABASE_URL="postgresql://…neon…" npx prisma migrate diff \
+  --from-empty --to-schema-datamodel prisma/schema.prisma \
+  --script > prisma/migrations/0_init/migration.sql
+# 2. Mark it as already-applied (the tables already exist in prod):
+DATABASE_URL="postgresql://…neon…" npx prisma migrate resolve --applied 0_init
+# 3. Commit the prisma/migrations/ folder.
 ```
-Running a `prisma` command locally **without** `DATABASE_URL` set is what
-produces the `P1012 / Environment variable not found: DATABASE_URL` error.
+After that, every subsequent `prisma migrate dev` (local) + `migrate deploy`
+(on deploy) works normally. See `backend/MIGRATIONS.md` for the same steps.
+
+Running a `prisma` command locally **without** `DATABASE_URL` set produces the
+`P1012 / Environment variable not found: DATABASE_URL` error.
 
 ## Troubleshooting
 

@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { api, API_URL, ApiError } from "./lib/api";
 import { t, useLang, LanguageSwitcher } from "./lib/i18n.jsx";
-import { C, Card, Spinner, ErrorNote, StatCard, EmptyState, Skeleton, SkeletonRows, PageHeader, Brand, fmtMoney, fmtDate, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
-import { toast, Toaster } from "./lib/toast.jsx";
+import { C, Card, Spinner, ErrorNote, StatCard, EmptyState, Skeleton, SkeletonRows, PageHeader, Brand, ThemeToggle, useTheme, fmtMoney, fmtDate, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
+import { toast, toastUndo, Toaster } from "./lib/toast.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
 import DOMPurify from "dompurify";
 
@@ -350,6 +350,113 @@ function GlobalSearch({ onSelectContact, dark = false }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ⌘K command palette: fuzzy-ish filter over a list of static actions
+// (navigate + create + quick actions, passed in from App so they can call
+// setView/setComposeOpen/etc.) plus live contact-search results from the same
+// /contacts?q= endpoint the sidebar search uses. Full keyboard nav: ↑/↓ to
+// move, Enter to run, Esc to close.
+function CommandPalette({ open, onClose, actions, onOpenContact }) {
+  const [query, setQuery] = useState("");
+  const [contacts, setContacts] = useState([]);
+  const [active, setActive] = useState(0);
+  const inputRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setContacts([]);
+      setActive(0);
+      setTimeout(() => inputRef.current?.focus(), 20);
+    }
+  }, [open]);
+
+  // Debounced contact lookup (only when there's a query).
+  useEffect(() => {
+    if (!open) return;
+    clearTimeout(debounceRef.current);
+    if (!query.trim()) { setContacts([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const data = await api.get(`/contacts?q=${encodeURIComponent(query.trim())}&pageSize=5`);
+        setContacts(data.contacts.slice(0, 5));
+      } catch { setContacts([]); }
+    }, 200);
+    return () => clearTimeout(debounceRef.current);
+  }, [query, open]);
+
+  const q = query.trim().toLowerCase();
+  const filteredActions = q
+    ? actions.filter((a) => (a.label + " " + (a.keywords || "")).toLowerCase().includes(q))
+    : actions;
+
+  // Flat list of selectable rows: actions first, then contacts.
+  const rows = [
+    ...filteredActions.map((a) => ({ kind: "action", ...a })),
+    ...contacts.map((c) => ({ kind: "contact", id: c.id, label: c.name || c.email, sub: c.email, contact: c })),
+  ];
+
+  function run(row) {
+    if (!row) return;
+    onClose();
+    if (row.kind === "action") row.run();
+    else onOpenContact(row.contact.id);
+  }
+
+  function onKeyDown(e) {
+    if (e.key === "Escape") { onClose(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, rows.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); run(rows[active]); }
+  }
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center p-4 pt-[12vh]" style={{ backgroundColor: "rgba(16,25,43,0.45)" }} onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl bg-white border overflow-hidden" style={{ borderColor: C.line, boxShadow: "0 24px 60px rgba(16,25,43,0.30)" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: C.line }}>
+          <Search size={16} style={{ color: C.slate }} />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+            onKeyDown={onKeyDown}
+            placeholder={t("Πήγαινε ή κάνε ενέργεια…")}
+            className="flex-1 outline-none text-sm bg-transparent"
+            style={{ color: C.ink }}
+          />
+          <span className="text-[10px] font-semibold rounded px-1.5 py-0.5" style={{ backgroundColor: C.pale, color: C.slate }}>ESC</span>
+        </div>
+        <div className="max-h-[50vh] overflow-y-auto py-1">
+          {rows.length === 0 ? (
+            <div className="px-4 py-6 text-center text-xs" style={{ color: C.slate }}>{t("Κανένα αποτέλεσμα.")}</div>
+          ) : (
+            rows.map((row, i) => (
+              <button
+                key={row.kind + row.id}
+                type="button"
+                onMouseEnter={() => setActive(i)}
+                onClick={() => run(row)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-left"
+                style={{ backgroundColor: i === active ? C.pale : "transparent" }}
+              >
+                <span className="flex items-center justify-center rounded-md shrink-0" style={{ width: 26, height: 26, backgroundColor: i === active ? "#fff" : C.pale }}>
+                  {row.kind === "action" ? (row.icon ? <row.icon size={14} style={{ color: C.navy }} /> : <ChevronRight size={14} style={{ color: C.navy }} />) : <Users size={14} style={{ color: C.navy }} />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium truncate" style={{ color: C.ink }}>{row.label}</span>
+                  {row.sub && <span className="block text-xs truncate" style={{ color: C.slate }}>{row.sub}</span>}
+                </span>
+                {row.kind === "contact" && <span className="text-[10px]" style={{ color: C.slate }}>{t("επαφή")}</span>}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1309,44 +1416,74 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
             </div>
 
             <div>
-              <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
-                <Mail size={14} /> {t("Ιστορικό αποστολών")} ({detail.timeline?.length || 0})
-              </div>
-              {(!detail.timeline || detail.timeline.length === 0) ? (
-                <p className="text-xs" style={{ color: C.slate }}>{t("Δεν έχει σταλεί κανένα email ακόμα.")}</p>
-              ) : (
-                <div className="space-y-2">
-                  {detail.timeline.map((ev) => {
-                    const open = expandedLogId === ev.id;
-                    return (
-                      <div key={ev.id} className="rounded-lg overflow-hidden" style={{ backgroundColor: C.pale }}>
-                        <button
-                          type="button"
-                          onClick={() => setExpandedLogId(open ? null : ev.id)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-left"
-                        >
-                          <div className="min-w-0 flex items-center gap-1.5">
-                            <ChevronRight size={12} style={{ color: C.slate, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} className="shrink-0" />
-                            <div className="min-w-0">
-                              <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{ev.subject}</div>
-                              <div className="text-[11px]" style={{ color: C.slate }}>{ev.sequenceName || t("Χειροκίνητο")} · {fmtDate(ev.sentAt)}</div>
+              {(() => {
+                // Unified conversation: email + LinkedIn touches in one thread.
+                // Falls back to the email-only timeline for older cached detail.
+                const convo = detail.conversation || (detail.timeline || []).map((e) => ({ kind: "email", ...e, at: e.sentAt }));
+                return (
+                  <>
+                    <div className="flex items-center gap-1.5 text-sm font-medium mb-2" style={{ color: C.ink }}>
+                      <Mail size={14} /> {t("Συνομιλία")} ({convo.length})
+                    </div>
+                    {convo.length === 0 ? (
+                      <p className="text-xs" style={{ color: C.slate }}>{t("Καμία επικοινωνία ακόμα.")}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {convo.map((ev) => {
+                          if (ev.kind !== "email") {
+                            const meta = {
+                              linkedin_connection: { Icon: Linkedin, label: t("Αίτημα σύνδεσης LinkedIn"), color: C.sky },
+                              linkedin_message: { Icon: Linkedin, label: t("Μήνυμα LinkedIn"), color: C.sky },
+                              linkedin_inmail: { Icon: Send, label: "InMail", color: C.navy },
+                            }[ev.kind] || { Icon: Linkedin, label: "LinkedIn", color: C.sky };
+                            return (
+                              <div key={ev.id} className="rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <meta.Icon size={13} style={{ color: meta.color }} className="shrink-0" />
+                                    <span className="text-xs font-medium truncate" style={{ color: C.ink }}>{meta.label}</span>
+                                  </div>
+                                  <span className="text-[11px] shrink-0" style={{ color: C.slate }}>{fmtDate(ev.at)}</span>
+                                </div>
+                                {ev.text && <div className="text-[11px] mt-1 line-clamp-3" style={{ color: C.slate }}>{ev.text}</div>}
+                                {ev.status && ev.status !== "sent" && <div className="text-[10px] mt-1" style={{ color: C.slate }}>{ev.status}</div>}
+                              </div>
+                            );
+                          }
+                          const open = expandedLogId === ev.id;
+                          return (
+                            <div key={ev.id} className="rounded-lg overflow-hidden" style={{ backgroundColor: C.pale }}>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedLogId(open ? null : ev.id)}
+                                className="w-full flex items-center justify-between px-3 py-2 text-left"
+                              >
+                                <div className="min-w-0 flex items-center gap-1.5">
+                                  <ChevronRight size={12} style={{ color: C.slate, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} className="shrink-0" />
+                                  <Mail size={13} style={{ color: C.slate }} className="shrink-0" />
+                                  <div className="min-w-0">
+                                    <div className="text-xs font-medium truncate" style={{ color: C.ink }}>{ev.subject}</div>
+                                    <div className="text-[11px]" style={{ color: C.slate }}>{ev.sequenceName || t("Χειροκίνητο")} · {fmtDate(ev.at || ev.sentAt)}</div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {ev.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>{t("Άνοιξε")}</span>}
+                                  {ev.clicked && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.amber}1A`, color: C.amber }}>{t("Κλικ")}</span>}
+                                </div>
+                              </button>
+                              {open && (
+                                <div className="px-3 pb-2.5 pl-7">
+                                  <EventTrace sentAt={ev.at || ev.sentAt} events={ev.events} />
+                                </div>
+                              )}
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {ev.opened && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.sky}1A`, color: C.sky }}>{t("Άνοιξε")}</span>}
-                            {ev.clicked && <span className="text-[10px] rounded px-1.5 py-0.5" style={{ backgroundColor: `${C.amber}1A`, color: C.amber }}>{t("Κλικ")}</span>}
-                          </div>
-                        </button>
-                        {open && (
-                          <div className="px-3 pb-2.5 pl-7">
-                            <EventTrace sentAt={ev.sentAt} events={ev.events} />
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div>
@@ -1414,6 +1551,40 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
   const [uploadNote, setUploadNote] = useState("");
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Saved segments: named snapshots of the current filter set, persisted per
+  // browser in localStorage (no backend needed — they're personal views).
+  const SEG_KEY = "sdloop_segments";
+  const [segments, setSegments] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(SEG_KEY) || "[]"); } catch { return []; }
+  });
+  function persistSegments(next) {
+    setSegments(next);
+    try { localStorage.setItem(SEG_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }
+  function currentFilters() {
+    return { query, statusFilter, categoryFilter, tagFilter, onlyDue, hideUnsubscribed, hasWebsiteOnly };
+  }
+  function applySegment(f) {
+    setQuery(f.query || "");
+    setStatusFilter(f.statusFilter || "all");
+    setCategoryFilter(f.categoryFilter || "all");
+    setTagFilter(f.tagFilter || "all");
+    setOnlyDue(!!f.onlyDue);
+    setHideUnsubscribed(!!f.hideUnsubscribed);
+    setHasWebsiteOnly(!!f.hasWebsiteOnly);
+    setPage(1);
+  }
+  function saveSegment() {
+    const name = (window.prompt(t("Όνομα segment:")) || "").trim();
+    if (!name) return;
+    const next = [...segments.filter((s) => s.name !== name), { name, filters: currentFilters() }];
+    persistSegments(next);
+    toast.success(t("Το segment αποθηκεύτηκε."));
+  }
+  function deleteSegment(name) {
+    persistSegments(segments.filter((s) => s.name !== name));
+  }
   const [detailContactId, setDetailContactId] = useState(null);
   const fileRef = useRef(null);
 
@@ -1747,6 +1918,36 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
             {t("Καθαρισμός φίλτρων")}
           </button>
         )}
+
+        {/* Saved segments: apply a named filter set, or save the current one. */}
+        <div className="flex items-center gap-1.5">
+          {segments.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => { const s = segments.find((x) => x.name === e.target.value); if (s) applySegment(s.filters); }}
+              className="rounded-lg px-2 py-1.5 text-xs border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}
+            >
+              <option value="">{t("Segments…")}</option>
+              {segments.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+            </select>
+          )}
+          {segments.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => { if (e.target.value) deleteSegment(e.target.value); }}
+              className="rounded-lg px-1.5 py-1.5 text-xs border outline-none bg-white" style={{ borderColor: C.line, color: C.slate }}
+              title={t("Διαγραφή segment")}
+            >
+              <option value="">🗑</option>
+              {segments.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+            </select>
+          )}
+          {hasActiveFilters && (
+            <button type="button" onClick={saveSegment} className="text-xs font-medium" style={{ color: C.sky }}>
+              {t("Αποθήκευση segment")}
+            </button>
+          )}
+        </div>
 
         {selected.size > 0 && (
           <div className="flex items-center gap-2 flex-wrap ml-auto">
@@ -2162,7 +2363,8 @@ function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate
           <Spinner label={t("Φόρτωση templates…")} />
         ) : templates.length === 0 ? (
           <EmptyState icon={FileText} title={t("Δεν υπάρχουν templates ακόμα.")}
-            hint={t("Φτιάξε επαναχρησιμοποιήσιμα emails με merge fields και βάλ' τα σε sequences και campaigns.")} />
+            hint={t("Φτιάξε επαναχρησιμοποιήσιμα emails με merge fields και βάλ' τα σε sequences και campaigns.")}
+            actionLabel={t("Νέο template")} onAction={() => setEditing("new")} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {templates.map((tpl) => (
@@ -2415,7 +2617,8 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
           <Spinner label={t("Φόρτωση προσφορών…")} />
         ) : offers.length === 0 ? (
           <EmptyState icon={Handshake} title={t("Δεν υπάρχουν προσφορές ακόμα.")}
-            hint={t("Κατέγραψε προσφορές ανά επαφή για να παρακολουθείς pipeline και win rate.")} />
+            hint={t("Κατέγραψε προσφορές ανά επαφή για να παρακολουθείς pipeline και win rate.")}
+            actionLabel={t("Νέα προσφορά")} onAction={() => setShowNew(true)} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {OFFER_STATUSES.map((col) => (
@@ -2578,9 +2781,10 @@ function StepFields({
   channel = "email",
   mode, setMode, templateId, setTemplateId, subject, setSubject, body, setBody,
   attachments, setAttachments, conditions, setConditions, templates,
-  subjectVariants, setSubjectVariants,
+  subjectVariants, setSubjectVariants, bodyVariants, setBodyVariants,
 }) {
   const variants = Array.isArray(subjectVariants) ? subjectVariants : [];
+  const bodyVars = Array.isArray(bodyVariants) ? bodyVariants : [];
   const isEmail = channel === "email";
   const isInmail = channel === "linkedin_inmail";
   const isLinkedin = channel === "linkedin";
@@ -2686,6 +2890,38 @@ function StepFields({
             </p>
           )}
           <AutoTrackingPixelNote />
+
+          {/* A/B body test: optional alternative full bodies. Each send picks
+              one body at random; winner shows under Analytics → A/B. */}
+          {typeof setBodyVariants === "function" && (
+            <div className="rounded-lg border px-3 py-2 space-y-2 mt-1" style={{ borderColor: C.line }}>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium" style={{ color: C.slate }}>
+                  {t("A/B κειμένου")}{bodyVars.length > 0 ? t(" · {n} παραλλαγές", { n: bodyVars.length + 1 }) : ""}
+                </span>
+                {bodyVars.length < 3 && (
+                  <button type="button" onClick={() => setBodyVariants([...bodyVars, ""])}
+                    className="text-[11px] font-medium flex items-center gap-1" style={{ color: C.sky }}>
+                    <Plus size={11} /> {t("Παραλλαγή κειμένου")}
+                  </button>
+                )}
+              </div>
+              {bodyVars.map((v, vi) => (
+                <div key={vi} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold" style={{ color: C.slate }}>{t("Παραλλαγή {v}", { v: String.fromCharCode(66 + vi) })}</span>
+                    <button type="button" onClick={() => setBodyVariants(bodyVars.filter((_, idx) => idx !== vi))} style={{ color: C.coral }}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                  <RichTextEditor value={v} onChange={(html) => setBodyVariants(bodyVars.map((x, idx) => (idx === vi ? html : x)))} minHeight={70} />
+                </div>
+              ))}
+              {bodyVars.length > 0 && (
+                <p className="text-[10px]" style={{ color: C.slate }}>{t("Κάθε αποστολή διαλέγει τυχαία ένα κείμενο. Νικητής: Analytics → A/B.")}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -2717,6 +2953,7 @@ function emptyStep(index) {
     templateId: "",
     subject: "",
     subjectVariants: [],
+    bodyVariants: [],
     body: unsubscribeSeed(),
     delayDays: SUGGESTED_DELAYS[index] ?? 7,
     conditions: { requireEvent: null, requireTags: [] },
@@ -2780,7 +3017,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
         const base = isMulti ? { channel: ch } : {};
         return s.mode === "template" && s.templateId && ch === "email"
           ? { ...base, templateId: s.templateId, subjectVariants: s.subjectVariants || [], delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
-          : { ...base, subject: s.subject, subjectVariants: s.subjectVariants || [], body: s.body, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments };
+          : { ...base, subject: s.subject, subjectVariants: s.subjectVariants || [], body: s.body, bodyVariants: s.bodyVariants || [], delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments };
       });
       await onCreate({ name, channel, linkedinConnectionNote: showConnectionNote ? linkedinConnectionNote : undefined, steps: payloadSteps });
       onClose();
@@ -2884,6 +3121,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
                 templateId={step.templateId} setTemplateId={(v) => updateStep(i, { templateId: v })}
                 subject={step.subject} setSubject={(v) => updateStep(i, { subject: v })}
                 subjectVariants={step.subjectVariants} setSubjectVariants={(v) => updateStep(i, { subjectVariants: v })}
+                bodyVariants={step.bodyVariants} setBodyVariants={(v) => updateStep(i, { bodyVariants: v })}
                 body={step.body} setBody={(v) => updateStep(i, { body: v })}
                 attachments={step.attachments} setAttachments={(v) => updateStep(i, { attachments: v })}
                 conditions={step.conditions} setConditions={(v) => updateStep(i, { conditions: v })}
@@ -2914,6 +3152,7 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
   const [subject, setSubject] = useState("");
   const [subjectVariants, setSubjectVariants] = useState([]);
   const [body, setBody] = useState("");
+  const [bodyVariants, setBodyVariants] = useState([]);
   const [attachments, setAttachments] = useState([]);
   const [conditions, setConditions] = useState({ requireEvent: null, requireTags: [] });
   const [delayDays, setDelayDays] = useState(suggestedDelay);
@@ -2928,7 +3167,7 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
       const payload =
         mode === "template"
           ? { templateId, subjectVariants, delayDays: Number(delayDays) || 0, conditions, attachments }
-          : { subject, subjectVariants, body, delayDays: Number(delayDays) || 0, conditions, attachments };
+          : { subject, subjectVariants, body, bodyVariants, delayDays: Number(delayDays) || 0, conditions, attachments };
       await onAdd(payload);
       onClose();
     } catch (err) {
@@ -2951,6 +3190,7 @@ function AddStepModal({ onClose, onAdd, templates, suggestedDelay }) {
             templateId={templateId} setTemplateId={setTemplateId}
             subject={subject} setSubject={setSubject}
             subjectVariants={subjectVariants} setSubjectVariants={setSubjectVariants}
+            bodyVariants={bodyVariants} setBodyVariants={setBodyVariants}
             body={body} setBody={setBody}
             attachments={attachments} setAttachments={setAttachments}
             conditions={conditions} setConditions={setConditions}
@@ -2984,6 +3224,17 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
   }, [sequences, activeId]);
 
   const active = sequences.find((s) => s.id === activeId);
+
+  // Per-step drop-off funnel for the open sequence (sent/opened per step).
+  const [dropoff, setDropoff] = useState(null);
+  useEffect(() => {
+    if (!activeId) { setDropoff(null); return; }
+    let cancelled = false;
+    api.get(`/analytics/sequence/${activeId}/steps`)
+      .then((d) => { if (!cancelled) setDropoff(d); })
+      .catch(() => { if (!cancelled) setDropoff(null); });
+    return () => { cancelled = true; };
+  }, [activeId, sequences]);
 
   async function handleDeleteStep(stepId) {
     if (!active) return;
@@ -3068,6 +3319,29 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
               </button>
             </div>
             <div className="px-8 py-8 max-w-2xl">
+              {dropoff && dropoff.steps.some((s) => s.sent > 0) && (
+                <Card className="p-4 mb-5">
+                  <div className="text-sm font-medium mb-3" style={{ color: C.ink }}>{t("Drop-off ανά βήμα")}</div>
+                  <div className="space-y-2">
+                    {dropoff.steps.map((s, i) => {
+                      const first = dropoff.steps[0]?.sent || 0;
+                      const widthPct = first ? Math.max(4, Math.round((s.sent / first) * 100)) : 0;
+                      const openRate = s.sent ? Math.round((s.opened / s.sent) * 100) : 0;
+                      return (
+                        <div key={s.id} className="flex items-center gap-3">
+                          <span className="text-[11px] w-12 shrink-0" style={{ color: C.slate }}>{t("Βήμα {n}", { n: i + 1 })}</span>
+                          <div className="flex-1 h-6 rounded-md overflow-hidden" style={{ backgroundColor: C.pale }}>
+                            <div className="h-full rounded-md flex items-center px-2" style={{ width: `${widthPct}%`, backgroundColor: C.sky, minWidth: 40 }}>
+                              <span className="text-[11px] font-semibold text-white">{s.sent}</span>
+                            </div>
+                          </div>
+                          <span className="text-[11px] w-24 shrink-0 text-right tabular-nums" style={{ color: C.slate }}>{t("{n}% open", { n: openRate })}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
               {active.steps.length < 3 && (
                 <TipBanner tone="warn">
                   {t("Αυτό το sequence έχει {n} βήματα. Best practice: 3-5 follow-ups δίνουν σημαντικά καλύτερα reply rates.", { n: active.steps.length })}
@@ -3743,7 +4017,8 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
           <Spinner label={t("Φόρτωση…")} />
         ) : campaigns.length === 0 ? (
           <EmptyState icon={Megaphone} title={t("Δεν έχεις δημιουργήσει campaign ακόμα.")}
-            hint={t("Στείλε ένα μήνυμα σε πολλές επαφές μαζί, με σταδιακή αποστολή για καλό deliverability.")} />
+            hint={t("Στείλε ένα μήνυμα σε πολλές επαφές μαζί, με σταδιακή αποστολή για καλό deliverability.")}
+            actionLabel={t("Νέο campaign")} onAction={() => setShowNew(true)} />
         ) : (
           <>
             {/* Desktop table view */}
@@ -3991,6 +4266,7 @@ function SendWindowCard({ isOwner }) {
         unsubscribeConfirmTitle: s.unsubscribeConfirmTitle || "",
         unsubscribeConfirmMessage: s.unsubscribeConfirmMessage || "",
         bookingLink: s.bookingLink || "",
+        bookingLinks: Array.isArray(s.bookingLinks) ? s.bookingLinks : [],
       });
       setUnsubscribeSeed(saved.unsubscribeText);
       setS(saved);
@@ -4056,6 +4332,41 @@ function SendWindowCard({ isOwner }) {
         <input disabled={!isOwner} value={s.bookingLink || ""} onChange={(e) => update({ bookingLink: e.target.value })}
           placeholder="https://cal.com/you/30min"
           className="w-full rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
+
+        {/* Round-robin: extra per-rep links. When present, {{booking_link}}
+            rotates across the primary + these so meetings spread across the team. */}
+        {(() => {
+          const links = Array.isArray(s.bookingLinks) ? s.bookingLinks : [];
+          return (
+            <div className="mt-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-medium" style={{ color: C.slate }}>
+                  {t("Round-robin (extra links)")}{links.length > 0 ? t(" · {n} στη ρότα", { n: links.length + 1 }) : ""}
+                </span>
+                {isOwner && links.length < 20 && (
+                  <button type="button" onClick={() => update({ bookingLinks: [...links, ""] })}
+                    className="text-[11px] font-medium flex items-center gap-1" style={{ color: C.sky }}>
+                    <Plus size={11} /> {t("Προσθήκη link")}
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {links.map((lnk, li) => (
+                  <div key={li} className="flex items-center gap-1.5">
+                    <input disabled={!isOwner} value={lnk} onChange={(e) => update({ bookingLinks: links.map((x, idx) => (idx === li ? e.target.value : x)) })}
+                      placeholder="https://cal.com/teammate/30min"
+                      className="flex-1 rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
+                    {isOwner && (
+                      <button type="button" onClick={() => update({ bookingLinks: links.filter((_, idx) => idx !== li) })} style={{ color: C.coral }}>
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Email tracking on/off - deliverability */}
@@ -4965,6 +5276,9 @@ export default function App() {
   // Subscribe to the language store so a switch re-renders the whole tree and
   // every t() call re-evaluates (see lib/i18n.jsx).
   useLang();
+  // Subscribe to the theme store so a light/dark toggle re-renders the tree and
+  // every C.* (theme-aware Proxy) re-reads (see lib/ui.jsx).
+  useTheme();
   const [authState, setAuthState] = useState("loading"); // loading | anon | authed
   const [user, setUser] = useState(null);
   const [view, setView] = useState("dashboard");
@@ -4972,6 +5286,7 @@ export default function App() {
   const [composeContactId, setComposeContactId] = useState("");
   const [pendingOpenContactId, setPendingOpenContactId] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const [contacts, setContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(false);
@@ -5310,8 +5625,7 @@ export default function App() {
     function onKey(e) {
       if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
-        const input = document.getElementById("global-search-input");
-        if (input) { setSidebarOpen(true); input.focus(); }
+        setPaletteOpen((v) => !v);
         return;
       }
       if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "c" || e.key === "C") && !isTyping()) {
@@ -5471,8 +5785,12 @@ export default function App() {
   }
 
   async function handleBulkDeleteContacts(ids) {
-    await api.post("/contacts/bulk-delete", { ids });
-    await loadContacts();
+    // Deferred: the actual delete only fires after the Undo window closes.
+    toastUndo(
+      t("Διαγράφηκαν {n} επαφές.", { n: ids.length }),
+      async () => { await api.post("/contacts/bulk-delete", { ids }); await loadContacts(); },
+      { undoLabel: t("Αναίρεση") }
+    );
   }
 
   async function handleExportContacts() {
@@ -5498,8 +5816,11 @@ export default function App() {
   }
 
   async function handleDeleteOffer(id) {
-    await api.del(`/offers/${id}`);
-    await loadOffers();
+    toastUndo(
+      t("Η προσφορά διαγράφηκε."),
+      async () => { await api.del(`/offers/${id}`); await loadOffers(); },
+      { undoLabel: t("Αναίρεση") }
+    );
   }
 
   async function handleEnroll(contactIds, sequenceId) {
@@ -5551,8 +5872,11 @@ export default function App() {
   }
 
   async function handleDeleteTemplate(id) {
-    await api.del(`/templates/${id}`);
-    await loadTemplates();
+    toastUndo(
+      t("Το template διαγράφηκε."),
+      async () => { await api.del(`/templates/${id}`); await loadTemplates(); },
+      { undoLabel: t("Αναίρεση") }
+    );
   }
 
   async function handleManualSend(data) {
@@ -5579,8 +5903,11 @@ export default function App() {
   }
 
   async function handleDeleteCampaign(campaignId) {
-    await api.del(`/campaigns/${campaignId}`);
-    await loadCampaigns();
+    toastUndo(
+      t("Το campaign διαγράφηκε."),
+      async () => { await api.del(`/campaigns/${campaignId}`); await loadCampaigns(); },
+      { undoLabel: t("Αναίρεση") }
+    );
   }
 
   async function handleLoadCampaignDetail(campaignId) {
@@ -5682,7 +6009,7 @@ export default function App() {
 
   if (authState === "loading") {
     return (
-      <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: "#F7F9FC" }}>
+      <div className="flex h-screen w-full items-center justify-center" style={{ backgroundColor: C.canvas }}>
         <Spinner label={t("Φόρτωση…")} />
       </div>
     );
@@ -5715,6 +6042,24 @@ export default function App() {
   return (
     <div className="flex h-screen w-full overflow-hidden" style={{ backgroundColor: C.canvas, fontFamily: "Inter, sans-serif" }}>
       <Toaster />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onOpenContact={handleSelectFromSearch}
+        actions={[
+          { id: "compose", label: t("Σύνταξη email"), icon: Pencil, keywords: "compose new email", run: () => setComposeOpen(true) },
+          { id: "go-dashboard", label: t("Σήμερα"), icon: CalendarClock, keywords: "today dashboard", run: () => setView("dashboard") },
+          { id: "go-inbox", label: t("Απεσταλμένα"), icon: Mail, keywords: "sent inbox", run: () => setView("inbox") },
+          { id: "go-contacts", label: t("Επαφές"), icon: Users, keywords: "contacts people", run: () => setView("contacts") },
+          { id: "go-sequences", label: t("Sequences"), icon: Layers, keywords: "sequences cadence", run: () => setView("sequences") },
+          { id: "go-templates", label: t("Templates"), icon: FileText, keywords: "templates", run: () => setView("templates") },
+          { id: "go-offers", label: t("Offers"), icon: Handshake, keywords: "offers deals pipeline", run: () => setView("offers") },
+          { id: "go-campaigns", label: t("Campaigns"), icon: Megaphone, keywords: "campaigns blast", run: () => setView("campaigns") },
+          { id: "go-analytics", label: "Analytics", icon: BarChart3, keywords: "analytics reports metrics", run: () => setView("analytics") },
+          { id: "go-team", label: t("Ομάδα"), icon: UserPlus, keywords: "team settings members", run: () => setView("team") },
+          { id: "go-integrations", label: "Integrations", icon: Globe, keywords: "integrations webhook meta linkedin", run: () => setView("integrations") },
+        ]}
+      />
       {!inviteBannerDismissed && user?.pendingInvites?.length > 0 && (
         <InviteResponseModal
           invites={user.pendingInvites}
@@ -5785,6 +6130,10 @@ export default function App() {
           <span className="text-[11px] font-medium" style={{ color: C.onDarkMuted }}>{t("Γλώσσα")}</span>
           <LanguageSwitcher compact dark />
         </div>
+        <div className="px-5 pt-2 pb-1 flex items-center justify-between">
+          <span className="text-[11px] font-medium" style={{ color: C.onDarkMuted }}>{t("Εμφάνιση")}</span>
+          <ThemeToggle dark />
+        </div>
         <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0" style={{ background: `linear-gradient(135deg, ${C.sky}, ${C.navy})` }}>
             {(user?.name || user?.email || "?").slice(0, 2).toUpperCase()}
@@ -5801,7 +6150,7 @@ export default function App() {
 
       {/* Main */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: C.line, backgroundColor: "#FFFFFF" }}>
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: C.line, backgroundColor: C.surface }}>
           <button onClick={() => setSidebarOpen(true)} className="text-slate-500 hover:text-slate-700">
             <Menu size={20} />
           </button>
@@ -5934,6 +6283,29 @@ export default function App() {
             />
           )}
         </div>
+
+        {/* Mobile bottom navigation — thumb-reachable quick access to the core
+            views, plus "More" which opens the full sidebar drawer. Part of the
+            flex column (not fixed) so it never overlaps content. */}
+        <nav className="md:hidden flex items-stretch border-t shrink-0" style={{ borderColor: C.line, backgroundColor: C.surface }}>
+          {[
+            ["dashboard", t("Σήμερα"), CalendarClock],
+            ["contacts", t("Επαφές"), Users],
+            ["sequences", t("Sequences"), Layers],
+            ["analytics", "Analytics", BarChart3],
+          ].map(([v, label, Icon]) => (
+            <button key={v} onClick={() => { setView(v); setSidebarOpen(false); }}
+              className="flex-1 flex flex-col items-center gap-0.5 py-2"
+              style={{ color: view === v ? C.sky : C.slate }}>
+              <Icon size={19} strokeWidth={view === v ? 2.4 : 2} />
+              <span className="text-[10px] font-medium">{label}</span>
+            </button>
+          ))}
+          <button onClick={() => setSidebarOpen(true)} className="flex-1 flex flex-col items-center gap-0.5 py-2" style={{ color: C.slate }}>
+            <Menu size={19} />
+            <span className="text-[10px] font-medium">{t("Περισσότερα")}</span>
+          </button>
+        </nav>
       </div>
 
       {composeOpen && (

@@ -33,6 +33,14 @@ const subjectVariantsSchema = z
   .default([])
   .transform((arr) => arr.map((s) => s.trim()).filter(Boolean));
 
+// Body A/B variants: up to 3 extra full HTML bodies, trimmed, empties dropped.
+const bodyVariantsSchema = z
+  .array(z.string().max(20000))
+  .max(3)
+  .optional()
+  .default([])
+  .transform((arr) => arr.map((s) => (s || "").trim()).filter(Boolean));
+
 const stepSchema = z
   .object({
     // Per-step channel. Optional so single-channel sequences can omit it (the
@@ -43,6 +51,7 @@ const stepSchema = z
     subject: z.string().min(1).max(300).optional(),
     subjectVariants: subjectVariantsSchema,
     body: z.string().min(1).max(20000).optional(),
+    bodyVariants: bodyVariantsSchema,
     delayDays: z.number().int().min(0).max(60),
     conditions: conditionsSchema,
     attachments: attachmentsSchema,
@@ -86,6 +95,7 @@ async function resolveSteps(steps, companyId, sequenceChannel = "email") {
         subject: template.subject,
         subjectVariants: step.subjectVariants || [],
         body: template.body,
+        bodyVariants: [], // templates are a single body; no body A/B
         delayDays: step.delayDays,
         sourceTemplateId: template.id,
         conditions: step.conditions,
@@ -97,6 +107,8 @@ async function resolveSteps(steps, companyId, sequenceChannel = "email") {
         subject: step.subject || "", // "" for LinkedIn message steps (no subject)
         subjectVariants: step.subjectVariants || [],
         body: step.body,
+        // Body A/B only meaningful for email steps; ignore for LinkedIn/InMail.
+        bodyVariants: channel === "email" ? (step.bodyVariants || []) : [],
         delayDays: step.delayDays,
         sourceTemplateId: null,
         conditions: step.conditions,
@@ -238,6 +250,7 @@ router.patch("/:id/steps/:stepId", async (req, res) => {
       subject: z.string().min(1).max(300).optional(),
       subjectVariants: subjectVariantsSchema.optional(),
       body: z.string().min(1).max(20000).optional(),
+      bodyVariants: bodyVariantsSchema.optional(),
       delayDays: z.number().int().min(0).max(60).optional(),
       conditions: conditionsSchema.optional(),
       attachments: attachmentsSchema.optional(),

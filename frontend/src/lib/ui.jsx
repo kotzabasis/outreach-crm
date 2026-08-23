@@ -5,13 +5,20 @@
 // shared layer, not the entire main-app bundle (contacts/sequences/
 // templates/campaigns/analytics/etc.), which used to ship to every visitor
 // regardless of which screen they actually landed on.
-import { Loader2, AlertTriangle, PhoneCall, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, AlertTriangle, PhoneCall, RefreshCw, Sun, Moon } from "lucide-react";
 import { t } from "./i18n.jsx";
 
-// ---------- Design tokens ----------
-// Color: navy #163B73 (primary), sky #2E6EE8 (accent/action), pale #EEF3FC (tint bg),
-// ink #10192B (text), slate #64748B (muted), mint #1FA971 (positive), amber #D9860B (pending), coral #E15353 (negative)
-export const C = {
+// ---------- Design tokens (theme-aware) ----------
+// Two palettes, light and dark. `C` is a Proxy that always reads the CURRENTLY
+// active palette, so every `style={{ color: C.ink }}` (and every `${C.coral}14`
+// alpha concatenation) flips automatically when the theme changes — no need to
+// thread a theme prop through the whole tree. Components re-render on toggle via
+// useTheme() at the top-level screens (App/SuperAdminApp/AuthScreen/Reset), the
+// same external-store pattern as i18n. Tailwind literal classes (bg-white,
+// hover:bg-slate-50, …) are handled by `.theme-dark` overrides in index.css,
+// since inline styles can't reach them.
+const LIGHT = {
   navy: "#163B73",
   sky: "#2E6EE8",
   pale: "#EEF3FC",
@@ -21,19 +28,108 @@ export const C = {
   amber: "#D9860B",
   coral: "#E15353",
   line: "#E2E8F0",
-  // Redesign tokens - a deeper navy for the app rail (professional SaaS look
-  // with real contrast against the light content area) plus the muted
-  // light-on-dark text/hover values used inside it. Same hue family as `navy`.
   sidebar: "#0E1F3D",
   sidebarTop: "#14294B",
   onDark: "#AFC0DC",
   onDarkMuted: "#7E90AE",
-  // App content background - a hair cooler than white so elevated white cards
-  // read as raised panels rather than blending into the page.
   canvas: "#F4F7FB",
-  // Standard card elevation, applied by <Card> and reused where needed.
+  surface: "#FFFFFF",
   shadow: "0 1px 2px rgba(16,25,43,0.04), 0 4px 12px rgba(16,25,43,0.06)",
 };
+const DARK = {
+  navy: "#A9C2EE",       // was a dark primary text/icon color → lightened for dark bg
+  sky: "#4C86F5",
+  pale: "#1B2740",       // tint/well backgrounds
+  ink: "#E7EEF9",        // primary text
+  slate: "#93A4BF",      // muted text
+  mint: "#34C793",
+  amber: "#E0A73B",
+  coral: "#F06D6D",
+  line: "#26324B",       // borders
+  sidebar: "#0A1526",
+  sidebarTop: "#0F1E36",
+  onDark: "#AFC0DC",
+  onDarkMuted: "#7E90AE",
+  canvas: "#0B1220",     // page background
+  surface: "#141E30",    // card/input background
+  shadow: "0 1px 2px rgba(0,0,0,0.4), 0 6px 18px rgba(0,0,0,0.45)",
+};
+
+const THEME_KEY = "sdloop_theme";
+function loadTheme() {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return v === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+let THEME = loadTheme();
+const themeListeners = new Set();
+
+function applyThemeClass() {
+  try {
+    const el = document.documentElement;
+    if (THEME === "dark") el.classList.add("theme-dark");
+    else el.classList.remove("theme-dark");
+  } catch { /* SSR/no-DOM guard */ }
+}
+applyThemeClass();
+
+export function getTheme() {
+  return THEME;
+}
+export function setTheme(next) {
+  const v = next === "dark" ? "dark" : "light";
+  if (v === THEME) return;
+  THEME = v;
+  try { localStorage.setItem(THEME_KEY, v); } catch { /* ignore */ }
+  applyThemeClass();
+  themeListeners.forEach((fn) => fn(v));
+}
+// Subscribe a top-level screen so a toggle re-renders the whole tree (which
+// re-reads every C.* getter through the Proxy below).
+export function useTheme() {
+  const [theme, setThemeState] = useState(THEME);
+  useEffect(() => {
+    const fn = (v) => setThemeState(v);
+    themeListeners.add(fn);
+    if (THEME !== theme) setThemeState(THEME);
+    return () => themeListeners.delete(fn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return { theme, setTheme };
+}
+
+// `C` reads the active palette on every property access.
+export const C = new Proxy({}, {
+  get(_t, prop) {
+    const pal = THEME === "dark" ? DARK : LIGHT;
+    return pal[prop];
+  },
+});
+
+// Small light/dark toggle for the sidebar (mirrors LanguageSwitcher styling).
+export function ThemeToggle({ dark = false }) {
+  const { theme, setTheme: set } = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <button
+      type="button"
+      onClick={() => set(isDark ? "light" : "dark")}
+      className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium"
+      style={{
+        borderColor: dark ? "rgba(255,255,255,0.16)" : C.line,
+        color: dark ? "#AFC0DC" : C.slate,
+        backgroundColor: dark ? "rgba(255,255,255,0.06)" : "transparent",
+      }}
+      title={isDark ? t("Φωτεινό θέμα") : t("Σκούρο θέμα")}
+    >
+      {isDark ? <Sun size={13} /> : <Moon size={13} />}
+      {isDark ? t("Φωτεινό") : t("Σκούρο")}
+    </button>
+  );
+}
 
 export function fmtMoney(value, currency = "EUR") {
   if (value == null || value === "") return "-";

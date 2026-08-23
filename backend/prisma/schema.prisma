@@ -206,6 +206,12 @@ model Company {
   // into manual replies — the single highest-leverage CTA for turning a reply
   // into a booked meeting.
   bookingLink                String @default("")
+  // Round-robin: additional per-rep booking links. When set, {{booking_link}}
+  // rotates across [bookingLink, ...bookingLinks] so meetings are distributed
+  // evenly across the team. `bookingLinkCursor` is the persistent rotation
+  // pointer, advanced once per send that actually uses the token.
+  bookingLinks               Json   @default("[]")
+  bookingLinkCursor          Int    @default(0)
 
   users        User[]
   contacts     Contact[]
@@ -631,6 +637,12 @@ model SequenceStep {
   // single `subject` above is always used. Shape: string[].
   subjectVariants  Json     @default("[]")
   body             String   // HTML, may contain {{name}}, {{company}}, {{email}} placeholders
+  // Body A/B testing: additional full HTML bodies tested against `body`. Same
+  // model as subjectVariants — when non-empty, each send picks uniformly at
+  // random from [body, ...bodyVariants]; the chosen index is recorded on
+  // EmailLog.bodyVariant so /analytics/ab-tests can report open rate per body
+  // and highlight the winner. Empty = no test. Shape: string[] (HTML).
+  bodyVariants     Json     @default("[]")
   delayDays        Int      @default(0) // days after previous step (0 for the first step)
   sourceTemplateId String?  // informational only — which template this was copied from, if any
   // Combinable gating conditions, evaluated by the scheduler right before
@@ -686,6 +698,9 @@ model EmailLog {
   companyId      String?
   company        Company?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   subject        String      @default("")
+  // Which body variant went out (index into [step.body, ...step.bodyVariants]);
+  // 0 = primary / no test. Powers body-level A/B open-rate analytics.
+  bodyVariant    Int         @default(0)
   source         String      @default("sequence") // sequence | manual | campaign
   attachments    Json        @default("[]") // kept for history/audit, same shape as SequenceStep.attachments
   gmailMessageId String?

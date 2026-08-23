@@ -6,3 +6,21 @@ html, body, #root {
   height: 100%;
   margin: 0;
 }
+
+/* ---------- Dark theme ----------
+   The `C` palette (lib/ui.jsx) is a theme-aware Proxy, so all inline
+   `style={{ color: C.x }}` colors flip automatically. These rules cover the
+   Tailwind LITERAL utility classes that inline styles can't reach — mostly
+   `bg-white` (cards, inputs, toasts, dropdowns) and slate hovers. `.theme-dark`
+   is toggled on <html> by setTheme(). */
+.theme-dark { color-scheme: dark; }
+.theme-dark body { background-color: #0B1220; }
+.theme-dark .bg-white { background-color: #141E30 !important; }
+.theme-dark .bg-slate-50 { background-color: rgba(255,255,255,0.05) !important; }
+.theme-dark .hover\:bg-slate-50:hover { background-color: rgba(255,255,255,0.06) !important; }
+.theme-dark .hover\:bg-white\/5:hover { background-color: rgba(255,255,255,0.06) !important; }
+/* Native controls (date pickers, checkboxes) render dark chrome. */
+.theme-dark input, .theme-dark textarea, .theme-dark select { color-scheme: dark; }
+/* Muted Tailwind text used in a few spots; keep it legible on dark. */
+.theme-dark .text-slate-400, .theme-dark .text-slate-500 { color: #8CA0BF !important; }
+.theme-dark .text-slate-600, .theme-dark .text-slate-700 { color: #AEBED6 !important; }
