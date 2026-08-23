@@ -71,8 +71,9 @@ export function useLang() {
   return { lang, setLang };
 }
 
-// Small EL/EN toggle for the header. `compact` renders a tighter version.
-export function LanguageSwitcher({ compact = false }) {
+// Small EL/EN toggle for the header. `compact` renders a tighter version;
+// `dark` styles it for a dark background (e.g. the app sidebar).
+export function LanguageSwitcher({ compact = false, dark = false }) {
   const { lang, setLang } = useLang();
   const opts = [
     ["el", "ΕΛ"],
@@ -81,22 +82,21 @@ export function LanguageSwitcher({ compact = false }) {
   return (
     <div
       className="inline-flex items-center rounded-lg border overflow-hidden"
-      style={{ borderColor: "#E2E8F0" }}
+      style={{ borderColor: dark ? "rgba(255,255,255,0.16)" : "#E2E8F0" }}
       role="group"
       aria-label="Language"
     >
       {opts.map(([code, label]) => {
         const active = lang === code;
+        const bg = active ? "#2E6EE8" : dark ? "rgba(255,255,255,0.06)" : "#fff";
+        const fg = active ? "#fff" : dark ? "#AFC0DC" : "#64748B";
         return (
           <button
             key={code}
             type="button"
             onClick={() => setLang(code)}
             className={`text-xs font-semibold ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}
-            style={{
-              backgroundColor: active ? "#2E6EE8" : "#fff",
-              color: active ? "#fff" : "#64748B",
-            }}
+            style={{ backgroundColor: bg, color: fg }}
           >
             {label}
           </button>

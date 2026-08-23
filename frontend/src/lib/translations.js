@@ -7,6 +7,14 @@
 // both the key and the translation.
 
 export const EN = {
+  // — Multichannel sequences —
+  "Multichannel": "Multichannel",
+  "Multichannel sequence: κάθε βήμα διαλέγει το δικό του κανάλι (Email / LinkedIn / InMail). Εγγράφονται όλες οι επαφές — τα βήματα LinkedIn/InMail παραλείπονται αυτόματα για επαφές χωρίς LinkedIn URL, ώστε να συνεχίζουν τα email.":
+    "Multichannel sequence: each step picks its own channel (Email / LinkedIn / InMail). All contacts are enrolled — LinkedIn/InMail steps are automatically skipped for contacts without a LinkedIn URL, so emails keep flowing.",
+  "Θέμα InMail": "InMail subject",
+  "Μήνυμα InMail… (υποστηρίζει {{first_name}})": "InMail message… (supports {{first_name}})",
+  "Μήνυμα LinkedIn… (υποστηρίζει {{first_name}})": "LinkedIn message… (supports {{first_name}})",
+
   // — Day-of-week abbreviations (send window) —
   "Δε": "Mon",
   "Τρ": "Tue",

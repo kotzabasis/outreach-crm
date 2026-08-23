@@ -576,8 +576,10 @@ model Sequence {
   // Gmail path; "linkedin" runs the same step engine but sends via the
   // connected LinkedIn account (Unipile) — first step becomes a connection
   // request for non-connections, follow-ups fire on the "connection accepted"
-  // event. A sequence is single-channel for the MVP.
-  channel   String   @default("email") // email | linkedin
+  // event. "multichannel" means the channel is chosen per step instead (see
+  // SequenceStep.channel), so a single cadence can mix email + LinkedIn + InMail
+  // touches. For the single-channel values every step inherits this one.
+  channel   String   @default("email") // email | linkedin | linkedin_inmail | multichannel
   // LinkedIn only: the connection-request note sent when an enrolled contact
   // isn't a 1st-degree connection yet. Once accepted, the sequence's steps run
   // as direct messages. Ignored for email sequences.
@@ -593,6 +595,11 @@ model SequenceStep {
   sequenceId       String
   sequence         Sequence  @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
   order            Int
+  // Which channel THIS step sends on. Defaults to "email" so existing rows and
+  // single-channel sequences are unaffected. In a "multichannel" sequence each
+  // step carries its own value; the scheduler dispatches per step on this
+  // (email → Gmail, linkedin → Unipile DM, linkedin_inmail → Unipile InMail).
+  channel          String   @default("email") // email | linkedin | linkedin_inmail
   subject          String
   // A/B subject testing: additional subject lines. When non-empty, each send
   // picks uniformly at random from [subject, ...subjectVariants], and the one

@@ -21,6 +21,18 @@ export const C = {
   amber: "#D9860B",
   coral: "#E15353",
   line: "#E2E8F0",
+  // Redesign tokens — a deeper navy for the app rail (professional SaaS look
+  // with real contrast against the light content area) plus the muted
+  // light-on-dark text/hover values used inside it. Same hue family as `navy`.
+  sidebar: "#0E1F3D",
+  sidebarTop: "#14294B",
+  onDark: "#AFC0DC",
+  onDarkMuted: "#7E90AE",
+  // App content background — a hair cooler than white so elevated white cards
+  // read as raised panels rather than blending into the page.
+  canvas: "#F4F7FB",
+  // Standard card elevation, applied by <Card> and reused where needed.
+  shadow: "0 1px 2px rgba(16,25,43,0.04), 0 4px 12px rgba(16,25,43,0.06)",
 };
 
 export function fmtMoney(value, currency = "EUR") {
@@ -41,7 +53,10 @@ export function fmtDate(value) {
 
 export function Card({ children, className = "", style }) {
   return (
-    <div className={`rounded-2xl bg-white border ${className}`} style={{ borderColor: C.line, ...style }}>
+    <div
+      className={`rounded-2xl bg-white border ${className}`}
+      style={{ borderColor: C.line, boxShadow: C.shadow, ...style }}
+    >
       {children}
     </div>
   );
@@ -73,10 +88,13 @@ export function ErrorNote({ message, onRetry }) {
 }
 
 export function StatCard({ label, value, sub, color }) {
+  // A thin colored accent rail on the left ties the metric to its status color
+  // and gives the stat row a more deliberate, dashboard-grade rhythm.
   return (
-    <Card className="p-5 flex-1">
-      <div className="text-xs font-medium uppercase tracking-wide" style={{ color: C.slate }}>{label}</div>
-      <div className="text-2xl font-semibold mt-2" style={{ color: C.ink, fontFamily: "IBM Plex Mono, monospace" }}>{value}</div>
+    <Card className="p-5 flex-1 relative overflow-hidden">
+      <span className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: color || C.sky }} />
+      <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: C.slate }}>{label}</div>
+      <div className="text-[26px] leading-tight font-bold mt-2" style={{ color: C.ink, fontFamily: "IBM Plex Mono, monospace", letterSpacing: "-0.02em" }}>{value}</div>
       <div className="text-xs mt-1" style={{ color }}>{sub}</div>
     </Card>
   );
@@ -101,12 +119,12 @@ export function Logo({ size = 34 }) {
   );
 }
 
-export function Brand({ size = 34, textSize = "text-lg" }) {
+export function Brand({ size = 34, textSize = "text-lg", light = false }) {
   return (
     <div className="flex items-center gap-2.5">
       <Logo size={size} />
-      <span className={`${textSize} font-semibold`} style={{ color: C.ink, fontFamily: "Sora, sans-serif", letterSpacing: "-0.01em" }}>
-        SD<span style={{ color: C.sky }}>Loop</span>
+      <span className={`${textSize} font-semibold`} style={{ color: light ? "#FFFFFF" : C.ink, fontFamily: "Sora, sans-serif", letterSpacing: "-0.01em" }}>
+        SD<span style={{ color: light ? "#7FB0FF" : C.sky }}>Loop</span>
       </span>
     </div>
   );

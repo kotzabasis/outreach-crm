@@ -35,6 +35,10 @@ const subjectVariantsSchema = z
 
 const stepSchema = z
   .object({
+    // Per-step channel. Optional so single-channel sequences can omit it (the
+    // step then inherits the sequence's channel); required-in-effect for
+    // "multichannel" sequences, where each step must declare its own.
+    channel: z.enum(["email", "linkedin", "linkedin_inmail"]).optional(),
     templateId: z.string().uuid().optional(),
     subject: z.string().min(1).max(300).optional(),
     subjectVariants: subjectVariantsSchema,
@@ -43,32 +47,42 @@ const stepSchema = z
     conditions: conditionsSchema,
     attachments: attachmentsSchema,
   })
-  // Inline steps need a body; subject is required only for the email channel
-  // (enforced in the create handler once we know the channel). LinkedIn steps
-  // are messages — body only.
+  // Inline steps need a body; subject requirements depend on the resolved
+  // channel and are enforced in the create handler once we know it. LinkedIn
+  // message steps are body-only.
   .refine((s) => s.templateId || s.body, {
     message: "Provide either templateId or a body",
   });
 
 const sequenceSchema = z.object({
   name: z.string().min(1).max(200),
-  channel: z.enum(["email", "linkedin", "linkedin_inmail"]).optional().default("email"),
+  channel: z.enum(["email", "linkedin", "linkedin_inmail", "multichannel"]).optional().default("email"),
   // LinkedIn only: connection-request note for not-yet-connected contacts.
   linkedinConnectionNote: z.string().max(300).optional().default(""),
   steps: z.array(stepSchema).min(1).max(20),
 });
 
+// The concrete channel a step will run on: its own if set (required for
+// multichannel), otherwise the sequence's. Single-channel sequences leave
+// step.channel unset and every step inherits the one value.
+function stepChannel(step, sequenceChannel) {
+  if (step.channel) return step.channel;
+  return sequenceChannel === "multichannel" ? "email" : sequenceChannel;
+}
+
 // Resolves each step to concrete {subject, body, delayDays, sourceTemplateId,
 // conditions, attachments} fields, fetching template content where needed.
 // Throws if a templateId doesn't belong to this user (caller should catch
 // and 400).
-async function resolveSteps(steps, companyId) {
+async function resolveSteps(steps, companyId, sequenceChannel = "email") {
   const resolved = [];
   for (const step of steps) {
+    const channel = stepChannel(step, sequenceChannel);
     if (step.templateId) {
       const template = await prisma.template.findFirst({ where: { id: step.templateId, companyId } });
       if (!template) throw new Error(`template_not_found:${step.templateId}`);
       resolved.push({
+        channel,
         subject: template.subject,
         subjectVariants: step.subjectVariants || [],
         body: template.body,
@@ -79,6 +93,7 @@ async function resolveSteps(steps, companyId) {
       });
     } else {
       resolved.push({
+        channel,
         subject: step.subject || "", // "" for LinkedIn message steps (no subject)
         subjectVariants: step.subjectVariants || [],
         body: step.body,
@@ -107,20 +122,25 @@ router.post("/", async (req, res) => {
 
   const { channel, linkedinConnectionNote } = parsed.data;
 
-  // Email inline steps require a subject; LinkedIn (message) steps don't.
-  if (channel === "email") {
-    const missing = parsed.data.steps.some((s) => !s.templateId && !s.subject);
-    if (missing) return res.status(400).json({ error: "email_steps_need_subject" });
-  }
-  // InMail carries a subject line, so InMail steps need both subject and body.
-  if (channel === "linkedin_inmail") {
-    const missing = parsed.data.steps.some((s) => !s.subject || !s.body);
-    if (missing) return res.status(400).json({ error: "inmail_steps_need_subject_and_body" });
+  // Validate each step against the channel it will actually run on. Works for
+  // both single-channel sequences (every step inherits `channel`) and
+  // multichannel ones (each step declares its own).
+  //   - email          → inline steps need a subject
+  //   - linkedin_inmail → need subject AND body (InMail carries a subject line)
+  //   - linkedin        → message only (body), no subject required
+  for (const s of parsed.data.steps) {
+    const ch = stepChannel(s, channel);
+    if (ch === "email" && !s.templateId && !s.subject) {
+      return res.status(400).json({ error: "email_steps_need_subject" });
+    }
+    if (ch === "linkedin_inmail" && (!s.subject || !s.body)) {
+      return res.status(400).json({ error: "inmail_steps_need_subject_and_body" });
+    }
   }
 
   let resolvedSteps;
   try {
-    resolvedSteps = await resolveSteps(parsed.data.steps, req.user.companyId);
+    resolvedSteps = await resolveSteps(parsed.data.steps, req.user.companyId, channel);
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
@@ -131,7 +151,11 @@ router.post("/", async (req, res) => {
       companyId: req.user.companyId,
       name: parsed.data.name,
       channel,
-      linkedinConnectionNote: channel === "linkedin" ? linkedinConnectionNote || "" : "",
+      // The connection-request note is used whenever a LinkedIn *message* step
+      // needs the contact connected first — so keep it for pure-LinkedIn and
+      // multichannel sequences alike (email/InMail-only sequences ignore it).
+      linkedinConnectionNote:
+        channel === "linkedin" || channel === "multichannel" ? linkedinConnectionNote || "" : "",
       steps: {
         create: resolvedSteps.map((s, i) => ({ ...s, order: i })),
       },
@@ -171,9 +195,17 @@ router.post("/:id/steps", async (req, res) => {
   const parsed = stepSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
+  const ch = stepChannel(parsed.data, sequence.channel);
+  if (ch === "email" && !parsed.data.templateId && !parsed.data.subject) {
+    return res.status(400).json({ error: "email_steps_need_subject" });
+  }
+  if (ch === "linkedin_inmail" && (!parsed.data.subject || !parsed.data.body)) {
+    return res.status(400).json({ error: "inmail_steps_need_subject_and_body" });
+  }
+
   let resolved;
   try {
-    [resolved] = await resolveSteps([parsed.data], req.user.companyId);
+    [resolved] = await resolveSteps([parsed.data], req.user.companyId, sequence.channel);
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }

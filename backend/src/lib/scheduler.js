@@ -148,15 +148,6 @@ async function advanceEnrollment(enrollment, sequence) {
 async function sendNextStep(enrollment) {
   const { contact, sequence } = enrollment;
 
-  // Same enrollment/step engine, different channel: LinkedIn sequences send via
-  // Unipile instead of Gmail (see sendNextLinkedinStep).
-  if (sequence.channel === "linkedin") {
-    return sendNextLinkedinStep(enrollment);
-  }
-  if (sequence.channel === "linkedin_inmail") {
-    return sendNextInmailStep(enrollment);
-  }
-
   if (contact.unsubscribed) {
     await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
     return false;
@@ -166,6 +157,18 @@ async function sendNextStep(enrollment) {
   if (!step) {
     await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "completed" } });
     return false;
+  }
+
+  // Dispatch on the CURRENT step's channel, not the sequence's — this is what
+  // makes a "multichannel" sequence work (each step can send on a different
+  // channel). Single-channel sequences leave step.channel = "email" default and
+  // the sequence's channel decides; multichannel steps each carry their own.
+  const channel = step.channel || (sequence.channel === "multichannel" ? "email" : sequence.channel);
+  if (channel === "linkedin") {
+    return sendNextLinkedinStep(enrollment);
+  }
+  if (channel === "linkedin_inmail") {
+    return sendNextInmailStep(enrollment);
   }
 
   if (!(await stepConditionsMet(step, enrollment, contact))) {
@@ -270,6 +273,15 @@ async function sendNextLinkedinStep(enrollment) {
     return false;
   }
 
+  // Multichannel: a contact with no LinkedIn URL can't receive this step, but
+  // the sequence's other (e.g. email) steps still should — so SKIP this one and
+  // move on, rather than pausing the whole enrollment. Pure-LinkedIn sequences
+  // never reach here for such contacts (the enroll filter excludes them).
+  if (sequence.channel === "multichannel" && !contact.linkedinProfileUrl) {
+    await advanceEnrollment(enrollment, sequence);
+    return false;
+  }
+
   const account = await linkedinOutreach.getSendableAccount(sequence.companyId);
   if (!account) return false; // not connected / paused / bad status — leave due, retry next tick
 
@@ -297,7 +309,10 @@ async function sendNextLinkedinStep(enrollment) {
     try {
       const r = await linkedinOutreach.sendConnectionRequest({
         account, contact, note: sequence.linkedinConnectionNote,
-        enrollmentId: enrollment.id, stepId: sequence.steps[0]?.id || null,
+        enrollmentId: enrollment.id,
+        // Attribute the invite to the current LinkedIn step (in a multichannel
+        // sequence that may not be step 0), falling back to the first step.
+        stepId: sequence.steps[enrollment.currentStep]?.id || sequence.steps[0]?.id || null,
       });
       if (r.skipped && r.reason === "already_connected") {
         // Turned out to be a 1st-degree connection — go straight to messaging.
@@ -348,6 +363,13 @@ async function sendNextInmailStep(enrollment) {
 
   if (contact.unsubscribed) {
     await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "paused" } });
+    return false;
+  }
+
+  // Multichannel: skip (don't pause) InMail steps for contacts with no LinkedIn
+  // URL — see the matching note in sendNextLinkedinStep.
+  if (sequence.channel === "multichannel" && !contact.linkedinProfileUrl) {
+    await advanceEnrollment(enrollment, sequence);
     return false;
   }
 

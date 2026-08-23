@@ -223,20 +223,39 @@ function CategoryChip({ children }) {
   );
 }
 
-function NavItem({ icon: Icon, label, active, onClick, count }) {
+function NavItem({ icon: Icon, label, active, onClick, count, dark = false }) {
+  // Dark rail: active row gets a translucent white fill + a sky accent bar and
+  // crisp white text; idle rows sit in muted light-blue and brighten on hover.
+  const color = dark
+    ? (active ? "#FFFFFF" : C.onDark)
+    : (active ? C.navy : "#475569");
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
+      className={`group relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+        dark ? (active ? "" : "hover:bg-white/5") : (active ? "" : "hover:bg-slate-50")
+      }`}
       style={{
-        backgroundColor: active ? C.pale : "transparent",
-        color: active ? C.navy : "#475569",
+        backgroundColor: active ? (dark ? "rgba(255,255,255,0.08)" : C.pale) : "transparent",
+        color,
       }}
     >
-      <Icon size={17} strokeWidth={2} />
+      {active && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r" style={{ backgroundColor: dark ? "#7FB0FF" : C.sky }} />
+      )}
+      <Icon size={17} strokeWidth={active ? 2.4 : 2} style={{ color: active ? (dark ? "#7FB0FF" : C.sky) : "currentColor" }} />
       <span className="flex-1 text-left">{label}</span>
-      {count != null && (
-        <span className="text-xs font-semibold" style={{ color: active ? C.navy : C.slate }}>{count}</span>
+      {count != null && count > 0 && (
+        <span
+          className="text-[11px] font-semibold rounded-full px-1.5 min-w-[20px] text-center"
+          style={
+            dark
+              ? { backgroundColor: active ? "rgba(127,176,255,0.18)" : "rgba(255,255,255,0.08)", color: active ? "#CFE0FF" : C.onDark }
+              : { backgroundColor: active ? "#fff" : "transparent", color: active ? C.navy : C.slate }
+          }
+        >
+          {count}
+        </span>
       )}
     </button>
   );
@@ -245,7 +264,7 @@ function NavItem({ icon: Icon, label, active, onClick, count }) {
 // Lives in the sidebar, but works from any view — debounced query against
 // GET /contacts?q=, jumps into the Contacts view and opens the picked
 // contact's detail drawer via App's pendingOpenContactId relay.
-function GlobalSearch({ onSelectContact }) {
+function GlobalSearch({ onSelectContact, dark = false }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -295,15 +314,19 @@ function GlobalSearch({ onSelectContact }) {
   return (
     <div className="relative px-3 mb-3">
       <div className="relative">
-        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: C.slate }} />
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: dark ? C.onDarkMuted : C.slate }} />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder={t("Αναζήτηση επαφών…")}
-          className="w-full rounded-lg pl-8 pr-3 py-2 text-xs border outline-none"
-          style={{ borderColor: C.line, color: C.ink, backgroundColor: C.pale }}
+          className="w-full rounded-lg pl-8 pr-3 py-2 text-xs border outline-none placeholder:text-current"
+          style={
+            dark
+              ? { borderColor: "rgba(255,255,255,0.12)", color: "#FFFFFF", backgroundColor: "rgba(255,255,255,0.06)" }
+              : { borderColor: C.line, color: C.ink, backgroundColor: C.pale }
+          }
         />
       </div>
       {open && (
@@ -2552,11 +2575,15 @@ function SequenceStepCard({ step, index, isLast, onDelete, onMoveUp, onMoveDown,
 }
 
 function StepFields({
+  channel = "email",
   mode, setMode, templateId, setTemplateId, subject, setSubject, body, setBody,
   attachments, setAttachments, conditions, setConditions, templates,
   subjectVariants, setSubjectVariants,
 }) {
   const variants = Array.isArray(subjectVariants) ? subjectVariants : [];
+  const isEmail = channel === "email";
+  const isInmail = channel === "linkedin_inmail";
+  const isLinkedin = channel === "linkedin";
   // Same spam-word check the template editor uses — surfaced here so a spammy
   // subject/body in a sequence step gets flagged before it ever sends.
   const spamWords = [
@@ -2571,6 +2598,24 @@ function StepFields({
       ...conditions,
       requireTags: text.split(",").map((t) => t.trim()).filter(Boolean),
     });
+  }
+
+  // LinkedIn message / InMail steps: plain-text message (LinkedIn doesn't render
+  // HTML), optional subject for InMail. No templates/A/B/tracking/gating — those
+  // are email-only concepts.
+  if (isLinkedin || isInmail) {
+    return (
+      <div className="space-y-2">
+        {isInmail && (
+          <input required placeholder={t("Θέμα InMail")} value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
+        )}
+        <textarea required rows={4} value={(body || "").replace(/<[^>]*>/g, "")} onChange={(e) => setBody(e.target.value)}
+          placeholder={isInmail ? t("Μήνυμα InMail… (υποστηρίζει {{first_name}})") : t("Μήνυμα LinkedIn… (υποστηρίζει {{first_name}})")}
+          className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none bg-white" style={{ borderColor: C.line, color: C.ink }} />
+      </div>
+    );
   }
 
   return (
@@ -2668,6 +2713,7 @@ function StepFields({
 function emptyStep(index) {
   return {
     mode: "inline",
+    channel: "email", // per-step channel (only meaningful for multichannel sequences)
     templateId: "",
     subject: "",
     subjectVariants: [],
@@ -2687,12 +2733,36 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
   const [error, setError] = useState("");
   const isLinkedin = channel === "linkedin";
   const isInmail = channel === "linkedin_inmail";
+  const isMulti = channel === "multichannel";
+  // The connection-request note applies whenever a LinkedIn *message* step may
+  // run against a not-yet-connected contact — that's pure-LinkedIn sequences
+  // and any multichannel sequence that contains a LinkedIn step.
+  const showConnectionNote = isLinkedin || (isMulti && steps.some((s) => s.channel === "linkedin"));
+  // Effective channel of a given step for rendering StepFields.
+  const stepCh = (s) => (isMulti ? s.channel || "email" : channel);
 
   function updateStep(i, patch) {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
   }
   function addStep() {
     setSteps((prev) => [...prev, emptyStep(prev.length)]);
+  }
+  // Keep a step's body sensible for its channel: the email unsubscribe footer
+  // (seeded into new steps) must not carry into a LinkedIn/InMail plain-text
+  // message, and switching back to email re-seeds an empty body.
+  function bodyForChannel(ch, body) {
+    const isMsg = ch === "linkedin" || ch === "linkedin_inmail";
+    if (isMsg && body === unsubscribeSeed()) return "";
+    if (ch === "email" && !body) return unsubscribeSeed();
+    return body;
+  }
+  // Top-level channel switch (single-channel sequences): re-seed every step's
+  // body for the new channel. Multichannel leaves bodies to the per-step picker.
+  function changeChannel(val) {
+    setChannel(val);
+    if (val !== "multichannel") {
+      setSteps((prev) => prev.map((s) => ({ ...s, body: bodyForChannel(val, s.body) })));
+    }
   }
   function removeStep(i) {
     setSteps((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
@@ -2703,12 +2773,16 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
     setError("");
     setBusy(true);
     try {
-      const payloadSteps = steps.map((s) =>
-        s.mode === "template" && s.templateId
-          ? { templateId: s.templateId, subjectVariants: s.subjectVariants || [], delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
-          : { subject: s.subject, subjectVariants: s.subjectVariants || [], body: s.body, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
-      );
-      await onCreate({ name, channel, linkedinConnectionNote: isLinkedin ? linkedinConnectionNote : undefined, steps: payloadSteps });
+      const payloadSteps = steps.map((s) => {
+        const ch = stepCh(s);
+        // Templates are email-only; a template-mode step on a non-email channel
+        // falls back to its inline subject/body.
+        const base = isMulti ? { channel: ch } : {};
+        return s.mode === "template" && s.templateId && ch === "email"
+          ? { ...base, templateId: s.templateId, subjectVariants: s.subjectVariants || [], delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments }
+          : { ...base, subject: s.subject, subjectVariants: s.subjectVariants || [], body: s.body, delayDays: Number(s.delayDays) || 0, conditions: s.conditions, attachments: s.attachments };
+      });
+      await onCreate({ name, channel, linkedinConnectionNote: showConnectionNote ? linkedinConnectionNote : undefined, steps: payloadSteps });
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η δημιουργία sequence."));
@@ -2737,10 +2811,10 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
 
           <div>
             <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>{t("Κανάλι")}</label>
-            <div className="flex gap-2">
-              {[["email", "Email", Mail], ["linkedin", "LinkedIn", Linkedin], ["linkedin_inmail", "InMail", Send]].map(([val, label, Icon]) => (
-                <button key={val} type="button" onClick={() => setChannel(val)}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border"
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[["email", "Email", Mail], ["linkedin", "LinkedIn", Linkedin], ["linkedin_inmail", "InMail", Send], ["multichannel", t("Multichannel"), Layers]].map(([val, label, Icon]) => (
+                <button key={val} type="button" onClick={() => changeChannel(val)}
+                  className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border"
                   style={channel === val ? { borderColor: C.sky, color: C.sky, backgroundColor: `${C.sky}0F` } : { borderColor: C.line, color: C.slate }}>
                   <Icon size={14} /> {label}
                 </button>
@@ -2749,22 +2823,27 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
           </div>
 
           {isLinkedin && (
-            <>
-              <TipBanner tone="info">
-                {t("LinkedIn sequence: αν η επαφή δεν είναι ήδη σύνδεση, το 1ο βήμα στέλνει αίτημα σύνδεσης με το σημείωμα παρακάτω. Τα follow-up μηνύματα ξεκινούν όταν γίνει αποδεκτό το αίτημα. Ισχύει ημερήσιο όριο αιτημάτων για προστασία του λογαριασμού. Μόνο επαφές με LinkedIn URL θα εγγραφούν.")}
-              </TipBanner>
-              <div>
-                <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>{t("Σημείωμα αιτήματος σύνδεσης")} <span style={{ fontWeight: 400 }}>{t("(προαιρετικό, max 300 χαρ.)")}</span></label>
-                <textarea value={linkedinConnectionNote} onChange={(e) => setLinkedinConnectionNote(e.target.value)} maxLength={300} rows={2}
-                  placeholder={t("π.χ. Γεια σου {{first_name}}, θα ήθελα να συνδεθούμε…")}
-                  className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
-              </div>
-            </>
+            <TipBanner tone="info">
+              {t("LinkedIn sequence: αν η επαφή δεν είναι ήδη σύνδεση, το 1ο βήμα στέλνει αίτημα σύνδεσης με το σημείωμα παρακάτω. Τα follow-up μηνύματα ξεκινούν όταν γίνει αποδεκτό το αίτημα. Ισχύει ημερήσιο όριο αιτημάτων για προστασία του λογαριασμού. Μόνο επαφές με LinkedIn URL θα εγγραφούν.")}
+            </TipBanner>
           )}
           {isInmail && (
             <TipBanner tone="info">
               {t("InMail sequence: κάθε βήμα στέλνει ένα InMail (με θέμα + μήνυμα) απευθείας, ακόμη και σε μη-συνδέσεις — δεν χρειάζεται αίτημα σύνδεσης. Απαιτεί premium LinkedIn και καταναλώνει InMail credits. Κάθε βήμα χρειάζεται θέμα και μήνυμα. Μόνο επαφές με LinkedIn URL θα εγγραφούν.")}
             </TipBanner>
+          )}
+          {isMulti && (
+            <TipBanner tone="info">
+              {t("Multichannel sequence: κάθε βήμα διαλέγει το δικό του κανάλι (Email / LinkedIn / InMail). Εγγράφονται όλες οι επαφές — τα βήματα LinkedIn/InMail παραλείπονται αυτόματα για επαφές χωρίς LinkedIn URL, ώστε να συνεχίζουν τα email.")}
+            </TipBanner>
+          )}
+          {showConnectionNote && (
+            <div>
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: C.slate }}>{t("Σημείωμα αιτήματος σύνδεσης")} <span style={{ fontWeight: 400 }}>{t("(προαιρετικό, max 300 χαρ.)")}</span></label>
+              <textarea value={linkedinConnectionNote} onChange={(e) => setLinkedinConnectionNote(e.target.value)} maxLength={300} rows={2}
+                placeholder={t("π.χ. Γεια σου {{first_name}}, θα ήθελα να συνδεθούμε…")}
+                className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
+            </div>
           )}
 
           {steps.map((step, i) => (
@@ -2787,7 +2866,20 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
                 </div>
               </div>
 
+              {isMulti && (
+                <div className="flex gap-1.5 mb-3">
+                  {[["email", "Email", Mail], ["linkedin", "LinkedIn", Linkedin], ["linkedin_inmail", "InMail", Send]].map(([val, label, Icon]) => (
+                    <button key={val} type="button" onClick={() => updateStep(i, { channel: val, body: bodyForChannel(val, step.body) })}
+                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium border"
+                      style={(step.channel || "email") === val ? { borderColor: C.sky, color: C.sky, backgroundColor: `${C.sky}0F` } : { borderColor: C.line, color: C.slate }}>
+                      <Icon size={12} /> {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <StepFields
+                channel={stepCh(step)}
                 mode={step.mode} setMode={(m) => updateStep(i, { mode: m })}
                 templateId={step.templateId} setTemplateId={(v) => updateStep(i, { templateId: v })}
                 subject={step.subject} setSubject={(v) => updateStep(i, { subject: v })}
@@ -5574,7 +5666,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-full" style={{ backgroundColor: "#F7F9FC", fontFamily: "Inter, sans-serif" }}>
+    <div className="flex h-screen w-full" style={{ backgroundColor: C.canvas, fontFamily: "Inter, sans-serif" }}>
       {!inviteBannerDismissed && user?.pendingInvites?.length > 0 && (
         <InviteResponseModal
           invites={user.pendingInvites}
@@ -5589,12 +5681,12 @@ export default function App() {
 
       {/* Sidebar */}
       <div
-        className={`fixed md:relative inset-y-0 left-0 z-40 w-60 border-r flex flex-col shrink-0 transform transition-transform duration-200 md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
-        style={{ borderColor: C.line, backgroundColor: "#FFFFFF" }}
+        className={`fixed md:relative inset-y-0 left-0 z-40 w-60 flex flex-col shrink-0 transform transition-transform duration-200 md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        style={{ background: `linear-gradient(180deg, ${C.sidebarTop} 0%, ${C.sidebar} 100%)` }}
       >
         <div className="px-5 py-5 flex items-center justify-between">
-          <Brand size={32} textSize="text-base" />
-          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600">
+          <Brand size={32} textSize="text-base" light />
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden" style={{ color: C.onDarkMuted }}>
             <X size={18} />
           </button>
         </div>
@@ -5602,39 +5694,39 @@ export default function App() {
         <div className="px-3">
           <button
             onClick={() => { setComposeOpen(true); setSidebarOpen(false); }}
-            className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white mb-3 shadow-sm"
-            style={{ backgroundColor: C.sky }}
+            className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white mb-3"
+            style={{ backgroundColor: C.sky, boxShadow: "0 6px 16px rgba(46,110,232,0.35)" }}
           >
             <Pencil size={14} /> {t("Σύνταξη")}
           </button>
         </div>
 
-        <GlobalSearch onSelectContact={handleSelectFromSearch} />
+        <GlobalSearch onSelectContact={handleSelectFromSearch} dark />
 
-        <div className="px-3 space-y-0.5 flex-1">
-          <NavItem icon={CalendarClock} label={t("Σήμερα")} active={view === "dashboard"} onClick={() => { setView("dashboard"); setSidebarOpen(false); }} count={counts.dueToday} />
-          <NavItem icon={Mail} label={t("Απεσταλμένα")} active={view === "inbox"} onClick={() => { setView("inbox"); setSidebarOpen(false); }} count={counts.inbox} />
-          <NavItem icon={Users} label={t("Επαφές")} active={view === "contacts"} onClick={() => { setView("contacts"); setSidebarOpen(false); }} count={counts.contacts} />
-          <NavItem icon={Layers} label={t("Sequences")} active={view === "sequences"} onClick={() => { setView("sequences"); setSidebarOpen(false); }} count={counts.sequences} />
-          <NavItem icon={FileText} label={t("Templates")} active={view === "templates"} onClick={() => { setView("templates"); setSidebarOpen(false); }} count={counts.templates} />
-          <NavItem icon={Handshake} label={t("Offers")} active={view === "offers"} onClick={() => { setView("offers"); setSidebarOpen(false); }} count={counts.offers} />
-          <NavItem icon={Megaphone} label={t("Campaigns")} active={view === "campaigns"} onClick={() => { setView("campaigns"); setSidebarOpen(false); }} count={counts.campaigns} />
-          <NavItem icon={BarChart3} label={t("Analytics")} active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
-          <NavItem icon={UserPlus} label={t("Ομάδα")} active={view === "team"} onClick={() => { setView("team"); setSidebarOpen(false); }} />
-          <NavItem icon={Globe} label={t("Integrations")} active={view === "integrations"} onClick={() => { setView("integrations"); setSidebarOpen(false); }} />
+        <div className="px-3 space-y-0.5 flex-1 overflow-y-auto">
+          <NavItem dark icon={CalendarClock} label={t("Σήμερα")} active={view === "dashboard"} onClick={() => { setView("dashboard"); setSidebarOpen(false); }} count={counts.dueToday} />
+          <NavItem dark icon={Mail} label={t("Απεσταλμένα")} active={view === "inbox"} onClick={() => { setView("inbox"); setSidebarOpen(false); }} count={counts.inbox} />
+          <NavItem dark icon={Users} label={t("Επαφές")} active={view === "contacts"} onClick={() => { setView("contacts"); setSidebarOpen(false); }} count={counts.contacts} />
+          <NavItem dark icon={Layers} label={t("Sequences")} active={view === "sequences"} onClick={() => { setView("sequences"); setSidebarOpen(false); }} count={counts.sequences} />
+          <NavItem dark icon={FileText} label={t("Templates")} active={view === "templates"} onClick={() => { setView("templates"); setSidebarOpen(false); }} count={counts.templates} />
+          <NavItem dark icon={Handshake} label={t("Offers")} active={view === "offers"} onClick={() => { setView("offers"); setSidebarOpen(false); }} count={counts.offers} />
+          <NavItem dark icon={Megaphone} label={t("Campaigns")} active={view === "campaigns"} onClick={() => { setView("campaigns"); setSidebarOpen(false); }} count={counts.campaigns} />
+          <NavItem dark icon={BarChart3} label={t("Analytics")} active={view === "analytics"} onClick={() => { setView("analytics"); setSidebarOpen(false); }} />
+          <NavItem dark icon={UserPlus} label={t("Ομάδα")} active={view === "team"} onClick={() => { setView("team"); setSidebarOpen(false); }} />
+          <NavItem dark icon={Globe} label={t("Integrations")} active={view === "integrations"} onClick={() => { setView("integrations"); setSidebarOpen(false); }} />
         </div>
 
         {user?.memberships?.length > 1 && (
           <div className="px-5 pb-2">
-            <label className="text-[11px] font-medium block mb-1" style={{ color: C.slate }}>{t("Εταιρεία")}</label>
+            <label className="text-[11px] font-medium block mb-1" style={{ color: C.onDarkMuted }}>{t("Εταιρεία")}</label>
             <select
               value={user.company?.id || ""}
               onChange={(e) => handleSwitchCompany(e.target.value)}
-              className="w-full rounded-lg px-2.5 py-1.5 text-xs border outline-none bg-white"
-              style={{ borderColor: C.line, color: C.ink }}
+              className="w-full rounded-lg px-2.5 py-1.5 text-xs border outline-none"
+              style={{ borderColor: "rgba(255,255,255,0.12)", color: "#FFFFFF", backgroundColor: "rgba(255,255,255,0.06)" }}
             >
               {user.memberships.map((m) => (
-                <option key={m.companyId} value={m.companyId}>
+                <option key={m.companyId} value={m.companyId} style={{ color: C.ink }}>
                   {m.companyName} ({m.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")})
                 </option>
               ))}
@@ -5642,18 +5734,18 @@ export default function App() {
           </div>
         )}
         <div className="px-5 pt-3 pb-1 flex items-center justify-between">
-          <span className="text-[11px] font-medium" style={{ color: C.slate }}>{t("Γλώσσα")}</span>
-          <LanguageSwitcher compact />
+          <span className="text-[11px] font-medium" style={{ color: C.onDarkMuted }}>{t("Γλώσσα")}</span>
+          <LanguageSwitcher compact dark />
         </div>
-        <div className="px-5 py-4 border-t flex items-center gap-2.5" style={{ borderColor: C.line }}>
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0" style={{ backgroundColor: C.navy }}>
+        <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0" style={{ background: `linear-gradient(135deg, ${C.sky}, ${C.navy})` }}>
             {(user?.name || user?.email || "?").slice(0, 2).toUpperCase()}
           </div>
           <div className="text-xs min-w-0 flex-1">
-            <div className="font-medium truncate" style={{ color: C.ink }}>{user?.name || t("Χρήστης")}</div>
-            <div className="truncate" style={{ color: C.slate }}>{user?.email}</div>
+            <div className="font-medium truncate" style={{ color: "#FFFFFF" }}>{user?.name || t("Χρήστης")}</div>
+            <div className="truncate" style={{ color: C.onDarkMuted }}>{user?.email}</div>
           </div>
-          <button onClick={handleLogout} className="text-slate-400 hover:text-slate-600 shrink-0" title={t("Αποσύνδεση")}>
+          <button onClick={handleLogout} className="shrink-0" style={{ color: C.onDarkMuted }} title={t("Αποσύνδεση")}>
             <LogOut size={15} />
           </button>
         </div>
