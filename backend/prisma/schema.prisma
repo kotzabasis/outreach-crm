@@ -564,6 +564,23 @@ model ContactNote {
   @@index([contactId])
 }
 
+// The express session store (connect-pg-simple) keeps login sessions in this
+// `session` table. It's created/managed by connect-pg-simple itself at runtime
+// (createTableIfMissing) and used to live OUTSIDE the Prisma schema — which is
+// exactly why a `prisma db push --accept-data-loss` on deploy would DROP it as
+// an "unknown" table, silently logging everyone out and breaking login until
+// it was manually recreated. Declaring it here makes db push treat it as
+// managed, so deploys preserve it. Types match connect-pg-simple's DDL exactly
+// (sid varchar PK, sess json, expire timestamp(6), index IDX_session_expire).
+model Session {
+  sid    String   @id @db.VarChar
+  sess   Json     @db.Json
+  expire DateTime @db.Timestamp(6)
+
+  @@index([expire], map: "IDX_session_expire")
+  @@map("session")
+}
+
 model Sequence {
   id        String   @id @default(uuid())
   userId    String? // who created it — audit only; SetNull so removing a teammate never deletes shared sequences
