@@ -261,11 +261,17 @@ function alternativePart(text, html) {
 
 // attachments: [{filename, mimeType, contentBase64}] — plain (unwrapped)
 // base64, size-validated upstream by lib/attachments.js.
-function buildRawMessage({ from, to, subject, html, text, attachments = [], listUnsubscribeUrl = null }) {
+function buildRawMessage({ from, to, subject, html, text, attachments = [], listUnsubscribeUrl = null, textOnly = false }) {
   const encodedSubject = encodeSubject(subject);
   const unsubHeaders = unsubscribeHeaders(listUnsubscribeUrl);
   const plain = text && text.trim() ? text : htmlToText(html);
-  const altLines = alternativePart(plain, html);
+  // Plain-text mode: a single text/plain part, no HTML alternative at all — an
+  // email indistinguishable from one typed by hand in Gmail, with zero of our
+  // markup. Otherwise the usual multipart/alternative (text + html).
+  const contentLines = textOnly
+    ? ["Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: 8bit", "", plain]
+    : alternativePart(plain, html);
+  const altLines = contentLines;
 
   if (!attachments.length) {
     const parts = [
@@ -307,7 +313,7 @@ function buildRawMessage({ from, to, subject, html, text, attachments = [], list
   return toBase64Url(parts.join("\r\n"));
 }
 
-async function sendTrackedEmail({ gmailAccount, contact, subject, body, trackingId, attachments = [], trackingEnabled = true, unsubscribeEnabled = true, bookingLink = null }) {
+async function sendTrackedEmail({ gmailAccount, contact, subject, body, trackingId, attachments = [], trackingEnabled = true, unsubscribeEnabled = true, plainText = false, bookingLink = null }) {
   const client = await getAuthedClientForGmailAccount(gmailAccount);
   const gmail = google.gmail({ version: "v1", auth: client });
 
@@ -339,23 +345,37 @@ async function sendTrackedEmail({ gmailAccount, contact, subject, body, tracking
   }
 
   const renderedSubject = renderTemplate(subject, contact, { asHtml: false, bookingLink: resolvedBooking || "" });
-  const renderedBodyHtml = renderTemplate(body, contact, { bookingLink: resolvedBooking || "" });
-  const htmlWithTracking = injectTracking(renderedBodyHtml, trackingId, { trackingEnabled, unsubscribeEnabled });
-  // Plain-text alternative from the body BEFORE tracking injection — so it has
-  // the real link text and no 1x1 pixel.
-  const textAlternative = htmlToText(renderedBodyHtml);
+
+  let htmlWithTracking = null;
+  let textBody;
+  const unsubUrl = `${process.env.BASE_URL}/track/unsubscribe/${trackingId}`;
+  if (plainText) {
+    // True plain-text send: no HTML part, no tracking (pixel/link-rewrite are
+    // HTML-only concepts). Render tokens as plain text, strip the editor's
+    // markup, and resolve the unsubscribe token to a visible URL (or drop it).
+    const rendered = renderTemplate(body, contact, { asHtml: false, bookingLink: resolvedBooking || "" });
+    textBody = htmlToText(rendered).split("{{unsubscribe_link}}").join(unsubscribeEnabled ? unsubUrl : "");
+  } else {
+    const renderedBodyHtml = renderTemplate(body, contact, { bookingLink: resolvedBooking || "" });
+    htmlWithTracking = injectTracking(renderedBodyHtml, trackingId, { trackingEnabled, unsubscribeEnabled });
+    // Plain-text alternative from the body BEFORE tracking injection — so it has
+    // the real link text and no 1x1 pixel.
+    textBody = htmlToText(renderedBodyHtml);
+  }
 
   const raw = buildRawMessage({
     from: gmailAccount.email,
     to: contact.email,
     subject: renderedSubject,
     html: htmlWithTracking,
-    text: textAlternative,
+    text: textBody,
     attachments,
+    textOnly: plainText,
     // Same URL the {{unsubscribe_link}} body token resolves to — surfaced in
     // the headers too so one-click unsubscribe works even if the sender edited
     // or removed the in-body link. Omitted entirely when unsubscribe is off.
-    listUnsubscribeUrl: unsubscribeEnabled ? `${process.env.BASE_URL}/track/unsubscribe/${trackingId}` : null,
+    // (Kept even in plain-text mode: the header is compliance, not tracking.)
+    listUnsubscribeUrl: unsubscribeEnabled ? unsubUrl : null,
   });
 
   const res = await gmail.users.messages.send({

@@ -189,6 +189,10 @@ model Company {
   // sends go out "clean": no open pixel and no click-link rewriting — better
   // deliverability, no analytics. The unsubscribe link/header is unaffected.
   emailTrackingEnabled Boolean @default(true)
+  // Plain-text mode. When on, emails go out as a single text/plain part with no
+  // HTML alternative at all — indistinguishable from a hand-typed Gmail message.
+  // Implies no tracking (pixel/link-rewrite are HTML-only). Off by default.
+  plainTextEnabled     Boolean @default(false)
   // One-click unsubscribe (List-Unsubscribe header + {{unsubscribe_link}} token).
   // On by default. When off, no List-Unsubscribe header is sent and the body
   // token resolves to empty — for fully clean 1:1 personalized sends.

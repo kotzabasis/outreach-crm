@@ -4261,6 +4261,7 @@ function SendWindowCard({ isOwner }) {
         sendDays: days,
         sendTimezone: s.sendTimezone,
         emailTrackingEnabled: s.emailTrackingEnabled !== false,
+        plainTextEnabled: s.plainTextEnabled === true,
         unsubscribeEnabled: s.unsubscribeEnabled !== false,
         unsubscribeText: s.unsubscribeText || "",
         unsubscribeConfirmTitle: s.unsubscribeConfirmTitle || "",
@@ -4383,6 +4384,23 @@ function SendWindowCard({ isOwner }) {
           {s.emailTrackingEnabled !== false
             ? t("Καταγράφονται opens & clicks (open pixel + rewriting των links).")
             : t("Clean αποστολή - χωρίς open pixel και χωρίς rewriting των links, για καλύτερο deliverability. Δεν θα υπάρχουν στατιστικά open/click.")}
+        </p>
+      </div>
+
+      {/* Plain-text mode: single text/plain part, no HTML at all */}
+      <div className="mt-4 pt-4 border-t" style={{ borderColor: C.line }}>
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-sm font-medium" style={{ color: C.ink }}>{t("Plain text (χωρίς HTML)")}</div>
+          <label className="flex items-center gap-2 text-xs" style={{ color: C.slate }}>
+            <input type="checkbox" disabled={!isOwner} checked={s.plainTextEnabled === true}
+              onChange={(e) => update({ plainTextEnabled: e.target.checked })} />
+            {t("Ενεργό")}
+          </label>
+        </div>
+        <p className="text-xs" style={{ color: C.slate }}>
+          {s.plainTextEnabled === true
+            ? t("Τα emails φεύγουν ως σκέτο text/plain - όπως ένα χειρόγραφο Gmail, χωρίς κανένα HTML. Το tracking απενεργοποιείται αυτόματα (δεν έχει νόημα χωρίς HTML).")
+            : t("Τα emails φεύγουν ως HTML + text (κανονικό). Ενεργοποίησέ το για 100% απλό κείμενο, μέγιστη προσωπική αίσθηση.")}
         </p>
       </div>
 

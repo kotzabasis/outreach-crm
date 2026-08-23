@@ -27,6 +27,7 @@ const SEND_WINDOW_SELECT = {
   sendDays: true,
   sendTimezone: true,
   emailTrackingEnabled: true,
+  plainTextEnabled: true,
   unsubscribeEnabled: true,
 };
 
@@ -236,6 +237,7 @@ async function sendNextStep(enrollment) {
       attachments: Array.isArray(step.attachments) ? step.attachments : [],
       trackingEnabled: sequence.company?.emailTrackingEnabled !== false,
       unsubscribeEnabled: sequence.company?.unsubscribeEnabled !== false,
+      plainText: sequence.company?.plainTextEnabled === true,
     });
   } catch (err) {
     if (isAuthError(err)) await flagNeedsReconnect(gmailAccount.id);
@@ -520,6 +522,7 @@ async function sendNextCampaignRecipient(campaign) {
       attachments: Array.isArray(campaign.attachments) ? campaign.attachments : [],
       trackingEnabled: campaign.company?.emailTrackingEnabled !== false,
       unsubscribeEnabled: campaign.company?.unsubscribeEnabled !== false,
+      plainText: campaign.company?.plainTextEnabled === true,
     });
   } catch (err) {
     if (isAuthError(err)) await flagNeedsReconnect(gmailAccount.id);

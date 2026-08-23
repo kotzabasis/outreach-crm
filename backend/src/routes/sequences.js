@@ -296,7 +296,7 @@ router.post("/:id/steps/:stepId/test-send", async (req, res) => {
 
   const trackingCompany = await prisma.company.findUnique({
     where: { id: req.user.companyId },
-    select: { emailTrackingEnabled: true, unsubscribeEnabled: true },
+    select: { emailTrackingEnabled: true, unsubscribeEnabled: true, plainTextEnabled: true },
   });
   try {
     await sendTrackedEmail({
@@ -308,6 +308,7 @@ router.post("/:id/steps/:stepId/test-send", async (req, res) => {
       attachments: Array.isArray(step.attachments) ? step.attachments : [],
       trackingEnabled: trackingCompany?.emailTrackingEnabled !== false,
       unsubscribeEnabled: trackingCompany?.unsubscribeEnabled !== false,
+      plainText: trackingCompany?.plainTextEnabled === true,
     });
   } catch (err) {
     console.error("Test send failed:", err.message);

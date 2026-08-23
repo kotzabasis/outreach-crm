@@ -735,4 +735,9 @@ export const EN = {
   "Φωτεινό": "Light",
   "Σκούρο": "Dark",
   "Εμφάνιση": "Appearance",
+
+  // --- Plain-text send mode ---
+  "Plain text (χωρίς HTML)": "Plain text (no HTML)",
+  "Τα emails φεύγουν ως σκέτο text/plain - όπως ένα χειρόγραφο Gmail, χωρίς κανένα HTML. Το tracking απενεργοποιείται αυτόματα (δεν έχει νόημα χωρίς HTML).": "Emails go out as raw text/plain - like a hand-typed Gmail, with no HTML at all. Tracking is turned off automatically (it has no meaning without HTML).",
+  "Τα emails φεύγουν ως HTML + text (κανονικό). Ενεργοποίησέ το για 100% απλό κείμενο, μέγιστη προσωπική αίσθηση.": "Emails go out as HTML + text (normal). Turn this on for 100% plain text and a maximally personal feel.",
 };
