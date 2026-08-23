@@ -87,6 +87,68 @@ export function ErrorNote({ message, onRetry }) {
   );
 }
 
+// A sticky view header bar. Pins to the top of the scrolling content pane so
+// the page title/actions stay visible while a long list scrolls under it.
+// Needs an opaque background (the canvas color) so scrolled content doesn't
+// bleed through. Use as the first child of a `h-full overflow-auto` view.
+export function PageHeader({ children, className = "" }) {
+  return (
+    <div
+      className={`sticky top-0 z-20 border-b ${className}`}
+      style={{ borderColor: C.line, backgroundColor: C.canvas }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Friendly empty state: an icon in a soft tinted disc, a title, an optional
+// one-line hint, and an optional call-to-action button. Replaces bare "no data"
+// text so dead ends become next steps.
+export function EmptyState({ icon: Icon, title, hint, actionLabel, onAction, className = "" }) {
+  return (
+    <div className={`flex flex-col items-center justify-center text-center py-16 px-6 ${className}`}>
+      {Icon && (
+        <div className="flex items-center justify-center rounded-2xl mb-3" style={{ width: 52, height: 52, backgroundColor: C.pale }}>
+          <Icon size={24} strokeWidth={1.8} style={{ color: C.sky }} />
+        </div>
+      )}
+      <div className="text-sm font-semibold" style={{ color: C.ink }}>{title}</div>
+      {hint && <div className="text-xs mt-1 max-w-xs" style={{ color: C.slate }}>{hint}</div>}
+      {actionLabel && onAction && (
+        <button
+          onClick={onAction}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white"
+          style={{ backgroundColor: C.sky, boxShadow: "0 4px 12px rgba(46,110,232,0.25)" }}
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Shimmering placeholder block for loading states — nicer than a spinner for
+// tables/cards because it hints at the shape of what's coming and doesn't jump.
+export function Skeleton({ className = "", style }) {
+  return <div className={`animate-pulse rounded-md ${className}`} style={{ backgroundColor: "#E8EEF6", ...style }} />;
+}
+
+// A few skeleton table rows, matched to a column count.
+export function SkeletonRows({ rows = 6, cols = 4 }) {
+  return (
+    <div className="divide-y" style={{ borderColor: C.line }}>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} className="flex items-center gap-4 px-4 py-3">
+          {Array.from({ length: cols }).map((_, c) => (
+            <Skeleton key={c} className="h-3" style={{ flex: c === 0 ? 2 : 1, opacity: 1 - r * 0.08 }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function StatCard({ label, value, sub, color }) {
   // A thin colored accent rail on the left ties the metric to its status color
   // and gives the stat row a more deliberate, dashboard-grade rhythm.

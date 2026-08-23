@@ -6,9 +6,10 @@
 import React, { useState, useEffect } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar,
+  BarChart, Bar, Cell, LabelList,
 } from "recharts";
-import { C, Card, Spinner, ErrorNote, StatCard, fmtMoney, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
+import { BarChart3 } from "lucide-react";
+import { C, Card, Spinner, ErrorNote, StatCard, EmptyState, PageHeader, fmtMoney, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
 import { api } from "./lib/api";
 import { t } from "./lib/i18n.jsx";
 
@@ -141,10 +142,45 @@ function AbTestsResults({ data, loading }) {
   );
 }
 
+const RANGES = [
+  ["7", "7"],
+  ["30", "30"],
+  ["90", "90"],
+  ["all", "all"],
+  ["custom", "custom"],
+];
+
 function AnalyticsView({ overview, timeline, crmOverview, loading, error, onReload }) {
   const [tab, setTab] = useState("email"); // email | crm | abtests
   const [abTests, setAbTests] = useState(null);
   const [abLoading, setAbLoading] = useState(false);
+  // Date-range filter for the Email tab. Presets (7/30/90/all) or a custom
+  // from-to window. Overview is refetched with the range so KPIs, funnel and
+  // the per-sequence/campaign tables all reflect it. Seeded from the prop so
+  // the first paint isn't empty.
+  const [range, setRange] = useState("30");
+  const [custom, setCustom] = useState({ from: "", to: "" });
+  const [rangedOverview, setRangedOverview] = useState(overview);
+  const [ovLoading, setOvLoading] = useState(false);
+
+  useEffect(() => {
+    let qs = "";
+    if (range === "custom") {
+      if (!custom.from || !custom.to) return; // wait for both dates
+      qs = `?from=${custom.from}&to=${custom.to}`;
+    } else if (range !== "all") {
+      qs = `?days=${range}`;
+    }
+    let cancelled = false;
+    setOvLoading(true);
+    api.get(`/analytics/overview${qs}`)
+      .then((d) => { if (!cancelled) setRangedOverview(d); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setOvLoading(false); });
+    return () => { cancelled = true; };
+  }, [range, custom.from, custom.to]);
+
+  const ov = rangedOverview || overview;
 
   // A/B results are their own endpoint, fetched only when that tab is opened.
   useEffect(() => {
@@ -158,37 +194,69 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
       .finally(() => { if (!cancelled) setAbLoading(false); });
     return () => { cancelled = true; };
   }, [tab]);
-  const totals = overview?.totals || { sent: 0, opened: 0, clicked: 0, replied: 0 };
+  const totals = ov?.totals || { sent: 0, opened: 0, clicked: 0, replied: 0 };
+  const rate = (n) => (totals.sent ? Math.round((n / totals.sent) * 100) : 0);
   const funnelData = [
-    { name: t("Στάλθηκαν"), value: totals.sent, fill: C.navy },
-    { name: t("Ανοίχτηκαν"), value: totals.opened, fill: C.sky },
-    { name: t("Κλικ"), value: totals.clicked, fill: C.amber },
-    { name: t("Απαντήσεις"), value: totals.replied, fill: C.mint },
+    { name: t("Στάλθηκαν"), value: totals.sent, rate: 100, fill: C.navy },
+    { name: t("Ανοίχτηκαν"), value: totals.opened, rate: rate(totals.opened), fill: C.sky },
+    { name: t("Κλικ"), value: totals.clicked, rate: rate(totals.clicked), fill: C.amber },
+    { name: t("Απαντήσεις"), value: totals.replied, rate: rate(totals.replied), fill: C.mint },
   ];
+  const funnelLabel = (e) => {
+    const d = funnelData[e.index] || {};
+    return `${d.value} · ${d.rate}%`;
+  };
 
   return (
     <div className="h-full overflow-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
-        <div>
-          <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>
-            {tab === "email"
-              ? t("Απόδοση όλων των αποστολών - sequences και χειροκίνητα emails")
-              : tab === "crm"
-              ? t("CRM reporting - pipeline & αποτελέσματα")
-              : t("A/B θεμάτων - ποια γραμμή θέματος ανοίγεται περισσότερο")}
-          </p>
+      <PageHeader className="px-8 py-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
+            <p className="text-sm mt-0.5" style={{ color: C.slate }}>
+              {tab === "email"
+                ? t("Απόδοση όλων των αποστολών - sequences και χειροκίνητα emails")
+                : tab === "crm"
+                ? t("CRM reporting - pipeline & αποτελέσματα")
+                : t("A/B θεμάτων - ποια γραμμή θέματος ανοίγεται περισσότερο")}
+            </p>
+          </div>
+          <div className="flex rounded-lg p-0.5" style={{ backgroundColor: C.pale }}>
+            {[["email", "Email"], ["crm", "Business (CRM)"], ["abtests", "A/B"]].map(([key, label]) => (
+              <button key={key} type="button" onClick={() => setTab(key)}
+                className="rounded-md px-3 py-1.5 text-xs font-medium"
+                style={{ backgroundColor: tab === key ? C.sky : "transparent", color: tab === key ? "#fff" : C.slate }}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex rounded-lg p-0.5" style={{ backgroundColor: C.pale }}>
-          {[["email", "Email"], ["crm", "Business (CRM)"], ["abtests", "A/B"]].map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setTab(key)}
-              className="rounded-md px-3 py-1.5 text-xs font-medium"
-              style={{ backgroundColor: tab === key ? C.sky : "transparent", color: tab === key ? "#fff" : C.slate }}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+        {tab === "email" && (
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <div className="flex rounded-lg p-0.5 border" style={{ borderColor: C.line, backgroundColor: "#fff" }}>
+              {RANGES.map(([key]) => (
+                <button key={key} type="button" onClick={() => setRange(key)}
+                  className="rounded-md px-2.5 py-1 text-[11px] font-medium"
+                  style={{ backgroundColor: range === key ? C.sky : "transparent", color: range === key ? "#fff" : C.slate }}>
+                  {key === "all" ? t("Όλα") : key === "custom" ? t("Προσαρμογή") : t("{n} ημέρες", { n: key })}
+                </button>
+              ))}
+            </div>
+            {range === "custom" && (
+              <div className="flex items-center gap-1.5">
+                <input type="date" value={custom.from} max={custom.to || undefined}
+                  onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))}
+                  className="rounded-md border px-2 py-1 text-[11px]" style={{ borderColor: C.line, color: C.ink }} />
+                <span className="text-[11px]" style={{ color: C.slate }}>{t("έως")}</span>
+                <input type="date" value={custom.to} min={custom.from || undefined}
+                  onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))}
+                  className="rounded-md border px-2 py-1 text-[11px]" style={{ borderColor: C.line, color: C.ink }} />
+              </div>
+            )}
+            {ovLoading && <span className="text-[11px]" style={{ color: C.slate }}>{t("Ενημέρωση…")}</span>}
+          </div>
+        )}
+      </PageHeader>
 
       <div className="px-8 py-6 space-y-6">
         <ErrorNote message={error} onRetry={onReload} />
@@ -200,18 +268,18 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
           <CrmReportingSection crm={crmOverview} />
         ) : (
           <>
-            <div className="flex flex-wrap gap-4">
-              <StatCard label="Open rate" value={pct(totals.opened, totals.sent)} sub={t("{n} αποστολές", { n: totals.sent })} color={C.mint} />
-              <StatCard label="Click rate" value={pct(totals.clicked, totals.sent)} sub={t("σε σχέση με αποστολές")} color={C.mint} />
-              <StatCard label="Reply rate" value={pct(totals.replied, totals.sent)} sub={t("σε σχέση με αποστολές")} color={C.coral} />
-              <StatCard label="Sequences" value={overview?.perSequence?.length ?? 0} sub={t("ενεργά + ανενεργά")} color={C.slate} />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard label={t("Στάλθηκαν")} value={totals.sent} sub={t("emails στο διάστημα")} color={C.navy} />
+              <StatCard label="Open rate" value={pct(totals.opened, totals.sent)} sub={t("{n} ανοίγματα", { n: totals.opened })} color={C.sky} />
+              <StatCard label="Reply rate" value={pct(totals.replied, totals.sent)} sub={t("{n} απαντήσεις", { n: totals.replied })} color={C.mint} />
+              <StatCard label="Click rate" value={pct(totals.clicked, totals.sent)} sub={t("{n} κλικ", { n: totals.clicked })} color={C.amber} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="p-5">
                 <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Τάση εμπλοκής")}</div>
                 {timeline.length === 0 ? (
-                  <p className="text-sm py-16 text-center" style={{ color: C.slate }}>{t("Δεν υπάρχουν ακόμα events.")}</p>
+                  <EmptyState icon={BarChart3} title={t("Δεν υπάρχουν ακόμα events.")} hint={t("Μόλις αρχίσουν να ανοίγονται τα emails σου, η τάση θα εμφανιστεί εδώ.")} />
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={timeline}>
@@ -228,16 +296,24 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
 
               <Card className="p-5">
                 <div className="text-sm font-medium mb-4" style={{ color: C.ink }}>{t("Funnel αποστολών")}</div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={funnelData} layout="vertical" margin={{ left: 20 }}>
-                    <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: C.ink }} axisLine={false} tickLine={false} width={100} />
-                    <Tooltip />
-                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                      {funnelData.map((d, i) => <React.Fragment key={i} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                {totals.sent === 0 ? (
+                  <EmptyState icon={BarChart3} title={t("Καμία αποστολή ακόμα.")} hint={t("Το funnel γεμίζει μόλις σταλεί το πρώτο email.")} />
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={funnelData} layout="vertical" margin={{ left: 20, right: 56 }}>
+                      <XAxis type="number" hide domain={[0, Math.max(totals.sent, 1)]} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: C.ink }} axisLine={false} tickLine={false} width={100} />
+                      <Bar dataKey="value" radius={[0, 6, 6, 0]} minPointSize={2} background={{ fill: C.pale, radius: 6 }}>
+                        {funnelData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                        <LabelList dataKey="value" position="right" content={(p) => (
+                          <text x={p.x + p.width + 8} y={p.y + p.height / 2} dy={4} fontSize={12} fontWeight={600} fill={C.slate}>
+                            {funnelLabel(p)}
+                          </text>
+                        )} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </Card>
             </div>
 
@@ -247,21 +323,21 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                 <thead>
                   <tr className="text-left" style={{ color: C.slate }}>
                     <th className="font-medium pb-2">Sequence</th>
-                    <th className="font-medium pb-2">{t("Στάλθηκαν")}</th>
-                    <th className="font-medium pb-2">Open rate</th>
-                    <th className="font-medium pb-2">Reply rate</th>
+                    <th className="font-medium pb-2 text-right">{t("Στάλθηκαν")}</th>
+                    <th className="font-medium pb-2 text-right">Open rate</th>
+                    <th className="font-medium pb-2 text-right">Reply rate</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(overview?.perSequence || []).map((s) => (
-                    <tr key={s.id} className="border-t" style={{ borderColor: C.line }}>
+                  {(ov?.perSequence || []).map((s, i) => (
+                    <tr key={s.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? "#FAFCFE" : "transparent" }}>
                       <td className="py-2.5 font-medium" style={{ color: C.ink }}>{s.name}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{s.sent}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{pct(s.opened, s.sent)}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{pct(s.replied, s.sent)}</td>
+                      <td className="py-2.5 text-right tabular-nums" style={{ color: C.ink }}>{s.sent}</td>
+                      <td className="py-2.5 text-right tabular-nums" style={{ color: C.ink }}>{pct(s.opened, s.sent)}</td>
+                      <td className="py-2.5 text-right tabular-nums font-semibold" style={{ color: s.replied ? C.mint : C.ink }}>{pct(s.replied, s.sent)}</td>
                     </tr>
                   ))}
-                  {(!overview?.perSequence || overview.perSequence.length === 0) && (
+                  {(!ov?.perSequence || ov.perSequence.length === 0) && (
                     <tr><td colSpan={4} className="py-6 text-center text-sm" style={{ color: C.slate }}>{t("Καμία δραστηριότητα ακόμα.")}</td></tr>
                   )}
                 </tbody>
@@ -275,22 +351,22 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                   <tr className="text-left" style={{ color: C.slate }}>
                     <th className="font-medium pb-2">Campaign</th>
                     <th className="font-medium pb-2">{t("Κατάσταση")}</th>
-                    <th className="font-medium pb-2">{t("Στάλθηκαν")}</th>
-                    <th className="font-medium pb-2">Open rate</th>
-                    <th className="font-medium pb-2">Reply rate</th>
+                    <th className="font-medium pb-2 text-right">{t("Στάλθηκαν")}</th>
+                    <th className="font-medium pb-2 text-right">Open rate</th>
+                    <th className="font-medium pb-2 text-right">Reply rate</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(overview?.perCampaign || []).map((c) => (
-                    <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
+                  {(ov?.perCampaign || []).map((c, i) => (
+                    <tr key={c.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? "#FAFCFE" : "transparent" }}>
                       <td className="py-2.5 font-medium" style={{ color: C.ink }}>{c.name}</td>
                       <td className="py-2.5"><CampaignStatusBadge status={c.status} /></td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{c.sent}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{pct(c.opened, c.sent)}</td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{pct(c.replied, c.sent)}</td>
+                      <td className="py-2.5 text-right tabular-nums" style={{ color: C.ink }}>{c.sent}</td>
+                      <td className="py-2.5 text-right tabular-nums" style={{ color: C.ink }}>{pct(c.opened, c.sent)}</td>
+                      <td className="py-2.5 text-right tabular-nums font-semibold" style={{ color: c.replied ? C.mint : C.ink }}>{pct(c.replied, c.sent)}</td>
                     </tr>
                   ))}
-                  {(!overview?.perCampaign || overview.perCampaign.length === 0) && (
+                  {(!ov?.perCampaign || ov.perCampaign.length === 0) && (
                     <tr><td colSpan={5} className="py-6 text-center text-sm" style={{ color: C.slate }}>{t("Κανένα campaign ακόμα.")}</td></tr>
                   )}
                 </tbody>

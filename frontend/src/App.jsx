@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import { api, API_URL, ApiError } from "./lib/api";
 import { t, useLang, LanguageSwitcher } from "./lib/i18n.jsx";
-import { C, Card, Spinner, ErrorNote, StatCard, Brand, fmtMoney, fmtDate, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
+import { C, Card, Spinner, ErrorNote, StatCard, EmptyState, Skeleton, SkeletonRows, PageHeader, Brand, fmtMoney, fmtDate, OFFER_STATUSES, CampaignStatusBadge } from "./lib/ui.jsx";
+import { toast, Toaster } from "./lib/toast.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
 import DOMPurify from "dompurify";
 
@@ -40,6 +41,7 @@ const MERGE_SAMPLE = {
   instagram: "#",
   googleReviews: "#",
   reportLink: "#",
+  bookingLink: "https://cal.com/you",
   comments: "μου άρεσε πολύ το τελευταίο σας project",
 };
 const SPAM_WORDS = [
@@ -99,6 +101,7 @@ function renderPreview(text) {
     .split("{{instagram}}").join(MERGE_SAMPLE.instagram)
     .split("{{google_reviews}}").join(MERGE_SAMPLE.googleReviews)
     .split("{{report_link}}").join(MERGE_SAMPLE.reportLink)
+    .split("{{booking_link}}").join(MERGE_SAMPLE.bookingLink)
     .split("{{comments}}").join(MERGE_SAMPLE.comments)
     // "#" keeps the preview link clickable-looking without pointing anywhere
     // real - the actual URL only exists once a send creates a trackingId.
@@ -316,11 +319,12 @@ function GlobalSearch({ onSelectContact, dark = false }) {
       <div className="relative">
         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: dark ? C.onDarkMuted : C.slate }} />
         <input
+          id="global-search-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder={t("Αναζήτηση επαφών…")}
+          placeholder={t("Αναζήτηση επαφών…  (⌘K)")}
           className="w-full rounded-lg pl-8 pr-3 py-2 text-xs border outline-none placeholder:text-current"
           style={
             dark
@@ -413,7 +417,7 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
       // eslint-disable-next-line no-new
       new URL(url);
     } catch {
-      window.alert(t("Ο σύνδεσμος δεν φαίνεται έγκυρος."));
+      toast.error(t("Ο σύνδεσμος δεν φαίνεται έγκυρος."));
       return;
     }
     const safeUrl = url.replace(/"/g, "&quot;");
@@ -1634,7 +1638,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
           onUpdateInternalNotes={onUpdateInternalNotes}
         />
       )}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Επαφές")}</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
@@ -1794,7 +1798,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       <div className="flex-1 overflow-auto px-6 py-4">
         <ErrorNote message={rowsError} onRetry={fetchPage} />
         {rowsLoading ? (
-          <Spinner label={t("Φόρτωση επαφών…")} />
+          <Card className="p-0 overflow-hidden"><SkeletonRows rows={8} cols={6} /></Card>
         ) : (
           <>
             {/* Desktop table view */}
@@ -1816,8 +1820,8 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((c) => (
-                    <tr key={c.id} className="border-t" style={{ borderColor: C.line }}>
+                  {rows.map((c, i) => (
+                    <tr key={c.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? "#FAFCFE" : "transparent" }}>
                       <td className="py-3">
                         <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
                       </td>
@@ -2059,7 +2063,7 @@ function TemplateModal({ initial, onClose, onSave }) {
 
             <div className="flex gap-1.5 flex-wrap">
               <span className="text-[11px] self-center" style={{ color: C.slate }}>{t("Εισαγωγή token:")}</span>
-              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{gmb}}", "{{facebook}}", "{{instagram}}", "{{google_reviews}}", "{{report_link}}", "{{comments}}"].map((tok) => (
+              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{gmb}}", "{{facebook}}", "{{instagram}}", "{{google_reviews}}", "{{report_link}}", "{{booking_link}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
                   {tok}
@@ -2143,7 +2147,7 @@ function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate
           onSave={handleSave}
         />
       )}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Templates</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("{n} αποθηκευμένα templates", { n: templates.length })}</p>
@@ -2157,10 +2161,8 @@ function TemplatesView({ templates, loading, error, onReload, onCreate, onUpdate
         {loading ? (
           <Spinner label={t("Φόρτωση templates…")} />
         ) : templates.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
-            <FileText size={28} strokeWidth={1.5} />
-            {t("Δεν υπάρχουν templates ακόμα.")}
-          </div>
+          <EmptyState icon={FileText} title={t("Δεν υπάρχουν templates ακόμα.")}
+            hint={t("Φτιάξε επαναχρησιμοποιήσιμα emails με merge fields και βάλ' τα σε sequences και campaigns.")} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {templates.map((tpl) => (
@@ -2396,7 +2398,7 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
           onConfirm={handleConfirmReason}
         />
       )}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Offers</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
@@ -2412,10 +2414,8 @@ function OffersView({ offers, contacts, loading, error, onReload, onCreate, onCh
         {loading ? (
           <Spinner label={t("Φόρτωση προσφορών…")} />
         ) : offers.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
-            <Handshake size={28} strokeWidth={1.5} />
-            {t("Δεν υπάρχουν προσφορές ακόμα.")}
-          </div>
+          <EmptyState icon={Handshake} title={t("Δεν υπάρχουν προσφορές ακόμα.")}
+            hint={t("Κατέγραψε προσφορές ανά επαφή για να παρακολουθείς pipeline και win rate.")} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {OFFER_STATUSES.map((col) => (
@@ -3056,7 +3056,7 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
         <ErrorNote message={error} onRetry={onReload} />
         {active ? (
           <>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
               <div>
                 <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{active.name}</h1>
                 <p className="text-sm mt-0.5" style={{ color: C.slate }}>
@@ -3104,7 +3104,7 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Απεσταλμένα")}</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Όλα τα emails που στάλθηκαν - sequences και χειροκίνητα. Πάτησε ένα για το trace.")}</p>
@@ -3122,10 +3122,9 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
         {loading ? (
           <Spinner label={t("Φόρτωση…")} />
         ) : activity.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
-            <MailCheck size={28} strokeWidth={1.5} />
-            {t("Δεν έχει σταλεί κανένα email ακόμα.")}
-          </div>
+          <EmptyState icon={MailCheck} title={t("Δεν έχει σταλεί κανένα email ακόμα.")}
+            hint={t("Μόλις φύγει το πρώτο email, εδώ θα βλέπεις κάθε αποστολή με opens και clicks.")}
+            actionLabel={t("Σύνταξη email")} onAction={() => setComposeOpen(true)} />
         ) : (
           activity.map((m) => {
             const isOpen = expandedId === m.id;
@@ -3175,7 +3174,7 @@ function DashboardView({ dashboard, loading, error, onReload, onSelectContact })
 
   return (
     <div className="h-full overflow-auto">
-      <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
         <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Σήμερα")}</h1>
         <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Ό,τι είναι εκκρεμές ή έληξε σήμερα - follow-ups και αυτόματα sequence sends.")}</p>
       </div>
@@ -3491,7 +3490,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
 
             <div className="flex gap-1.5 flex-wrap">
               <span className="text-[11px] self-center" style={{ color: C.slate }}>{t("Εισαγωγή token:")}</span>
-              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{gmb}}", "{{facebook}}", "{{instagram}}", "{{google_reviews}}", "{{report_link}}", "{{comments}}"].map((tok) => (
+              {["{{name}}", "{{first_name}}", "{{last_name}}", "{{company}}", "{{email}}", "{{website}}", "{{gmb}}", "{{facebook}}", "{{instagram}}", "{{google_reviews}}", "{{report_link}}", "{{booking_link}}", "{{comments}}"].map((tok) => (
                 <button key={tok} type="button" onClick={() => insertToken(tok)}
                   className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ backgroundColor: C.pale, color: C.navy }}>
                   {tok}
@@ -3729,7 +3728,7 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
       {detailId && (
         <CampaignDetailDrawer campaignId={detailId} onClose={() => setDetailId(null)} onLoad={onLoadDetail} onStart={onStart} onPause={onPause} onDelete={onDelete} />
       )}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Campaigns</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Ένα μήνυμα σε πολλές επαφές, ένα-ένα με απόσταση - όχι μαζική αποστολή.")}</p>
@@ -3743,10 +3742,8 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
         {loading ? (
           <Spinner label={t("Φόρτωση…")} />
         ) : campaigns.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-sm" style={{ color: C.slate }}>
-            <Megaphone size={28} strokeWidth={1.5} />
-            {t("Δεν έχεις δημιουργήσει campaign ακόμα.")}
-          </div>
+          <EmptyState icon={Megaphone} title={t("Δεν έχεις δημιουργήσει campaign ακόμα.")}
+            hint={t("Στείλε ένα μήνυμα σε πολλές επαφές μαζί, με σταδιακή αποστολή για καλό deliverability.")} />
         ) : (
           <>
             {/* Desktop table view */}
@@ -3993,6 +3990,7 @@ function SendWindowCard({ isOwner }) {
         unsubscribeText: s.unsubscribeText || "",
         unsubscribeConfirmTitle: s.unsubscribeConfirmTitle || "",
         unsubscribeConfirmMessage: s.unsubscribeConfirmMessage || "",
+        bookingLink: s.bookingLink || "",
       });
       setUnsubscribeSeed(saved.unsubscribeText);
       setS(saved);
@@ -4047,6 +4045,17 @@ function SendWindowCard({ isOwner }) {
             placeholder="Europe/Athens"
             className="rounded-md px-2 py-1 text-xs border bg-white flex-1 min-w-[160px]" style={{ borderColor: C.line, color: C.ink }} />
         </div>
+      </div>
+
+      {/* Booking link - powers the {{booking_link}} merge token */}
+      <div className="mt-4 pt-4 border-t" style={{ borderColor: C.line }}>
+        <div className="text-sm font-medium mb-1" style={{ color: C.ink }}>{t("Σύνδεσμος ραντεβού")}</div>
+        <p className="text-xs mb-2" style={{ color: C.slate }}>
+          {t("Το link για κράτηση κλήσης (Calendly, Cal.com…). Μπες το ως {{booking_link}} σε templates, sequences ή απαντήσεις.")}
+        </p>
+        <input disabled={!isOwner} value={s.bookingLink || ""} onChange={(e) => update({ bookingLink: e.target.value })}
+          placeholder="https://cal.com/you/30min"
+          className="w-full rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
       </div>
 
       {/* Email tracking on/off - deliverability */}
@@ -4403,7 +4412,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
     <div className="h-full overflow-auto">
       {showNew && <NewTeammateModal onClose={() => setShowNew(false)} onInvite={onInvite} />}
       {showExisting && <InviteExistingModal onClose={() => setShowExisting(false)} onInvite={onInviteExisting} />}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Ομάδα")}</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Οι συνεργάτες στο workspace σου - μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.")}</p>
@@ -4667,7 +4676,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
   if (!isOwner) {
     return (
       <div className="h-full overflow-auto">
-        <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
+        <div className="px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Integrations</h1>
         </div>
         <div className="px-8 py-16 flex flex-col items-center gap-2 text-sm" style={{ color: C.slate }}>
@@ -4680,7 +4689,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
 
   return (
     <div className="h-full overflow-auto">
-      <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
+      <div className="px-8 py-5 border-b sticky top-0 z-20" style={{ borderColor: C.line, backgroundColor: C.canvas }}>
         <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Integrations</h1>
         <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Αυτόματη εισαγωγή επαφών από WordPress, φόρμες leadgen και Meta Lead Ads.")}</p>
       </div>
@@ -4963,7 +4972,6 @@ export default function App() {
   const [composeContactId, setComposeContactId] = useState("");
   const [pendingOpenContactId, setPendingOpenContactId] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [gmailNotice, setGmailNotice] = useState("");
 
   const [contacts, setContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(false);
@@ -4998,7 +5006,6 @@ export default function App() {
   const [integrationsError, setIntegrationsError] = useState("");
   const [recentLeads, setRecentLeads] = useState([]);
   const [linkedinPendingConnect, setLinkedinPendingConnect] = useState(false);
-  const [linkedinNotice, setLinkedinNotice] = useState("");
 
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -5249,7 +5256,8 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const gmailConnected = params.get("gmail_connected");
     if (gmailConnected !== null) {
-      setGmailNotice(gmailConnected === "1" ? t("Το Gmail συνδέθηκε.") : t("Η σύνδεση Gmail απέτυχε ή ακυρώθηκε."));
+      if (gmailConnected === "1") toast.success(t("Το Gmail συνδέθηκε."));
+      else toast.error(t("Η σύνδεση Gmail απέτυχε ή ακυρώθηκε."));
       params.delete("gmail_connected");
       params.delete("reason");
       const clean = window.location.pathname + (params.toString() ? `?${params}` : "");
@@ -5267,7 +5275,7 @@ export default function App() {
         setLinkedinPendingConnect(true);
         setView("integrations");
       } else if (linkedinConnected === "0") {
-        setLinkedinNotice(t("Η σύνδεση LinkedIn απέτυχε ή ακυρώθηκε."));
+        toast.error(t("Η σύνδεση LinkedIn απέτυχε ή ακυρώθηκε."));
       }
       params.delete("linkedin_connected");
       params.delete("reason");
@@ -5287,6 +5295,33 @@ export default function App() {
   useEffect(() => {
     if (authState === "authed") loadCore();
   }, [authState, loadCore]);
+
+  // Global keyboard shortcuts (only while authed): ⌘/Ctrl+K focuses the sidebar
+  // search; plain "C" opens compose. Both are ignored while the user is typing
+  // in a field or a modal-style overlay so they never hijack normal input.
+  useEffect(() => {
+    if (authState !== "authed") return;
+    function isTyping() {
+      const el = document.activeElement;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+    }
+    function onKey(e) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        const input = document.getElementById("global-search-input");
+        if (input) { setSidebarOpen(true); input.focus(); }
+        return;
+      }
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "c" || e.key === "C") && !isTyping()) {
+        e.preventDefault();
+        setComposeOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [authState]);
 
   // Load the workspace's editable unsubscribe footer once, so new draft bodies
   // (compose, sequence steps, campaigns, templates) seed from the configured
@@ -5391,7 +5426,7 @@ export default function App() {
       await api.post("/auth/switch-company", { companyId });
       window.location.reload();
     } catch (err) {
-      window.alert(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αλλαγή εταιρείας."));
+      toast.error(err instanceof ApiError ? err.message : t("Δεν ήταν δυνατή η αλλαγή εταιρείας."));
     }
   }
 
@@ -5468,13 +5503,22 @@ export default function App() {
   }
 
   async function handleEnroll(contactIds, sequenceId) {
-    await api.post(`/sequences/${sequenceId}/enroll`, { contactIds });
+    const r = await api.post(`/sequences/${sequenceId}/enroll`, { contactIds });
     await Promise.all([loadContacts(), loadSequences()]);
+    if (r && typeof r.enrolled === "number") {
+      toast.success(
+        r.skipped
+          ? t("Εγγράφηκαν {n}, παραλείφθηκαν {s}.", { n: r.enrolled, s: r.skipped })
+          : t("Εγγράφηκαν {n} επαφές.", { n: r.enrolled })
+      );
+    }
+    return r;
   }
 
   async function handleCreateSequence(data) {
     await api.post("/sequences", data);
     await loadSequences();
+    toast.success(t("Το sequence δημιουργήθηκε."));
   }
 
   async function handleAddStep(sequenceId, payload) {
@@ -5551,6 +5595,9 @@ export default function App() {
   async function handleMarkReplied(contactId) {
     await api.post(`/contacts/${contactId}/mark-replied`);
     await Promise.all([loadContacts(), loadSequences(), loadAnalytics()]);
+    // Marking replied pauses the contact's active sequences server-side. Nudge
+    // the rep toward the highest-value next step: reply with the booking link.
+    toast.success(t("Σημειώθηκε ως απάντηση - το sequence σταμάτησε. Στείλε τον σύνδεσμο ραντεβού για κλείσιμο."));
   }
 
   async function handleToggleUnsubscribed(contactId, next) {
@@ -5667,6 +5714,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden" style={{ backgroundColor: C.canvas, fontFamily: "Inter, sans-serif" }}>
+      <Toaster />
       {!inviteBannerDismissed && user?.pendingInvites?.length > 0 && (
         <InviteResponseModal
           invites={user.pendingInvites}
@@ -5759,18 +5807,6 @@ export default function App() {
           </button>
           <Brand size={26} textSize="text-sm" />
         </div>
-        {gmailNotice && (
-          <div className="px-6 py-2 text-sm flex items-center justify-between" style={{ backgroundColor: C.pale, color: C.navy }}>
-            {gmailNotice}
-            <button onClick={() => setGmailNotice("")} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-          </div>
-        )}
-        {linkedinNotice && (
-          <div className="px-6 py-2 text-sm flex items-center justify-between" style={{ backgroundColor: C.pale, color: C.navy }}>
-            {linkedinNotice}
-            <button onClick={() => setLinkedinNotice("")} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-          </div>
-        )}
         <GmailBanner user={user} />
         <div className="flex-1 min-w-0 min-h-0">
           {view === "dashboard" && (

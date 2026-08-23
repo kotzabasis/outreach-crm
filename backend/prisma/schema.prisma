@@ -201,6 +201,12 @@ model Company {
   unsubscribeConfirmTitle    String @default("")
   unsubscribeConfirmMessage  String @default("")
 
+  // A "book a call" URL (Calendly/Cal.com/etc.). Exposed as the {{booking_link}}
+  // merge token so reps can drop a scheduling link into templates/sequences and
+  // into manual replies — the single highest-leverage CTA for turning a reply
+  // into a booked meeting.
+  bookingLink                String @default("")
+
   users        User[]
   contacts     Contact[]
   sequences    Sequence[]

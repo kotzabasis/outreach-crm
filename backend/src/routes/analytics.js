@@ -19,8 +19,34 @@ router.use(revalidatable);
 // distinct EmailLogs with at least one non-bot open event (not a raw event
 // count — one email can be opened multiple times), and "replied" means
 // contacts marked replied who have actually been emailed at least once.
+// Resolve an optional analytics date window from the query string. Custom
+// `from`/`to` (YYYY-MM-DD) win; otherwise a `days` preset (7/30/90…); otherwise
+// all-time (null = no filter). Returned as Date objects bounding EmailLog.sentAt.
+function parseRange(q) {
+  if (q.from && q.to) {
+    const f = new Date(q.from);
+    const tt = new Date(q.to);
+    if (!Number.isNaN(f.getTime()) && !Number.isNaN(tt.getTime())) {
+      tt.setHours(23, 59, 59, 999); // inclusive end-of-day
+      return { fromDate: f, toDate: tt };
+    }
+  }
+  const days = Number(q.days);
+  if (days && days > 0) {
+    return { fromDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000), toDate: new Date(Date.now() + 1000) };
+  }
+  return { fromDate: null, toDate: null };
+}
+
 router.get("/overview", async (req, res) => {
   const companyId = req.user.companyId;
+
+  // Optional date window (KPIs + funnel + per-sequence/campaign counts all
+  // respect it, so the whole page reflects the chosen range consistently).
+  const { fromDate, toDate } = parseRange(req.query);
+  const dateFilter = fromDate
+    ? Prisma.sql`AND el."sentAt" >= ${fromDate} AND el."sentAt" <= ${toDate}`
+    : Prisma.empty;
 
   // Three aggregation queries (instead of 6 + 4N + 4M): totals, per-sequence, per-campaign.
   // Using raw SQL to aggregate in one pass per group, avoiding N+1 problem.
@@ -35,7 +61,7 @@ router.get("/overview", async (req, res) => {
       FROM "EmailLog" el
       LEFT JOIN "TrackingEvent" te ON el.id = te."emailLogId"
       LEFT JOIN "Contact" c ON el."contactId" = c.id AND c.status = 'replied'
-      WHERE el."companyId" = ${companyId}
+      WHERE el."companyId" = ${companyId} ${dateFilter}
     `.then((rows) => ({
       sent: Number(rows[0]?.sent || 0),
       opened: Number(rows[0]?.opened || 0),
@@ -53,7 +79,7 @@ router.get("/overview", async (req, res) => {
         COUNT(DISTINCT CASE WHEN e.status = 'replied' THEN e.id END) as replied
       FROM "Sequence" s
       LEFT JOIN "Enrollment" e ON s.id = e."sequenceId"
-      LEFT JOIN "EmailLog" el ON e.id = el."enrollmentId"
+      LEFT JOIN "EmailLog" el ON e.id = el."enrollmentId" ${dateFilter}
       LEFT JOIN "TrackingEvent" te ON el.id = te."emailLogId"
       WHERE s."companyId" = ${companyId}
       GROUP BY s.id, s.name
@@ -79,7 +105,7 @@ router.get("/overview", async (req, res) => {
         COUNT(DISTINCT CASE WHEN te.type = 'click' THEN el.id END) as clicked,
         COUNT(DISTINCT CASE WHEN ct.status = 'replied' AND el.id IS NOT NULL THEN ct.id END) as replied
       FROM "Campaign" c
-      LEFT JOIN "EmailLog" el ON c.id = el."campaignId"
+      LEFT JOIN "EmailLog" el ON c.id = el."campaignId" ${dateFilter}
       LEFT JOIN "TrackingEvent" te ON el.id = te."emailLogId"
       LEFT JOIN "Contact" ct ON el."contactId" = ct.id AND ct.status = 'replied'
       WHERE c."companyId" = ${companyId}

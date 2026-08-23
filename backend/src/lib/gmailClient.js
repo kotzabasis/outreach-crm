@@ -101,9 +101,12 @@ function sanitizeMergeUrl(raw) {
 // The URL tokens go through the same scheme allowlist either way — a
 // javascript:/data: value isn't safe in a subject either, even if it can't
 // execute there, and this keeps the two contexts from silently diverging.
-function renderTemplate(template, contact, { asHtml = true } = {}) {
+function renderTemplate(template, contact, { asHtml = true, bookingLink = "" } = {}) {
   const text = asHtml ? escapeHtml : (v) => String(v || "");
   return template
+    // Company-level scheduling link (Calendly/Cal.com/etc.). Usable as a bare
+    // token or inside an <a href="{{booking_link}}">book a call</a>.
+    .replaceAll("{{booking_link}}", sanitizeMergeUrl(bookingLink))
     // Prefer the dedicated firstName column when set — falls back to
     // splitting `name` on whitespace for contacts created before that field
     // existed (or imported without it).
@@ -304,12 +307,23 @@ function buildRawMessage({ from, to, subject, html, text, attachments = [], list
   return toBase64Url(parts.join("\r\n"));
 }
 
-async function sendTrackedEmail({ gmailAccount, contact, subject, body, trackingId, attachments = [], trackingEnabled = true, unsubscribeEnabled = true }) {
+async function sendTrackedEmail({ gmailAccount, contact, subject, body, trackingId, attachments = [], trackingEnabled = true, unsubscribeEnabled = true, bookingLink = null }) {
   const client = await getAuthedClientForGmailAccount(gmailAccount);
   const gmail = google.gmail({ version: "v1", auth: client });
 
-  const renderedSubject = renderTemplate(subject, contact, { asHtml: false });
-  const renderedBodyHtml = renderTemplate(body, contact);
+  // Resolve the company's booking link lazily — only worth a query when the
+  // {{booking_link}} token is actually present, so this adds no cost to the
+  // vast majority of sends. Callers may also pass it in to skip the lookup.
+  let resolvedBooking = bookingLink;
+  if (resolvedBooking == null && /\{\{booking_link\}\}/.test(`${body}${subject}`)) {
+    const company = gmailAccount.companyId
+      ? await prisma.company.findUnique({ where: { id: gmailAccount.companyId }, select: { bookingLink: true } }).catch(() => null)
+      : null;
+    resolvedBooking = company?.bookingLink || "";
+  }
+
+  const renderedSubject = renderTemplate(subject, contact, { asHtml: false, bookingLink: resolvedBooking || "" });
+  const renderedBodyHtml = renderTemplate(body, contact, { bookingLink: resolvedBooking || "" });
   const htmlWithTracking = injectTracking(renderedBodyHtml, trackingId, { trackingEnabled, unsubscribeEnabled });
   // Plain-text alternative from the body BEFORE tracking injection — so it has
   // the real link text and no 1x1 pixel.

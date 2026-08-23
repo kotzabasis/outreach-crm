@@ -35,6 +35,7 @@ const SETTINGS_SELECT = {
   unsubscribeText: true,
   unsubscribeConfirmTitle: true,
   unsubscribeConfirmMessage: true,
+  bookingLink: true,
 };
 
 // Readable by any member (the UI shows when automated sends go out); only an
@@ -60,6 +61,7 @@ const sendWindowSchema = z.object({
   unsubscribeText: z.string().max(4000).optional(),
   unsubscribeConfirmTitle: z.string().max(200).optional(),
   unsubscribeConfirmMessage: z.string().max(1000).optional(),
+  bookingLink: z.string().max(500).optional(),
 });
 
 router.patch("/settings", requireOwner, async (req, res) => {
