@@ -7,8 +7,8 @@ import { AuthScreen } from "./AuthScreen.jsx";
 
 // ---------- Admin ----------
 // Everything below (through SuperAdminApp at the bottom) used to live inline
-// in App.jsx. Split into its own file so the main app — the thing every
-// regular company user actually loads — doesn't ship this platform-admin-only
+// in App.jsx. Split into its own file so the main app - the thing every
+// regular company user actually loads - doesn't ship this platform-admin-only
 // code (companies panel, cross-company user list, stats modal, etc.) in its
 // bundle. Only reachable via the /superadmin route (see main.jsx), which
 // lazy-loads this file on its own.
@@ -53,7 +53,7 @@ function NewAdminUserModal({ onClose, onCreate, companies }) {
             <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Εταιρεία")}</label>
             <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-              <option value="">{t("— χωρίς εταιρεία (θα οριστεί αργότερα) —")}</option>
+              <option value="">{t("- χωρίς εταιρεία (θα οριστεί αργότερα) -")}</option>
               {(companies || []).map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -74,9 +74,9 @@ function NewAdminUserModal({ onClose, onCreate, companies }) {
 }
 
 // `users` (all existing accounts, passed down from AdminView) lets a platform
-// admin make an EXISTING person the owner of this new company — e.g. someone
+// admin make an EXISTING person the owner of this new company - e.g. someone
 // who already owns/works at one pilot company is now also launching another
-// — without hitting "email_already_registered" trying to create a duplicate
+// - without hitting "email_already_registered" trying to create a duplicate
 // account for them. That error is correct for a brand-new account; it just
 // isn't the right tool for "add this person to another company," which is a
 // Membership, not a new user (see POST /admin/companies + assign-company).
@@ -138,7 +138,7 @@ function NewCompanyModal({ onClose, onCreate, users }) {
               <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Ιδιοκτήτης")}</label>
               <select required value={existingOwnerUserId} onChange={(e) => setExistingOwnerUserId(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-                <option value="">{t("— επίλεξε χρήστη —")}</option>
+                <option value="">{t("- επίλεξε χρήστη -")}</option>
                 {(users || []).map((u) => (
                   <option key={u.id} value={u.id}>{u.name ? `${u.name} (${u.email})` : u.email}</option>
                 ))}
@@ -169,7 +169,7 @@ function NewCompanyModal({ onClose, onCreate, users }) {
   );
 }
 
-// Only `name` is required — legalName/taxId/taxOffice/gemhNumber/address/
+// Only `name` is required - legalName/taxId/taxOffice/gemhNumber/address/
 // phone/email are the optional Greek-business profile fields (see
 // schema.prisma's Company model); a pilot company can go indefinitely
 // without ever filling them in.
@@ -244,7 +244,7 @@ function EditCompanyModal({ company, onClose, onSave }) {
 }
 
 // Lets a platform admin add this user to another company (or change their
-// role in one they're already in), and remove them from one — the additive
+// role in one they're already in), and remove them from one - the additive
 // counterpart to the single "assign a company" dropdown this replaced, now
 // that a user can belong to more than one company at once (owner of one,
 // member of another). See POST/DELETE /admin/users/:id/(assign-company|
@@ -302,7 +302,7 @@ function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
             {memberships.map((m) => (
               <div key={m.companyId} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
                 <div className="text-sm" style={{ color: C.ink }}>
-                  {m.companyName} <span style={{ color: C.slate }}>— {m.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")}</span>
+                  {m.companyName} <span style={{ color: C.slate }}>- {m.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")}</span>
                 </div>
                 <button disabled={busy} onClick={() => handleRemove(m)} title={t("Αφαίρεση")} style={{ color: C.coral }}>
                   <Trash2 size={13} />
@@ -320,7 +320,7 @@ function ManageMembershipsModal({ user, companies, onClose, onAdd, onRemove }) {
               <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Προσθήκη σε εταιρεία")}</label>
               <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
                 className="w-full rounded-lg px-2.5 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
-                <option value="">{t("— επίλεξε —")}</option>
+                <option value="">{t("- επίλεξε -")}</option>
                 {availableCompanies.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -352,7 +352,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
 
   // Client-side filter is enough here (unlike the per-company Contacts list,
   // which paginates server-side): `companies` is the platform's own tenant
-  // list, already loaded in full for the table above — its scale is "how
+  // list, already loaded in full for the table above - its scale is "how
   // many companies signed up to SDLoop", not "how many contacts one company
   // has", so it stays comfortably small enough to filter in the browser even
   // as it grows into the hundreds.
@@ -443,8 +443,8 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
                       <span className="text-xs font-medium" style={{ color: C.mint }}>{t("Ενεργή")}</span>
                     )}
                   </td>
-                  <td className="py-2.5" style={{ color: C.ink }}>{c.userCount ?? "—"}</td>
-                  <td className="py-2.5" style={{ color: C.ink }}>{c.contactCount ?? "—"}</td>
+                  <td className="py-2.5" style={{ color: C.ink }}>{c.userCount ?? "-"}</td>
+                  <td className="py-2.5" style={{ color: C.ink }}>{c.contactCount ?? "-"}</td>
                   <td className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     {c.status === "suspended" ? (
                       <button disabled={busyId === c.id} onClick={() => run(c.id, onActivate)}
@@ -469,7 +469,7 @@ function CompaniesPanel({ companies, loading, error, onReload, onCreate, onEditC
 }
 
 // Read-only per-company usage snapshot, opened by clicking a row in
-// CompaniesPanel — self-contained (fetches its own data via companyId) since
+// CompaniesPanel - self-contained (fetches its own data via companyId) since
 // nothing else on the page needs this data, unlike the list above which is
 // already loaded/managed by the parent.
 function CompanyStatsModal({ company, onClose }) {
@@ -540,7 +540,7 @@ function CompanyStatsModal({ company, onClose }) {
                 <div className="space-y-1">
                   {stats.gmailAccounts.map((g, i) => (
                     <p key={i} className="text-sm" style={{ color: g.needsReconnect ? C.coral : C.ink }}>
-                      {g.needsReconnect ? t("{email} — χρειάζεται επανασύνδεση", { email: g.email }) : g.email}
+                      {g.needsReconnect ? t("{email} - χρειάζεται επανασύνδεση", { email: g.email }) : g.email}
                     </p>
                   ))}
                 </div>
@@ -591,7 +591,7 @@ function CompanyStatsModal({ company, onClose }) {
 // Self-contained (fetches its own data, same pattern as CompanyStatsModal)
 // so the company filter dropdown can just live here rather than threading a
 // selected-company-id up through AdminView/SuperAdminApp. Defaults to "every
-// company" (companyId omitted) — the original cross-platform rollup — and
+// company" (companyId omitted) - the original cross-platform rollup - and
 // refetches /admin/team-overview?companyId=... whenever the dropdown changes,
 // since a rep's numbers only make sense scoped to one company (someone who's
 // a member of two companies would otherwise have contacts/sends from both
@@ -669,7 +669,7 @@ function TeamPerformanceCard({ companies }) {
                       <td className="py-2.5" style={{ color: C.ink }}>{u.contacts}</td>
                       <td className="py-2.5" style={{ color: C.ink }}>{u.sent}</td>
                       <td className="py-2.5" style={{ color: C.ink }}>{u.offers} <span style={{ color: C.slate }}>({fmtMoney(u.offersValue)})</span></td>
-                      <td className="py-2.5" style={{ color: C.ink }}>{u.winRate == null ? "—" : `${Math.round(u.winRate * 100)}%`}</td>
+                      <td className="py-2.5" style={{ color: C.ink }}>{u.winRate == null ? "-" : `${Math.round(u.winRate * 100)}%`}</td>
                     </tr>
                   ))
                 )}
@@ -683,7 +683,7 @@ function TeamPerformanceCard({ companies }) {
 }
 
 // Read-only trail of admin/owner actions (see backend lib/auditLog.js for
-// exactly what gets logged and why) — self-contained/self-fetching, same
+// exactly what gets logged and why) - self-contained/self-fetching, same
 // pattern as TeamPerformanceCard, with its own company filter since "what
 // happened in this one company" is the far more common question than "every
 // action across the whole platform."
@@ -750,7 +750,7 @@ function AuditLogCard({ companies }) {
                   <tr key={l.id} className="border-t align-top" style={{ borderColor: C.line }}>
                     <td className="py-2.5 text-xs whitespace-nowrap" style={{ color: C.slate }}>{fmtDate(l.createdAt)}</td>
                     <td className="py-2.5" style={{ color: C.ink }}>{l.summary}</td>
-                    <td className="py-2.5 text-xs" style={{ color: C.slate }}>{l.companyName || "—"}</td>
+                    <td className="py-2.5 text-xs" style={{ color: C.slate }}>{l.companyName || "-"}</td>
                   </tr>
                 ))
               )}
@@ -770,7 +770,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
 
   // Same reasoning as CompaniesPanel's search box: this is the platform-wide
   // user list (every account across every company), already loaded in full
-  // with no pagination — client-side filtering keeps it usable as headcount
+  // with no pagination - client-side filtering keeps it usable as headcount
   // grows, without needing a backend rewrite the way the per-company
   // Contacts list did.
   const filteredUsers = useMemo(() => {
@@ -903,7 +903,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                 {filteredUsers.map((u) => (
                   <tr key={u.id} className="border-t" style={{ borderColor: C.line }}>
                     <td className="px-4 py-3">
-                      <div className="font-medium" style={{ color: C.ink }}>{u.name || "—"}</div>
+                      <div className="font-medium" style={{ color: C.ink }}>{u.name || "-"}</div>
                       <div className="text-xs" style={{ color: C.slate }}>{u.email}</div>
                     </td>
                     <td className="px-4 py-3">
@@ -927,7 +927,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
                         style={{ borderColor: C.line, color: C.ink }}
                       >
                         {(u.memberships || []).length === 0
-                          ? t("— καμία —")
+                          ? t("- καμία -")
                           : u.memberships.length === 1
                           ? u.memberships[0].companyName
                           : t("{n} εταιρείες", { n: u.memberships.length })}
@@ -982,7 +982,7 @@ function AdminView({ users, loading, error, onReload, onApprove, onRevoke, onPro
 
 // ---------- Super Admin (separate route: /superadmin) ----------
 // Platform-wide company/user management, deliberately isolated from the main
-// SDLoop app shell — no CRM sidebar, no per-company data, and not linked from
+// SDLoop app shell - no CRM sidebar, no per-company data, and not linked from
 // any in-app nav. Reachable only by typing the URL (see main.jsx) and gated
 // to isAdmin accounts; a logged-in company owner/member who lands here sees
 // an access-denied screen, never the panel itself.
@@ -999,15 +999,15 @@ export function SuperAdminApp() {
   const [companiesLoading, setCompaniesLoading] = useState(false);
   const [companiesError, setCompaniesError] = useState("");
 
-  // Team performance (Απόδοση ομάδας) fetches itself now — see
-  // TeamPerformanceCard — since it needs to refetch on its own company filter
+  // Team performance (Απόδοση ομάδας) fetches itself now - see
+  // TeamPerformanceCard - since it needs to refetch on its own company filter
   // independently of the users list.
   const loadAdminUsers = useCallback(async () => {
     setAdminLoading(true);
     setAdminError("");
     try {
       // /admin/users returns a paginated object ({ users, total, ... }), not a
-      // bare array — extract the rows (the admin view calls .filter/.map on
+      // bare array - extract the rows (the admin view calls .filter/.map on
       // this). Max page size so the counts/search over all users aren't
       // truncated. (Defensive: also accept a bare array.)
       const res = await api.get("/admin/users?pageSize=200");
@@ -1085,7 +1085,7 @@ export function SuperAdminApp() {
     await api.del(`/admin/users/${id}`);
     await loadAdminUsers();
   }
-  // Additive — adds/updates a Membership without touching any other company
+  // Additive - adds/updates a Membership without touching any other company
   // the user already belongs to (see admin.js). Returns the updated user
   // (with its fresh memberships list) so ManageMembershipsModal can refresh
   // itself without a full users reload round-trip.
@@ -1105,7 +1105,7 @@ export function SuperAdminApp() {
     await api.post("/admin/companies", data);
     await loadCompanies();
     // An existingOwnerUserId create can change that user's memberships/home
-    // company — refresh the users list too so it's reflected immediately.
+    // company - refresh the users list too so it's reflected immediately.
     await loadAdminUsers();
   }
   async function handleEditCompany(id, data) {

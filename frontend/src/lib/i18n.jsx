@@ -2,7 +2,7 @@
 // - No heavy dependency (fits the app's minimal-deps style).
 // - The Greek string IS the key: t("Νέα επαφή") returns Greek in EL mode and
 //   looks up an English translation in EN mode, falling back to the Greek if a
-//   translation is missing — so nothing ever renders blank/broken while the
+//   translation is missing - so nothing ever renders blank/broken while the
 //   dictionary is still being filled in.
 // - Language preference lives in localStorage (per browser), so no backend/DB
 //   change is needed. Default is Greek (the app's original language).

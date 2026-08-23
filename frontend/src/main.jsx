@@ -6,17 +6,17 @@ import { Brand, C, Card } from "./lib/ui.jsx";
 import { t } from "./lib/i18n.jsx";
 
 // /superadmin is a separate area for platform-admin-only work (creating
-// companies, managing every user across companies) — deliberately kept out
+// companies, managing every user across companies) - deliberately kept out
 // of the regular sidebar/nav so a normal company owner/member never even
 // sees it exists. /reset-password is the destination of the "forgot
-// password" email link — has to work with no existing session, so it's its
+// password" email link - has to work with no existing session, so it's its
 // own top-level screen too rather than something nested inside App's auth
 // gate. Same deploy either way, just a different top-level screen based on
 // the URL path.
 //
 // Each screen now lives in its own file (App.jsx, SuperAdminApp.jsx,
 // ResetPasswordPage.jsx) and is lazy-loaded here, so a visitor only
-// downloads the JS for the screen they actually land on — a regular company
+// downloads the JS for the screen they actually land on - a regular company
 // user's browser never fetches the platform-admin-only SuperAdminApp code,
 // and vice versa.
 const App = lazy(() => import("./App.jsx"));
@@ -27,15 +27,15 @@ const ResetPasswordPage = lazy(() => import("./ResetPasswordPage.jsx"));
 // the previous hashed chunk filenames; the next lazy import (navigating to a
 // code-split screen/view) then 404s with a ChunkLoadError, which React surfaces
 // as the ErrorBoundary's "Κάτι πήγε στραβά" screen. Almost always the fix is
-// simply to reload and fetch the current build — so do it automatically, once,
+// simply to reload and fetch the current build - so do it automatically, once,
 // guarded against a reload loop if the failure is something other than a stale
 // chunk. Vite fires `vite:preloadError` for exactly this case.
 window.addEventListener("vite:preloadError", () => {
-  if (sessionStorage.getItem("chunkReloaded")) return; // already tried — don't loop
+  if (sessionStorage.getItem("chunkReloaded")) return; // already tried - don't loop
   sessionStorage.setItem("chunkReloaded", "1");
   window.location.reload();
 });
-// A clean load means we're on the current build — clear the guard so a future
+// A clean load means we're on the current build - clear the guard so a future
 // deploy can auto-recover again.
 window.addEventListener("load", () => sessionStorage.removeItem("chunkReloaded"));
 
@@ -47,10 +47,10 @@ const Screen = path.startsWith("/superadmin")
   : App;
 
 // Before this, a crash mid-render anywhere in the app (any of the three
-// screens above) was invisible to us — the backend had Sentry, but nothing
+// screens above) was invisible to us - the backend had Sentry, but nothing
 // caught a broken component on the frontend; the user just saw a blank
 // white page with no way for it to reach us. Sentry.ErrorBoundary reports
-// the crash (when VITE_SENTRY_DSN is configured — a no-op otherwise, same as
+// the crash (when VITE_SENTRY_DSN is configured - a no-op otherwise, same as
 // the backend) and swaps in this friendly screen instead of a blank one.
 function ErrorFallback() {
   return (

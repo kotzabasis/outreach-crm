@@ -1,5 +1,5 @@
 // Shared presentational primitives used by all three top-level screens
-// (App, SuperAdminApp, ResetPasswordPage — see main.jsx). Pulled out of the
+// (App, SuperAdminApp, ResetPasswordPage - see main.jsx). Pulled out of the
 // old single App.jsx monolith specifically so those screens can be
 // code-split: SuperAdminApp and ResetPasswordPage only need this small
 // shared layer, not the entire main-app bundle (contacts/sequences/
@@ -21,14 +21,14 @@ export const C = {
   amber: "#D9860B",
   coral: "#E15353",
   line: "#E2E8F0",
-  // Redesign tokens — a deeper navy for the app rail (professional SaaS look
+  // Redesign tokens - a deeper navy for the app rail (professional SaaS look
   // with real contrast against the light content area) plus the muted
   // light-on-dark text/hover values used inside it. Same hue family as `navy`.
   sidebar: "#0E1F3D",
   sidebarTop: "#14294B",
   onDark: "#AFC0DC",
   onDarkMuted: "#7E90AE",
-  // App content background — a hair cooler than white so elevated white cards
+  // App content background - a hair cooler than white so elevated white cards
   // read as raised panels rather than blending into the page.
   canvas: "#F4F7FB",
   // Standard card elevation, applied by <Card> and reused where needed.
@@ -36,15 +36,15 @@ export const C = {
 };
 
 export function fmtMoney(value, currency = "EUR") {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return "-";
   const symbol = currency === "EUR" ? "€" : currency === "USD" ? "$" : `${currency} `;
   return `${symbol}${Number(value).toLocaleString("el-GR", { maximumFractionDigits: 2 })}`;
 }
 
 export function fmtDate(value) {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
   if (sameDay) return d.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" });
@@ -130,7 +130,7 @@ export function Brand({ size = 34, textSize = "text-lg", light = false }) {
   );
 }
 
-// Shared status metadata/badges — used by App.jsx's Offers/Contacts/
+// Shared status metadata/badges - used by App.jsx's Offers/Contacts/
 // Campaigns/Analytics views alike, so they live here rather than in App.jsx
 // itself (which would defeat lazy-loading AnalyticsView.jsx, since that file
 // needs these too without pulling in the whole App.jsx module).

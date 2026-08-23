@@ -1,6 +1,6 @@
 // Split out of App.jsx specifically so recharts (a sizeable dependency only
 // this view needs) ships as its own chunk, fetched only when a user opens
-// the Analytics tab, instead of bloating every visitor's initial bundle —
+// the Analytics tab, instead of bloating every visitor's initial bundle -
 // see App.jsx's `const AnalyticsView = lazy(() => import("./AnalyticsView.jsx"))`.
 // Default export is required for React.lazy's dynamic import().
 import React, { useState, useEffect } from "react";
@@ -37,12 +37,12 @@ function AbTestCard({ title, subtitle, variants }) {
                   style={{ backgroundColor: v.isPrimary ? `${C.navy}14` : `${C.slate}14`, color: v.isPrimary ? C.navy : C.slate }}>
                   {v.isPrimary ? "A" : String.fromCharCode(65 + i)}
                 </span>
-                <span className="text-xs truncate" style={{ color: C.ink }} title={v.subject}>{v.subject || "—"}</span>
+                <span className="text-xs truncate" style={{ color: C.ink }} title={v.subject}>{v.subject || "-"}</span>
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-[11px]" style={{ color: C.slate }}>{v.opened}/{v.sent}</span>
                 <span className="text-xs font-semibold tabular-nums" style={{ color: isWinner ? C.mint : C.slate }}>
-                  {v.sent > 0 ? `${v.openRate}%` : "—"}
+                  {v.sent > 0 ? `${v.openRate}%` : "-"}
                 </span>
               </div>
             </div>
@@ -67,7 +67,7 @@ function CrmReportingSection({ crm }) {
       <div className="flex flex-wrap gap-4">
         <StatCard label={t("Επικοινωνήθηκαν")} value={crm.contactsContacted} sub={t("από {n} επαφές", { n: crm.contactsTotal })} color={C.sky} />
         <StatCard label={t("Προσφορές")} value={crm.offersTotal} sub={t("σύνολο")} color={C.navy} />
-        <StatCard label={t("Win rate")} value={crm.winRate == null ? "—" : `${Math.round(crm.winRate * 100)}%`} sub={t("αποδεκτές / αποφασισμένες")} color={C.mint} />
+        <StatCard label={t("Win rate")} value={crm.winRate == null ? "-" : `${Math.round(crm.winRate * 100)}%`} sub={t("αποδεκτές / αποφασισμένες")} color={C.mint} />
         <StatCard label={t("Αξία σε εξέλιξη")} value={fmtMoney((crm.valueByStatus?.sent || 0) + (crm.valueByStatus?.draft || 0))} sub="draft + sent" color={C.amber} />
       </div>
 
@@ -173,10 +173,10 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Analytics</h1>
           <p className="text-sm mt-0.5" style={{ color: C.slate }}>
             {tab === "email"
-              ? t("Απόδοση όλων των αποστολών — sequences και χειροκίνητα emails")
+              ? t("Απόδοση όλων των αποστολών - sequences και χειροκίνητα emails")
               : tab === "crm"
-              ? t("CRM reporting — pipeline & αποτελέσματα")
-              : t("A/B θεμάτων — ποια γραμμή θέματος ανοίγεται περισσότερο")}
+              ? t("CRM reporting - pipeline & αποτελέσματα")
+              : t("A/B θεμάτων - ποια γραμμή θέματος ανοίγεται περισσότερο")}
           </p>
         </div>
         <div className="flex rounded-lg p-0.5" style={{ backgroundColor: C.pale }}>

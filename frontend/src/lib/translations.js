@@ -7,15 +7,15 @@
 // both the key and the translation.
 
 export const EN = {
-  // — Multichannel sequences —
+  // - Multichannel sequences -
   "Multichannel": "Multichannel",
-  "Multichannel sequence: κάθε βήμα διαλέγει το δικό του κανάλι (Email / LinkedIn / InMail). Εγγράφονται όλες οι επαφές — τα βήματα LinkedIn/InMail παραλείπονται αυτόματα για επαφές χωρίς LinkedIn URL, ώστε να συνεχίζουν τα email.":
-    "Multichannel sequence: each step picks its own channel (Email / LinkedIn / InMail). All contacts are enrolled — LinkedIn/InMail steps are automatically skipped for contacts without a LinkedIn URL, so emails keep flowing.",
+  "Multichannel sequence: κάθε βήμα διαλέγει το δικό του κανάλι (Email / LinkedIn / InMail). Εγγράφονται όλες οι επαφές - τα βήματα LinkedIn/InMail παραλείπονται αυτόματα για επαφές χωρίς LinkedIn URL, ώστε να συνεχίζουν τα email.":
+    "Multichannel sequence: each step picks its own channel (Email / LinkedIn / InMail). All contacts are enrolled - LinkedIn/InMail steps are automatically skipped for contacts without a LinkedIn URL, so emails keep flowing.",
   "Θέμα InMail": "InMail subject",
   "Μήνυμα InMail… (υποστηρίζει {{first_name}})": "InMail message… (supports {{first_name}})",
   "Μήνυμα LinkedIn… (υποστηρίζει {{first_name}})": "LinkedIn message… (supports {{first_name}})",
 
-  // — Day-of-week abbreviations (send window) —
+  // - Day-of-week abbreviations (send window) -
   "Δε": "Mon",
   "Τρ": "Tue",
   "Τε": "Wed",
@@ -24,7 +24,7 @@ export const EN = {
   "Σα": "Sat",
   "Κυ": "Sun",
 
-  // — Common actions / words —
+  // - Common actions / words -
   "Αποθήκευση": "Save",
   "Ακύρωση": "Cancel",
   "Διαγραφή": "Delete",
@@ -42,7 +42,7 @@ export const EN = {
   "Όχι": "No",
   "Απόκρυψη": "Hide",
 
-  // — Sidebar / navigation —
+  // - Sidebar / navigation -
   "Σύνταξη": "Compose",
   "Σήμερα": "Today",
   "Απεσταλμένα": "Sent",
@@ -60,12 +60,12 @@ export const EN = {
   "Ιδιοκτήτης": "Owner",
   "Μέλος": "Member",
 
-  // — Header —
+  // - Header -
   "Διαχείριση πλατφόρμας": "Platform administration",
   "Πίσω στην εφαρμογή": "Back to app",
   "Αποσύνδεση": "Sign out",
 
-  // — Auth screen —
+  // - Auth screen -
   "Σύνδεση": "Sign in",
   "Εγγραφή": "Sign up",
   "Email": "Email",
@@ -73,7 +73,7 @@ export const EN = {
   "Ξέχασες τον κωδικό;": "Forgot your password?",
   "Όνομα": "Name",
   "Όνομα εταιρείας": "Company name",
-  // — Contacts view —
+  // - Contacts view -
   "{n} επαφές (φιλτραρισμένο)": "{n} contacts (filtered)",
   "{n} επαφές συνολικά": "{n} contacts total",
   " · {n} με εκκρεμή υπενθύμιση": " · {n} with a pending reminder",
@@ -89,13 +89,13 @@ export const EN = {
   "Απόκρυψη unsubscribed": "Hide unsubscribed",
   "Μόνο με website": "Only with website",
 
-  // — Sequences view —
+  // - Sequences view -
   "{steps} βήματα · {sent} αποστολές": "{steps} steps · {sent} sends",
   "{sent} στάλθηκαν · {opened} ανοίχτηκαν · {replied} απαντήσεις": "{sent} sent · {opened} opened · {replied} replies",
   "Προσθήκη βήματος": "Add step",
   "Διάλεξε ή φτιάξε ένα sequence.": "Pick or create a sequence.",
 
-  // — Team / settings (send window + deliverability) —
+  // - Team / settings (send window + deliverability) -
   "Δεν αποθηκεύτηκε.": "Couldn't save.",
   "Παράθυρο αποστολής": "Send window",
   "Τα αυτόματα emails (sequences & campaigns) φεύγουν μόνο μέσα σε αυτές τις ώρες/ημέρες. Ό,τι πέφτει εκτός, μετατίθεται για το επόμενο άνοιγμα.":
@@ -105,14 +105,14 @@ export const EN = {
   "έως": "to",
   "Ζώνη ώρας": "Time zone",
   "Καταγράφονται opens & clicks (open pixel + rewriting των links).": "Opens & clicks are tracked (open pixel + link rewriting).",
-  "Clean αποστολή — χωρίς open pixel και χωρίς rewriting των links, για καλύτερο deliverability. Δεν θα υπάρχουν στατιστικά open/click.":
-    "Clean send — no open pixel and no link rewriting, for better deliverability. No open/click stats.",
+  "Clean αποστολή - χωρίς open pixel και χωρίς rewriting των links, για καλύτερο deliverability. Δεν θα υπάρχουν στατιστικά open/click.":
+    "Clean send - no open pixel and no link rewriting, for better deliverability. No open/click stats.",
   "Προστίθεται List-Unsubscribe header + ο σύνδεσμος {{unsubscribe_link}} λειτουργεί. Συνιστάται για deliverability.":
     "Adds a List-Unsubscribe header + the {{unsubscribe_link}} works. Recommended for deliverability.",
-  "Χωρίς List-Unsubscribe header· το {{unsubscribe_link}} αφαιρείται από το κείμενο — 100% clean 1:1 αποστολή. Πρόσεξε τη συμμόρφωση (σε bulk απαιτείται unsubscribe).":
-    "No List-Unsubscribe header; {{unsubscribe_link}} is removed from the body — 100% clean 1:1 send. Mind compliance (unsubscribe is required for bulk).",
+  "Χωρίς List-Unsubscribe header· το {{unsubscribe_link}} αφαιρείται από το κείμενο - 100% clean 1:1 αποστολή. Πρόσεξε τη συμμόρφωση (σε bulk απαιτείται unsubscribe).":
+    "No List-Unsubscribe header; {{unsubscribe_link}} is removed from the body - 100% clean 1:1 send. Mind compliance (unsubscribe is required for bulk).",
 
-  // — Templates view —
+  // - Templates view -
   "{n} αποθηκευμένα templates": "{n} saved templates",
   "Νέο template": "New template",
   "Φόρτωση templates…": "Loading templates…",
@@ -120,15 +120,15 @@ export const EN = {
   "{n}× σε χρήση": "{n}× in use",
   "Αντιγραφή": "Copy",
 
-  // — Offers view —
+  // - Offers view -
   "{n} προσφορές · σύνολο ενεργών {total}": "{n} offers · active total {total}",
   "Νέα προσφορά": "New offer",
   "Φόρτωση προσφορών…": "Loading offers…",
   "Δεν υπάρχουν προσφορές ακόμα.": "No offers yet.",
 
-  // — Campaigns view —
-  "Ένα μήνυμα σε πολλές επαφές, ένα-ένα με απόσταση — όχι μαζική αποστολή.":
-    "One message to many contacts, one by one with spacing — not a bulk blast.",
+  // - Campaigns view -
+  "Ένα μήνυμα σε πολλές επαφές, ένα-ένα με απόσταση - όχι μαζική αποστολή.":
+    "One message to many contacts, one by one with spacing - not a bulk blast.",
   "Νέο campaign": "New campaign",
   "Δεν έχεις δημιουργήσει campaign ακόμα.": "You haven't created a campaign yet.",
   "Όνομα": "Name",
@@ -138,19 +138,19 @@ export const EN = {
   "Εκκίνηση": "Start",
   "Παύση": "Pause",
 
-  // — Inbox / Sent view —
-  "Όλα τα emails που στάλθηκαν — sequences και χειροκίνητα. Πάτησε ένα για το trace.":
-    "All sent emails — sequences and manual. Click one to trace it.",
+  // - Inbox / Sent view -
+  "Όλα τα emails που στάλθηκαν - sequences και χειροκίνητα. Πάτησε ένα για το trace.":
+    "All sent emails - sequences and manual. Click one to trace it.",
   "Δεν έχει σταλεί κανένα email ακόμα.": "No email has been sent yet.",
   "προς {who}": "to {who}",
   " · χειροκίνητο": " · manual",
 
-  // — Dashboard / Today —
-  "Ό,τι είναι εκκρεμές ή έληξε σήμερα — follow-ups και αυτόματα sequence sends.":
-    "Everything due or overdue today — follow-ups and automatic sequence sends.",
+  // - Dashboard / Today -
+  "Ό,τι είναι εκκρεμές ή έληξε σήμερα - follow-ups και αυτόματα sequence sends.":
+    "Everything due or overdue today - follow-ups and automatic sequence sends.",
   "Τίποτα εκκρεμές για σήμερα.": "Nothing due today.",
 
-  // — Analytics view —
+  // - Analytics view -
   "Πρόχειρες": "Drafts",
   "Στάλθηκαν": "Sent",
   "Έγιναν δεκτές": "Accepted",
@@ -168,9 +168,9 @@ export const EN = {
   "Ανοίχτηκαν": "Opened",
   "Κλικ": "Clicks",
   "Απαντήσεις": "Replies",
-  "Απόδοση όλων των αποστολών — sequences και χειροκίνητα emails": "Performance of all sends — sequences and manual emails",
-  "CRM reporting — pipeline & αποτελέσματα": "CRM reporting — pipeline & outcomes",
-  "A/B θεμάτων — ποια γραμμή θέματος ανοίγεται περισσότερο": "Subject A/B — which subject line gets opened more",
+  "Απόδοση όλων των αποστολών - sequences και χειροκίνητα emails": "Performance of all sends - sequences and manual emails",
+  "CRM reporting - pipeline & αποτελέσματα": "CRM reporting - pipeline & outcomes",
+  "A/B θεμάτων - ποια γραμμή θέματος ανοίγεται περισσότερο": "Subject A/B - which subject line gets opened more",
   "Φόρτωση analytics…": "Loading analytics…",
   "{n} αποστολές": "{n} sends",
   "σε σχέση με αποστολές": "relative to sends",
@@ -188,7 +188,7 @@ export const EN = {
   "Δεν υπάρχουν ακόμα A/B tests. Πρόσθεσε εναλλακτικά θέματα σε ένα βήμα sequence ή σε ένα campaign για να ξεκινήσεις.":
     "No A/B tests yet. Add alternative subject lines to a sequence step or a campaign to get started.",
 
-  // — SuperAdmin —
+  // - SuperAdmin -
   "Εταιρείες": "Companies",
   "Αναζήτηση εταιρείας…": "Search company…",
   "Φόρτωση εταιρειών…": "Loading companies…",
@@ -205,12 +205,12 @@ export const EN = {
   "Νέος χρήστης": "New user",
   "Όνομα (προαιρετικό)": "Name (optional)",
   "Κωδικός (τουλάχιστον 10 χαρακτήρες)": "Password (at least 10 characters)",
-  "— χωρίς εταιρεία (θα οριστεί αργότερα) —": "— no company (set later) —",
+  "- χωρίς εταιρεία (θα οριστεί αργότερα) -": "- no company (set later) -",
   "Δικαιώματα admin": "Admin permissions",
   "Δημιουργία χρήστη": "Create user",
   "Νέος ιδιοκτήτης": "New owner",
   "Υπάρχων χρήστης": "Existing user",
-  "— επίλεξε χρήστη —": "— pick a user —",
+  "- επίλεξε χρήστη -": "- pick a user -",
   "Ο χρήστης θα γίνει ιδιοκτήτης της νέας εταιρείας, χωρίς να αγγίξει τις υπόλοιπες εταιρείες του.":
     "The user will become the owner of the new company, without affecting their other companies.",
   "Πρώτος χρήστης (ιδιοκτήτης)": "First user (owner)",
@@ -227,11 +227,11 @@ export const EN = {
   "Δεν ανήκει σε καμία εταιρεία ακόμα.": "Not in any company yet.",
   "Αφαίρεση": "Remove",
   "Προσθήκη σε εταιρεία": "Add to company",
-  "— επίλεξε —": "— pick —",
+  "- επίλεξε -": "- pick -",
   "Φόρτωση στατιστικών…": "Loading stats…",
   "ενεργά / σύνολο": "active / total",
   "Δεν έχει συνδεθεί ακόμα.": "Not connected yet.",
-  "{email} — χρειάζεται επανασύνδεση": "{email} — needs reconnect",
+  "{email} - χρειάζεται επανασύνδεση": "{email} - needs reconnect",
   "Επαφές ανά κατάσταση": "Contacts by status",
   "Μέλη ομάδας": "Team members",
   "Ρόλος": "Role",
@@ -252,7 +252,7 @@ export const EN = {
   "Φόρτωση χρηστών…": "Loading users…",
   "Δεν υπάρχουν ακόμα χρήστες.": "No users yet.",
   "Κανένας χρήστης δεν ταιριάζει με «{q}».": "No user matches «{q}».",
-  "— καμία —": "— none —",
+  "- καμία -": "- none -",
   "{n} εταιρείες": "{n} companies",
   "Έγκριση": "Approve",
   "Ανάκληση": "Revoke",
@@ -260,23 +260,23 @@ export const EN = {
   "Αφαίρεση admin": "Remove admin",
   "Διαγραφή χρήστη": "Delete user",
 
-  // — New contact modal —
+  // - New contact modal -
   "Όνομα (εμφανίζεται ως {{name}} σε emails)": "Name (shown as {{name}} in emails)",
   "Όνομα (first name)": "First name",
   "Επώνυμο (last name)": "Last name",
   "Κατηγορία (π.χ. Lead, Πελάτης)": "Category (e.g. Lead, Customer)",
   "Ετικέτες (χωρισμένες με κόμμα)": "Tags (comma-separated)",
-  "Ζώνη ώρας (προαιρετικό, π.χ. Europe/London — για send window στην ώρα του παραλήπτη)":
-    "Time zone (optional, e.g. Europe/London — for the send window in the recipient's time)",
-  "Website (προαιρετικό — {{website}} σε emails)": "Website (optional — {{website}} in emails)",
-  "Report link (προαιρετικό — {{report_link}} σε emails)": "Report link (optional — {{report_link}} in emails)",
-  "LinkedIn profile URL (προαιρετικό — για LinkedIn outreach)": "LinkedIn profile URL (optional — for LinkedIn outreach)",
+  "Ζώνη ώρας (προαιρετικό, π.χ. Europe/London - για send window στην ώρα του παραλήπτη)":
+    "Time zone (optional, e.g. Europe/London - for the send window in the recipient's time)",
+  "Website (προαιρετικό - {{website}} σε emails)": "Website (optional - {{website}} in emails)",
+  "Report link (προαιρετικό - {{report_link}} σε emails)": "Report link (optional - {{report_link}} in emails)",
+  "LinkedIn profile URL (προαιρετικό - για LinkedIn outreach)": "LinkedIn profile URL (optional - for LinkedIn outreach)",
   "Σχόλια": "Comments",
-  "— διαθέσιμο ως {{comments}} σε emails": "— available as {{comments}} in emails",
-  "Internal σχόλια (προαιρετικό — ΔΕΝ χρησιμοποιείται σε emails, μόνο εσωτερική χρήση)":
-    "Internal notes (optional — NOT used in emails, internal only)",
+  "- διαθέσιμο ως {{comments}} σε emails": "- available as {{comments}} in emails",
+  "Internal σχόλια (προαιρετικό - ΔΕΝ χρησιμοποιείται σε emails, μόνο εσωτερική χρήση)":
+    "Internal notes (optional - NOT used in emails, internal only)",
 
-  // — LinkedIn / InMail contact panel —
+  // - LinkedIn / InMail contact panel -
   "Δεν έχει σταλεί": "Not sent",
   "Εκκρεμεί (αίτημα στάλθηκε)": "Pending (request sent)",
   "Αποδεκτό ✓": "Accepted ✓",
@@ -303,7 +303,7 @@ export const EN = {
   "Χρειάζεται premium LinkedIn (Sales Navigator/Recruiter) και καταναλώνει InMail credit.":
     "Requires premium LinkedIn (Sales Navigator/Recruiter) and consumes an InMail credit.",
 
-  // — Contacts view (table, bulk, pagination) + contact drawer —
+  // - Contacts view (table, bulk, pagination) + contact drawer -
   "Καθαρισμός φίλτρων": "Clear filters",
   "{n} επιλεγμένες": "{n} selected",
   "Εγγραφή σε sequence…": "Enroll in sequence…",
@@ -333,37 +333,37 @@ export const EN = {
   "Νέα σημείωση…": "New note…",
   "Καμία σημείωση ακόμα.": "No notes yet.",
 
-  // — Contact detail drawer —
-  "Δεν διαβάζουμε το inbox σου — σημείωσε το χειροκίνητα όταν κάποιος απαντήσει, για να σταματήσει το sequence και να μετρήσει σωστά το reply rate.":
-    "We don't read your inbox — mark it manually when someone replies, so the sequence stops and the reply rate counts correctly.",
+  // - Contact detail drawer -
+  "Δεν διαβάζουμε το inbox σου - σημείωσε το χειροκίνητα όταν κάποιος απαντήσει, για να σταματήσει το sequence και να μετρήσει σωστά το reply rate.":
+    "We don't read your inbox - mark it manually when someone replies, so the sequence stops and the reply rate counts correctly.",
   "Mark ως απάντησε": "Mark as replied",
   "Αποστολή email": "Send email",
-  "Ζώνη ώρας (π.χ. Europe/London — για send window στην ώρα του παραλήπτη)": "Time zone (e.g. Europe/London — for the send window in the recipient's time)",
+  "Ζώνη ώρας (π.χ. Europe/London - για send window στην ώρα του παραλήπτη)": "Time zone (e.g. Europe/London - for the send window in the recipient's time)",
   "LinkedIn profile URL (για LinkedIn outreach)": "LinkedIn profile URL (for LinkedIn outreach)",
   "Επεξεργασία στοιχείων επαφής": "Edit contact details",
   "Επισήμανση ως unsubscribed": "Mark as unsubscribed",
   "Internal σχόλια": "Internal notes",
-  "— εσωτερική χρήση μόνο, ΔΕΝ στέλνεται ποτέ σε email": "— internal use only, NEVER sent in an email",
+  "- εσωτερική χρήση μόνο, ΔΕΝ στέλνεται ποτέ σε email": "- internal use only, NEVER sent in an email",
   "π.χ. εσωτερική σημείωση για το πώς προσεγγίσαμε αυτή την επαφή...": "e.g. internal note on how we approached this contact...",
   "Αποθήκευση σχολίων": "Save comments",
   "Αποθήκευση internal σχολίων": "Save internal notes",
   "Επόμενη υπενθύμιση": "Next reminder",
 
-  // — Compose modal —
+  // - Compose modal -
   "Νέο μήνυμα": "New message",
-  "Προς — επίλεξε επαφή…": "To — pick a contact…",
+  "Προς - επίλεξε επαφή…": "To - pick a contact…",
   "Θέμα": "Subject",
   "Best practice: το email δεν έχει σύνδεσμο απεγγραφής.": "Best practice: the email has no unsubscribe link.",
-  "Δεν έχεις συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό.": "You haven't connected Gmail yet — sending won't work without it.",
+  "Δεν έχεις συνδέσει Gmail ακόμα - η αποστολή δεν θα δουλέψει χωρίς αυτό.": "You haven't connected Gmail yet - sending won't work without it.",
   "Εστάλη ✓": "Sent ✓",
   "Αποστολή": "Send",
   "Επίλεξε παραλήπτη.": "Pick a recipient.",
-  "Δεν έχεις συνδέσει Gmail — σύνδεσε το από το μπάνερ στην κορυφή για να στείλεις.": "You haven't connected Gmail — connect it from the banner at the top to send.",
-  "Η σύνδεση Gmail διακόπηκε — συνδέσου ξανά από το μπάνερ στην κορυφή για να στείλεις.": "The Gmail connection was interrupted — reconnect from the banner at the top to send.",
-  "Η επαφή έχει κάνει unsubscribe — δεν επιτρέπεται αποστολή.": "The contact has unsubscribed — sending is not allowed.",
-  "Συμπληρώθηκε το ημερήσιο όριο emails ({limit}) για την εταιρεία σας — δοκίμασε ξανά αύριο.": "Your company's daily email limit ({limit}) has been reached — try again tomorrow.",
+  "Δεν έχεις συνδέσει Gmail - σύνδεσε το από το μπάνερ στην κορυφή για να στείλεις.": "You haven't connected Gmail - connect it from the banner at the top to send.",
+  "Η σύνδεση Gmail διακόπηκε - συνδέσου ξανά από το μπάνερ στην κορυφή για να στείλεις.": "The Gmail connection was interrupted - reconnect from the banner at the top to send.",
+  "Η επαφή έχει κάνει unsubscribe - δεν επιτρέπεται αποστολή.": "The contact has unsubscribed - sending is not allowed.",
+  "Συμπληρώθηκε το ημερήσιο όριο emails ({limit}) για την εταιρεία σας - δοκίμασε ξανά αύριο.": "Your company's daily email limit ({limit}) has been reached - try again tomorrow.",
 
-  // — New campaign modal + campaign detail —
+  // - New campaign modal + campaign detail -
   "Όνομα campaign": "Campaign name",
   "Φόρτωση περιεχομένου από template…": "Load content from template…",
   "Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})": "Subject (e.g. A quick idea for {{company}})",
@@ -372,11 +372,11 @@ export const EN = {
   "Παραλλαγή θέματος": "Subject variant",
   "Εναλλακτικό θέμα {n}": "Alternative subject {n}",
   "Εισαγωγή token:": "Insert token:",
-  "Best practice: το email δεν έχει σύνδεσμο απεγγραφής — ιδιαίτερα σημαντικό για μαζικές αποστολές σαν campaign.":
-    "Best practice: the email has no unsubscribe link — especially important for bulk sends like a campaign.",
+  "Best practice: το email δεν έχει σύνδεσμο απεγγραφής - ιδιαίτερα σημαντικό για μαζικές αποστολές σαν campaign.":
+    "Best practice: the email has no unsubscribe link - especially important for bulk sends like a campaign.",
   "Απόσταση μεταξύ αποστολών (λεπτά)": "Interval between sends (minutes)",
-  "Τα emails φεύγουν ένα-ένα, όχι όλα μαζί — π.χ. με 2 λεπτά, {n} επαφές θα χρειαστούν περίπου {mins} λεπτά για να ολοκληρωθούν.":
-    "Emails go out one by one, not all at once — e.g. at 2 minutes, {n} contacts will take about {mins} minutes to finish.",
+  "Τα emails φεύγουν ένα-ένα, όχι όλα μαζί - π.χ. με 2 λεπτά, {n} επαφές θα χρειαστούν περίπου {mins} λεπτά για να ολοκληρωθούν.":
+    "Emails go out one by one, not all at once - e.g. at 2 minutes, {n} contacts will take about {mins} minutes to finish.",
   "Δημιουργία campaign (ως πρόχειρο)": "Create campaign (as draft)",
   "Παραλήπτες": "Recipients",
   "Αναζήτηση…": "Search…",
@@ -401,14 +401,14 @@ export const EN = {
   "Αποτυχία": "Failed",
   "Δεν έχει σταλεί ακόμα.": "Not sent yet.",
   "Δεν υπάρχουν sequences ακόμα.": "No sequences yet.",
-  "Αυτό το sequence έχει {n} βήματα. Best practice: 3–5 follow-ups δίνουν σημαντικά καλύτερα reply rates.":
-    "This sequence has {n} steps. Best practice: 3–5 follow-ups give significantly better reply rates.",
+  "Αυτό το sequence έχει {n} βήματα. Best practice: 3-5 follow-ups δίνουν σημαντικά καλύτερα reply rates.":
+    "This sequence has {n} steps. Best practice: 3-5 follow-ups give significantly better reply rates.",
   "Κανένα follow-up εκκρεμές.": "No pending follow-ups.",
   "Αυτόματα sends": "Automatic sends",
   "Κανένα sequence send εκκρεμές.": "No pending sequence sends.",
   "εκπρόθεσμο": "overdue",
 
-  // — Contacts errors + template modal —
+  // - Contacts errors + template modal -
   "Δεν ήταν δυνατή η φόρτωση επαφών.": "Couldn't load contacts.",
   "Προστέθηκαν {created}, αγνοήθηκαν {skipped}.": "Added {created}, skipped {skipped}.",
   "Το ανέβασμα απέτυχε.": "Upload failed.",
@@ -425,12 +425,12 @@ export const EN = {
   "(συνιστάται κάτω από 60 για καλύτερο open rate)": "(under 60 recommended for a better open rate)",
   "⚠ Πιθανές λέξεις spam-trigger: {words}": "⚠ Possible spam-trigger words: {words}",
   "{chars} χαρακτήρες · {words} λέξεις": "{chars} characters · {words} words",
-  "Best practice: το email δεν έχει σύνδεσμο απεγγραφής — βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails. Πρόσθεσε ένα link με href {{unsubscribe_link}}.":
-    "Best practice: the email has no unsubscribe link — it helps deliverability and is essential for bulk cold emails. Add a link with href {{unsubscribe_link}}.",
+  "Best practice: το email δεν έχει σύνδεσμο απεγγραφής - βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails. Πρόσθεσε ένα link με href {{unsubscribe_link}}.":
+    "Best practice: the email has no unsubscribe link - it helps deliverability and is essential for bulk cold emails. Add a link with href {{unsubscribe_link}}.",
   "Προεπισκόπηση (με δείγμα δεδομένων)": "Preview (with sample data)",
   "Προς:": "To:",
 
-  // — Status labels, conditions, toolbar, search —
+  // - Status labels, conditions, toolbar, search -
   "Νέο": "New",
   "Απάντησε": "Replied",
   "Χωρίς συνθήκη": "No condition",
@@ -463,8 +463,8 @@ export const EN = {
   "Τουλάχιστον 10 χαρακτήρες.": "At least 10 characters.",
   "Αποστολή συνδέσμου": "Send link",
   "Δημιουργία λογαριασμού": "Create account",
-  "Η πρόσβαση εγκρίνεται από διαχειριστή — μετά την εγγραφή θα περιμένεις έγκριση πριν μπορέσεις να συνδεθείς.":
-    "Access is approved by an admin — after signing up you'll wait for approval before you can sign in.",
+  "Η πρόσβαση εγκρίνεται από διαχειριστή - μετά την εγγραφή θα περιμένεις έγκριση πριν μπορέσεις να συνδεθείς.":
+    "Access is approved by an admin - after signing up you'll wait for approval before you can sign in.",
 
   // --- Team/Settings, Integrations, LinkedIn/InMail, SuperAdmin, ResetPassword, errors ---
   "Άνοιγμα αγνοήθηκε (αυτόματο/bot, όχι πραγματικό)": "Open ignored (automated/bot, not real)",
@@ -472,16 +472,16 @@ export const EN = {
   "Μέχρι {n} αρχεία ανά email.": "Up to {n} files per email.",
   "Το \"{name}\" ξεπερνάει τα 2MB.": "\"{name}\" exceeds 2MB.",
   "Προστίθεται επίσης ένα αόρατο pixel παρακολούθησης ανοίγματος σε κάθε αποστολή.": "An invisible open-tracking pixel is also added to every send.",
-  "Δεν έχετε συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό.": "You haven't connected Gmail yet — sending won't work without it.",
-  "Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον ιδιοκτήτη να το συνδέσει.": "Your workspace hasn't connected Gmail yet — ask the owner to connect it.",
+  "Δεν έχετε συνδέσει Gmail ακόμα - η αποστολή δεν θα δουλέψει χωρίς αυτό.": "You haven't connected Gmail yet - sending won't work without it.",
+  "Το workspace σας δεν έχει συνδέσει Gmail ακόμα - ζήτησε από τον ιδιοκτήτη να το συνδέσει.": "Your workspace hasn't connected Gmail yet - ask the owner to connect it.",
   "Σύνδεση Gmail": "Connect Gmail",
-  "Η σύνδεση Gmail διακόπηκε (πιθανώς ανακλήθηκε η πρόσβαση) — οι αποστολές έχουν σταματήσει μέχρι να συνδεθεί ξανά.": "The Gmail connection was interrupted (access may have been revoked) — sending is paused until it's reconnected.",
-  "Η σύνδεση Gmail του workspace διακόπηκε — ζήτησε από τον ιδιοκτήτη να τη συνδέσει ξανά.": "The workspace's Gmail connection was interrupted — ask the owner to reconnect it.",
+  "Η σύνδεση Gmail διακόπηκε (πιθανώς ανακλήθηκε η πρόσβαση) - οι αποστολές έχουν σταματήσει μέχρι να συνδεθεί ξανά.": "The Gmail connection was interrupted (access may have been revoked) - sending is paused until it's reconnected.",
+  "Η σύνδεση Gmail του workspace διακόπηκε - ζήτησε από τον ιδιοκτήτη να τη συνδέσει ξανά.": "The workspace's Gmail connection was interrupted - ask the owner to reconnect it.",
   "Επανασύνδεση Gmail": "Reconnect Gmail",
-  "{broken} από τα {total} mailbox χρειάζονται επανασύνδεση — η αποστολή συνεχίζει με μειωμένη χωρητικότητα.": "{broken} of {total} mailboxes need reconnecting — sending continues at reduced capacity.",
-  "Ένα mailbox του workspace χρειάζεται επανασύνδεση — ζήτησε από τον ιδιοκτήτη να το φτιάξει.": "A workspace mailbox needs reconnecting — ask the owner to fix it.",
+  "{broken} από τα {total} mailbox χρειάζονται επανασύνδεση - η αποστολή συνεχίζει με μειωμένη χωρητικότητα.": "{broken} of {total} mailboxes need reconnecting - sending continues at reduced capacity.",
+  "Ένα mailbox του workspace χρειάζεται επανασύνδεση - ζήτησε από τον ιδιοκτήτη να το φτιάξει.": "A workspace mailbox needs reconnecting - ask the owner to fix it.",
   "Επανασύνδεση": "Reconnect",
-  "Το ημερήσιο όριο emails ({sent}/{cap}) έχει συμπληρωθεί — η αποστολή θα συνεχίσει αύριο.": "The daily email limit ({sent}/{cap}) has been reached — sending will resume tomorrow.",
+  "Το ημερήσιο όριο emails ({sent}/{cap}) έχει συμπληρωθεί - η αποστολή θα συνεχίσει αύριο.": "The daily email limit ({sent}/{cap}) has been reached - sending will resume tomorrow.",
   "Πλησιάζετε το ημερήσιο όριο emails: {sent}/{cap} έχουν σταλεί σήμερα.": "You're approaching the daily email limit: {sent}/{cap} sent today.",
   "Στήλες CSV: name, firstName, lastName, email, phone, company, category, tags, website, reportLink, comments, internalNotes": "CSV columns: name, firstName, lastName, email, phone, company, category, tags, website, reportLink, comments, internalNotes",
   "Δεν ήταν δυνατή η δημιουργία προσφοράς.": "Couldn't create the offer.",
@@ -491,7 +491,7 @@ export const EN = {
   "Σημειώσεις (προαιρετικό)": "Notes (optional)",
   "Γιατί έγινε δεκτή;": "Why was it accepted?",
   "Γιατί απορρίφθηκε;": "Why was it declined?",
-  "Προαιρετικό — τροφοδοτεί το CRM reporting (λόγοι έγκρισης/απόρριψης).": "Optional — feeds CRM reporting (accept/decline reasons).",
+  "Προαιρετικό - τροφοδοτεί το CRM reporting (λόγοι έγκρισης/απόρριψης).": "Optional - feeds CRM reporting (accept/decline reasons).",
   "π.χ. τιμή, timing, ανταγωνισμός…": "e.g. price, timing, competition…",
   "Παράλειψη": "Skip",
   "Δοκιμαστική αποστολή": "Test send",
@@ -513,14 +513,14 @@ export const EN = {
   "Μόνο για tags (χωρισμένα με κόμμα)…": "Only for tags (comma-separated)…",
   "Δεν ήταν δυνατή η δημιουργία sequence.": "Couldn't create the sequence.",
   "Νέο sequence": "New sequence",
-  "Best practice: 3–5 follow-ups ανεβάζουν σημαντικά τα ποσοστά απάντησης. Σκέψου να προσθέσεις ακόμη βήματα πριν δημιουργήσεις το sequence.": "Best practice: 3–5 follow-ups significantly raise reply rates. Consider adding more steps before creating the sequence.",
+  "Best practice: 3-5 follow-ups ανεβάζουν σημαντικά τα ποσοστά απάντησης. Σκέψου να προσθέσεις ακόμη βήματα πριν δημιουργήσεις το sequence.": "Best practice: 3-5 follow-ups significantly raise reply rates. Consider adding more steps before creating the sequence.",
   "Όνομα sequence": "Sequence name",
   "Κανάλι": "Channel",
   "LinkedIn sequence: αν η επαφή δεν είναι ήδη σύνδεση, το 1ο βήμα στέλνει αίτημα σύνδεσης με το σημείωμα παρακάτω. Τα follow-up μηνύματα ξεκινούν όταν γίνει αποδεκτό το αίτημα. Ισχύει ημερήσιο όριο αιτημάτων για προστασία του λογαριασμού. Μόνο επαφές με LinkedIn URL θα εγγραφούν.": "LinkedIn sequence: if the contact isn't already a connection, the 1st step sends a connection request with the note below. Follow-up messages start once the request is accepted. A daily request limit applies to protect the account. Only contacts with a LinkedIn URL will be enrolled.",
   "Σημείωμα αιτήματος σύνδεσης": "Connection request note",
   "(προαιρετικό, max 300 χαρ.)": "(optional, max 300 chars)",
   "π.χ. Γεια σου {{first_name}}, θα ήθελα να συνδεθούμε…": "e.g. Hi {{first_name}}, I'd like to connect…",
-  "InMail sequence: κάθε βήμα στέλνει ένα InMail (με θέμα + μήνυμα) απευθείας, ακόμη και σε μη-συνδέσεις — δεν χρειάζεται αίτημα σύνδεσης. Απαιτεί premium LinkedIn και καταναλώνει InMail credits. Κάθε βήμα χρειάζεται θέμα και μήνυμα. Μόνο επαφές με LinkedIn URL θα εγγραφούν.": "InMail sequence: each step sends an InMail (subject + message) directly, even to non-connections — no connection request needed. Requires premium LinkedIn and consumes InMail credits. Each step needs a subject and a message. Only contacts with a LinkedIn URL will be enrolled.",
+  "InMail sequence: κάθε βήμα στέλνει ένα InMail (με θέμα + μήνυμα) απευθείας, ακόμη και σε μη-συνδέσεις - δεν χρειάζεται αίτημα σύνδεσης. Απαιτεί premium LinkedIn και καταναλώνει InMail credits. Κάθε βήμα χρειάζεται θέμα και μήνυμα. Μόνο επαφές με LinkedIn URL θα εγγραφούν.": "InMail sequence: each step sends an InMail (subject + message) directly, even to non-connections - no connection request needed. Requires premium LinkedIn and consumes InMail credits. Each step needs a subject and a message. Only contacts with a LinkedIn URL will be enrolled.",
   "Βήμα {n}": "Step {n}",
   "ημέρες μετά": "days later",
   "(προτείνεται: {n} ημέρες)": "(recommended: {n} days)",
@@ -533,18 +533,18 @@ export const EN = {
   "Δημιουργήθηκε:": "Created:",
   "Δεν ήταν δυνατή η πρόσκληση.": "Couldn't send the invite.",
   "Πρόσκληση συνεργάτη": "Invite a teammate",
-  "Ο συνεργάτης θα βλέπει τις ίδιες επαφές, sequences, templates και campaigns με εσένα — μοιράζεστε το ίδιο workspace.": "Your teammate will see the same contacts, sequences, templates and campaigns as you — you share the same workspace.",
+  "Ο συνεργάτης θα βλέπει τις ίδιες επαφές, sequences, templates και campaigns με εσένα - μοιράζεστε το ίδιο workspace.": "Your teammate will see the same contacts, sequences, templates and campaigns as you - you share the same workspace.",
   "Πρόσκληση": "Invite",
   "Πρόσκληση υπάρχοντος χρήστη": "Invite an existing user",
   "Η πρόσκληση στάλθηκε. Θα εμφανιστεί στον λογαριασμό του/της την επόμενη φορά που θα συνδεθεί, και θα προστεθεί στην ομάδα μόνο αν την αποδεχτεί.": "The invite was sent. It will appear in their account next time they sign in, and they'll join the team only if they accept it.",
   "Email υπάρχοντος λογαριασμού": "Email of an existing account",
-  "Ο χρήστης πρέπει ήδη να έχει λογαριασμό SDLoop. Θα λάβει μια πρόσκληση που μπορεί να αποδεχτεί ή να απορρίψει — δεν προστίθεται αυτόματα.": "The user must already have an SDLoop account. They'll receive an invite they can accept or decline — they're not added automatically.",
+  "Ο χρήστης πρέπει ήδη να έχει λογαριασμό SDLoop. Θα λάβει μια πρόσκληση που μπορεί να αποδεχτεί ή να απορρίψει - δεν προστίθεται αυτόματα.": "The user must already have an SDLoop account. They'll receive an invite they can accept or decline - they're not added automatically.",
   "Αποστολή πρόσκλησης": "Send invite",
   "Κείμενο unsubscribe στο email": "Unsubscribe text in the email",
-  "— seed σε νέα emails· πρέπει να περιέχει {{unsubscribe_link}}": "— seeded into new emails; must contain {{unsubscribe_link}}",
-  "⚠ Λείπει το {{unsubscribe_link}} — ο σύνδεσμος δεν θα λειτουργεί.": "⚠ Missing {{unsubscribe_link}} — the link won't work.",
-  "Σελίδα επιβεβαίωσης — τίτλος": "Confirmation page — title",
-  "Σελίδα επιβεβαίωσης — μήνυμα": "Confirmation page — message",
+  "- seed σε νέα emails· πρέπει να περιέχει {{unsubscribe_link}}": "- seeded into new emails; must contain {{unsubscribe_link}}",
+  "⚠ Λείπει το {{unsubscribe_link}} - ο σύνδεσμος δεν θα λειτουργεί.": "⚠ Missing {{unsubscribe_link}} - the link won't work.",
+  "Σελίδα επιβεβαίωσης - τίτλος": "Confirmation page - title",
+  "Σελίδα επιβεβαίωσης - μήνυμα": "Confirmation page - message",
   "Δεν φορτώθηκε.": "Couldn't load.",
   "Η αποθήκευση απέτυχε.": "Save failed.",
   "Ρυθμίσεις Unipile": "Unipile settings",
@@ -552,10 +552,10 @@ export const EN = {
   "Δεν έχει ρυθμιστεί": "Not configured",
   "Access token και DSN για το Unipile API. Το token αποθηκεύεται κρυπτογραφημένο και δεν εμφανίζεται ποτέ ξανά.": "Access token and DSN for the Unipile API. The token is stored encrypted and never shown again.",
   "Access token": "Access token",
-  "— έχει οριστεί (κενό = ίδιο)": "— set (blank = unchanged)",
+  "- έχει οριστεί (κενό = ίδιο)": "- set (blank = unchanged)",
   "••••••••  (άφησε κενό για να μη το αλλάξεις)": "••••••••  (leave blank to keep it)",
   "InMail API tier": "InMail API tier",
-  "— ανάλογα με το premium seat σου": "— depending on your premium seat",
+  "- ανάλογα με το premium seat σου": "- depending on your premium seat",
   "Δεν επιστράφηκε σύνδεσμος σύνδεσης.": "No connection link was returned.",
   "Η σύνδεση απέτυχε.": "Connection failed.",
   "Αποσύνδεση του LinkedIn λογαριασμού;": "Disconnect the LinkedIn account?",
@@ -575,19 +575,19 @@ export const EN = {
   "Αφαίρεση του/της {who} από την ομάδα;": "Remove {who} from the team?",
   "Αποσύνδεση του mailbox {email}; Οι αποστολές που το χρησιμοποιούσαν θα περάσουν στα υπόλοιπα συνδεδεμένα mailbox.": "Disconnect the mailbox {email}? Sends that used it will move to the other connected mailboxes.",
   "Δεν ήταν δυνατή η αποσύνδεση.": "Couldn't disconnect.",
-  "Οι συνεργάτες στο workspace σου — μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.": "Your workspace teammates — you share the same contacts and the same Gmail.",
+  "Οι συνεργάτες στο workspace σου - μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.": "Your workspace teammates - you share the same contacts and the same Gmail.",
   "Εξαγωγή δεδομένων": "Export data",
   "Εκκρεμείς προσκλήσεις": "Pending invites",
   "Συνδεδεμένα mailbox": "Connected mailboxes",
   "Σύνδεση mailbox": "Connect mailbox",
-  "Οι αποστολές μοιράζονται αυτόματα ανάμεσα σε όλα τα συνδεδεμένα mailbox — περισσότερα mailbox σημαίνουν μεγαλύτερη ημερήσια χωρητικότητα αποστολών.": "Sends are automatically distributed across all connected mailboxes — more mailboxes means higher daily send capacity.",
+  "Οι αποστολές μοιράζονται αυτόματα ανάμεσα σε όλα τα συνδεδεμένα mailbox - περισσότερα mailbox σημαίνουν μεγαλύτερη ημερήσια χωρητικότητα αποστολών.": "Sends are automatically distributed across all connected mailboxes - more mailboxes means higher daily send capacity.",
   "Δεν έχει συνδεθεί κανένα mailbox ακόμα.": "No mailbox connected yet.",
   "χρειάζεται επανασύνδεση": "needs reconnecting",
   "{sent}/{cap} σήμερα": "{sent}/{cap} today",
   "Φόρτωση ομάδας…": "Loading team…",
   "Συνεργάτης": "Teammate",
   "Δεν ήταν δυνατή η δημιουργία.": "Couldn't create.",
-  "Η παλιά διεύθυνση θα σταματήσει να δουλεύει — θα χρειαστεί να ενημερώσεις τη φόρμα/plugin με τη νέα. Συνέχεια;": "The old address will stop working — you'll need to update your form/plugin with the new one. Continue?",
+  "Η παλιά διεύθυνση θα σταματήσει να δουλεύει - θα χρειαστεί να ενημερώσεις τη φόρμα/plugin με τη νέα. Συνέχεια;": "The old address will stop working - you'll need to update your form/plugin with the new one. Continue?",
   "Δεν ήταν δυνατή η ανανέωση.": "Couldn't refresh.",
   "Διαγραφή αυτού του webhook; Η φόρμα/plugin που το χρησιμοποιεί θα σταματήσει να στέλνει leads.": "Delete this webhook? The form/plugin using it will stop sending leads.",
   "Δεν ήταν δυνατή η διαγραφή.": "Couldn't delete.",
@@ -607,11 +607,11 @@ export const EN = {
   "· κανένα ακόμα": "· none yet",
   "Ετικέτα (π.χ. WordPress site)": "Label (e.g. WordPress site)",
   "Νέο webhook": "New webhook",
-  "Απευθείας σύνδεση σελίδας Facebook/Instagram μέσω Graph API. Χρειάζεται το Page ID και ένα Page Access Token με δικαίωμα leads_retrieval — δες το SETUP.md για τα βήματα δημιουργίας Meta App.": "Direct connection of a Facebook/Instagram page via the Graph API. Needs the Page ID and a Page Access Token with the leads_retrieval permission — see SETUP.md for the Meta App creation steps.",
+  "Απευθείας σύνδεση σελίδας Facebook/Instagram μέσω Graph API. Χρειάζεται το Page ID και ένα Page Access Token με δικαίωμα leads_retrieval - δες το SETUP.md για τα βήματα δημιουργίας Meta App.": "Direct connection of a Facebook/Instagram page via the Graph API. Needs the Page ID and a Page Access Token with the leads_retrieval permission - see SETUP.md for the Meta App creation steps.",
   "Όνομα σελίδας (προαιρετικό)": "Page name (optional)",
   "Σύνδεση σελίδας": "Connect page",
-  "Απευθείας σύνδεση μέσω LinkedIn's Lead Sync API. Χρειάζεται έγκριση από το LinkedIn (Lead Sync API access) πριν λειτουργήσει για πραγματικά organizations — δες το SETUP.md. Μέχρι τότε η σύνδεση αποθηκεύεται αλλά δεν θα λαμβάνει leads.": "Direct connection via LinkedIn's Lead Sync API. Requires approval from LinkedIn (Lead Sync API access) before it works for real organizations — see SETUP.md. Until then the connection is saved but won't receive leads.",
-  "Η σύνδεση με το LinkedIn έγινε — πρόσθεσε το Organization URN για να ολοκληρωθεί.": "Connected to LinkedIn — add the Organization URN to finish.",
+  "Απευθείας σύνδεση μέσω LinkedIn's Lead Sync API. Χρειάζεται έγκριση από το LinkedIn (Lead Sync API access) πριν λειτουργήσει για πραγματικά organizations - δες το SETUP.md. Μέχρι τότε η σύνδεση αποθηκεύεται αλλά δεν θα λαμβάνει leads.": "Direct connection via LinkedIn's Lead Sync API. Requires approval from LinkedIn (Lead Sync API access) before it works for real organizations - see SETUP.md. Until then the connection is saved but won't receive leads.",
+  "Η σύνδεση με το LinkedIn έγινε - πρόσθεσε το Organization URN για να ολοκληρωθεί.": "Connected to LinkedIn - add the Organization URN to finish.",
   "Organization URN (π.χ. urn:li:organization:12345)": "Organization URN (e.g. urn:li:organization:12345)",
   "Ολοκλήρωση σύνδεσης": "Finish connection",
   "Σύνδεση LinkedIn": "Connect LinkedIn",

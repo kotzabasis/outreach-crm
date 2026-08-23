@@ -4,7 +4,7 @@ import { api, ApiError } from "./lib/api";
 import { C, Card, Brand } from "./lib/ui.jsx";
 import { t, useLang, LanguageSwitcher } from "./lib/i18n.jsx";
 
-// Standalone page at /reset-password?token=... — the destination of the
+// Standalone page at /reset-password?token=... - the destination of the
 // email link sent by AuthScreen's "forgot password" flow. Deliberately
 // separate from AuthScreen (no login/register tabs, no existing session
 // needed) since resetting a password is, by definition, something you do
@@ -34,7 +34,7 @@ export function ResetPasswordPage() {
     } catch (err) {
       // Every failure mode here (bad/expired/reused token, or even a
       // malformed one) boils down to the same actionable advice for a real
-      // user — never show them a raw backend error code like
+      // user - never show them a raw backend error code like
       // "invalid_request" or "invalid_or_expired_token".
       setError(t("Ο σύνδεσμος επαναφοράς δεν είναι έγκυρος ή έχει λήξει. Ζήτησε νέο σύνδεσμο από την οθόνη σύνδεσης."));
     } finally {

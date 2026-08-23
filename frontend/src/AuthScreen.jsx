@@ -5,7 +5,7 @@ import { C, Card, Brand } from "./lib/ui.jsx";
 import { t, useLang, LanguageSwitcher } from "./lib/i18n.jsx";
 
 // Shared between the main App (default screen) and SuperAdminApp (/superadmin)
-// — both are gated behind the same login, just with a different destination
+// - both are gated behind the same login, just with a different destination
 // afterwards. Kept in its own file so both entry points can import it without
 // either one pulling in the other's code (see main.jsx for the lazy-loaded
 // split).
@@ -36,7 +36,7 @@ export function AuthScreen({ onAuthenticated }) {
         onAuthenticated(user);
       } else if (mode === "forgot") {
         // Backend always responds the same way whether or not the email
-        // exists (see auth.js) — nothing to branch on here, just show its
+        // exists (see auth.js) - nothing to branch on here, just show its
         // message and drop back to the login tab.
         const result = await api.post("/auth/forgot-password", { email });
         setInfo(result?.message || t("Αν υπάρχει λογαριασμός με αυτό το email, στάλθηκε σύνδεσμος επαναφοράς."));
@@ -44,7 +44,7 @@ export function AuthScreen({ onAuthenticated }) {
       } else {
         const result = await api.post("/auth/register", { email, password, name: name || undefined });
         if (result && result.pending) {
-          // Access is invite/approval-gated — new accounts wait for an admin.
+          // Access is invite/approval-gated - new accounts wait for an admin.
           setInfo(result.message || t("Ο λογαριασμός δημιουργήθηκε. Περιμένει έγκριση από διαχειριστή."));
           setMode("login");
         } else {
@@ -154,7 +154,7 @@ export function AuthScreen({ onAuthenticated }) {
 
             {mode === "register" && (
               <p className="text-[11px] rounded-lg px-3 py-2" style={{ backgroundColor: C.pale, color: C.navy }}>
-                {t("Η πρόσβαση εγκρίνεται από διαχειριστή — μετά την εγγραφή θα περιμένεις έγκριση πριν μπορέσεις να συνδεθείς.")}
+                {t("Η πρόσβαση εγκρίνεται από διαχειριστή - μετά την εγγραφή θα περιμένεις έγκριση πριν μπορέσεις να συνδεθείς.")}
               </p>
             )}
 

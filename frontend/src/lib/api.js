@@ -2,7 +2,7 @@
 //
 // Security notes (see SECURITY.md / SETUP.md in the backend for the full picture):
 // - Auth is a first-party session cookie, never a token in JS-readable storage
-//   (no localStorage/sessionStorage involved) — so `credentials: "include"` is
+//   (no localStorage/sessionStorage involved) - so `credentials: "include"` is
 //   required on every request, and is the one thing every call below shares.
 // - CSRF protection uses double-submit tokens: the backend sends a token in
 //   the X-CSRF-Token response header, and we include it in that same header
@@ -11,7 +11,7 @@
 //   interaction repopulates it.
 // - The API base URL is a public value (not a secret) set at build time via
 //   VITE_API_URL; it's fine for it to be visible in the bundle.
-// - We never log request bodies (which may contain passwords) — only status
+// - We never log request bodies (which may contain passwords) - only status
 //   codes and the server's own error payloads make it into thrown errors.
 
 export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
@@ -32,7 +32,7 @@ function emitApi(name) {
 }
 
 // The backend returns error codes as raw snake_case strings (e.g.
-// { error: "email_already_registered" }) — without this, ApiError.message
+// { error: "email_already_registered" }) - without this, ApiError.message
 // WAS that raw code, shown verbatim in the UI wherever a catch block falls
 // back to `err.message` (which is most of them). Translates every known code
 // to a proper Greek sentence; anything not listed here still falls through to
@@ -61,12 +61,12 @@ const ERROR_MESSAGES = {
   send_failed: "Η αποστολή απέτυχε.",
   sequence_has_no_steps: "Το sequence δεν έχει βήματα.",
   invalid_email_or_password: "Λάθος email ή κωδικός.",
-  session_error: "Σφάλμα σύνδεσης — δοκίμασε ξανά.",
+  session_error: "Σφάλμα σύνδεσης - δοκίμασε ξανά.",
   account_pending_approval: "Ο λογαριασμός εκκρεμεί έγκρισης από διαχειριστή.",
   company_suspended: "Η εταιρεία είναι ανεσταλμένη.",
   invalid_request: "Μη έγκυρο αίτημα.",
   invalid_or_expired_token: "Ο σύνδεσμος έληξε ή δεν είναι πλέον έγκυρος.",
-  not_authenticated: "Η σύνδεση έληξε — συνδέσου ξανά.",
+  not_authenticated: "Η σύνδεση έληξε - συνδέσου ξανά.",
   invalid_template: "Μη έγκυρο template.",
   subject_and_body_required: "Χρειάζονται θέμα και κείμενο.",
   no_valid_contacts: "Δεν υπάρχουν έγκυρες επαφές για αποστολή.",
@@ -113,7 +113,7 @@ async function request(path, { method = "GET", body, isForm = false, _retried = 
   } catch {
     // Network-level failure (backend asleep/unreachable). Render's free tier
     // spins the backend down after 15 min idle and takes ~30-40s to wake up
-    // on the next request — give it one silent retry before surfacing an
+    // on the next request - give it one silent retry before surfacing an
     // error, since the very next attempt a moment later usually succeeds.
     if (!_retried) {
       emitApi("api:waking");
@@ -142,7 +142,7 @@ async function request(path, { method = "GET", body, isForm = false, _retried = 
 
   if (!res.ok) {
     // Same cold-start situation as above, but manifesting as an HTTP-level
-    // error instead of a thrown network exception — while Render is waking
+    // error instead of a thrown network exception - while Render is waking
     // the instance back up, some requests (especially non-GET) come back as
     // a bare 404/502/503 with no real JSON error body (just an interstitial
     // page), rather than our own API's error shape. Retry once rather than
@@ -172,7 +172,7 @@ export const api = {
     form.append("file", file);
     return request(path, { method: "POST", body: form, isForm: true });
   },
-  // For file downloads (CSV export) — needs the session cookie like every
+  // For file downloads (CSV export) - needs the session cookie like every
   // other call, but returns a Blob instead of parsed JSON.
   async downloadBlob(path) {
     let res;

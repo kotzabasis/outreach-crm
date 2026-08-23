@@ -19,11 +19,11 @@ import DOMPurify from "dompurify";
 
 // recharts (and everything that depends on it) now lives entirely in
 // AnalyticsView.jsx, loaded as its own chunk only when a user actually opens
-// the Analytics tab — previously it shipped in every visitor's initial
+// the Analytics tab - previously it shipped in every visitor's initial
 // bundle regardless of whether they ever looked at that tab.
 const AnalyticsView = lazy(() => import("./AnalyticsView.jsx"));
 
-// Cold-outreach best-practice cadence: immediate, then 3/7/14/21/30 days —
+// Cold-outreach best-practice cadence: immediate, then 3/7/14/21/30 days -
 // gives ~3-5 touches, which is the sweet spot most sales/outreach guides
 // converge on before diminishing returns / spam fatigue set in.
 const SUGGESTED_DELAYS = [0, 3, 7, 14, 21, 30];
@@ -49,9 +49,9 @@ const SPAM_WORDS = [
   "χωρίς ρίσκο", "limited time", "περιορισμένος χρόνος",
 ];
 
-// Seeded into every brand-new template/compose/step body (empty drafts only —
+// Seeded into every brand-new template/compose/step body (empty drafts only -
 // never forced onto existing content) so the unsubscribe line is there by
-// default but fully editable, movable, or deletable like any other text —
+// default but fully editable, movable, or deletable like any other text -
 // per Stelios's request that it not be a hidden, backend-only addition
 // anymore. {{unsubscribe_link}} is resolved to the real per-send URL
 // server-side at send time (see injectTracking in gmailClient.js); here in
@@ -60,7 +60,7 @@ const SPAM_WORDS = [
 // Leads with an empty paragraph on purpose: with only the disclaimer <div>
 // in the editor, contentEditable has nowhere else to put the caret, so
 // clicking "above" it just drops you at the start of the disclaimer's own
-// text — there's no way to write your own content first. The empty <p>
+// text - there's no way to write your own content first. The empty <p>
 // gives the cursor a real line to land on above the disclaimer.
 const DEFAULT_DISCLAIMER_HTML =
   '<p><br></p><div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:sans-serif;font-size:11px;color:#94a3b8;">Αν δεν θέλετε να λάβετε καμία άλλη επικοινωνία από εμάς, <a href="{{unsubscribe_link}}" style="color:#94a3b8;text-decoration:underline;">πατήστε εδώ</a>.</div>';
@@ -77,7 +77,7 @@ export function setUnsubscribeSeed(html) {
   _unsubscribeSeed = html || DEFAULT_DISCLAIMER_HTML;
 }
 
-// A body is "compliant" if it still contains a real unsubscribe link — check
+// A body is "compliant" if it still contains a real unsubscribe link - check
 // the raw HTML (not the tag-stripped plain text used for spam/word counts),
 // since the token lives inside an href attribute that tag-stripping would
 // throw away along with the rest of the <a> tag.
@@ -101,7 +101,7 @@ function renderPreview(text) {
     .split("{{report_link}}").join(MERGE_SAMPLE.reportLink)
     .split("{{comments}}").join(MERGE_SAMPLE.comments)
     // "#" keeps the preview link clickable-looking without pointing anywhere
-    // real — the actual URL only exists once a send creates a trackingId.
+    // real - the actual URL only exists once a send creates a trackingId.
     .split("{{unsubscribe_link}}").join("#");
 }
 
@@ -124,7 +124,7 @@ function isFollowUpDue(value) {
   return new Date(value).getTime() <= Date.now();
 }
 
-// Mirrors backend/src/lib/attachments.js — no external file storage, so
+// Mirrors backend/src/lib/attachments.js - no external file storage, so
 // attachments are capped hard and stored as base64 on the row.
 const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 const MAX_ATTACHMENTS = 5;
@@ -146,18 +146,18 @@ const EVENT_CONDITIONS = [
   { key: "not_clicked", label: "Μόνο αν ΔΕΝ έκανε κλικ στο προηγούμενο" },
 ];
 
-// Always shows date + time — used in the per-send event trace, where fmtDate's
+// Always shows date + time - used in the per-send event trace, where fmtDate's
 // "just the time if it's today" shorthand would be ambiguous across a list of
 // events that might span several days.
 function fmtDateTime(value) {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return `${d.toLocaleDateString("el-GR", { day: "2-digit", month: "short" })}, ${d.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 // Renders the chronological trace for one sent email: when it was sent, when
-// (if ever) it was genuinely opened/clicked, and — transparently — any open
+// (if ever) it was genuinely opened/clicked, and - transparently - any open
 // that got filtered out as a bot/self-view (see isLikelyBotOpen in
 // tracking.js) instead of just silently not counting it. Shared between the
 // Inbox row expansion and the contact detail drawer's timeline.
@@ -215,7 +215,7 @@ function TagChip({ children }) {
 }
 
 function CategoryChip({ children }) {
-  if (!children) return <span style={{ color: C.slate }}>—</span>;
+  if (!children) return <span style={{ color: C.slate }}>-</span>;
   return (
     <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: `${C.sky}14`, color: C.sky }}>
       {children}
@@ -261,7 +261,7 @@ function NavItem({ icon: Icon, label, active, onClick, count, dark = false }) {
   );
 }
 
-// Lives in the sidebar, but works from any view — debounced query against
+// Lives in the sidebar, but works from any view - debounced query against
 // GET /contacts?q=, jumps into the Contacts view and opens the picked
 // contact's detail drawer via App's pendingOpenContactId relay.
 function GlobalSearch({ onSelectContact, dark = false }) {
@@ -283,7 +283,7 @@ function GlobalSearch({ onSelectContact, dark = false }) {
     debounceRef.current = setTimeout(async () => {
       try {
         // GET /contacts now returns a { contacts, total, ... } envelope
-        // (paginated server-side) rather than a bare array — see
+        // (paginated server-side) rather than a bare array - see
         // routes/contacts.js. pageSize=8 avoids fetching more rows than this
         // dropdown will ever show.
         const data = await api.get(`/contacts?q=${encodeURIComponent(query.trim())}&pageSize=8`);
@@ -363,7 +363,7 @@ function TipBanner({ children, tone = "info" }) {
 // ---------- Rich text editor ----------
 // Best-practice link handling for cold outreach: a bare domain typed without
 // a scheme (e.g. "example.com") would otherwise be inserted as a relative
-// link — clicking it in the sent email would try to navigate relative to
+// link - clicking it in the sent email would try to navigate relative to
 // whatever page it's opened from, which breaks silently. Default to https.
 function normalizeLinkUrl(raw) {
   const trimmed = raw.trim();
@@ -373,7 +373,7 @@ function normalizeLinkUrl(raw) {
 }
 
 // Every RichTextEditor value gets routed through here before it's ever
-// assigned to innerHTML. This isn't just content we typed ourselves — it can
+// assigned to innerHTML. This isn't just content we typed ourselves - it can
 // also be data loaded straight from the server (a contact's `comments`, a
 // template/step/campaign body), which itself can originate from a CSV
 // upload of a list we didn't author. Without this, a stray
@@ -385,7 +385,7 @@ function sanitizeRichHtml(html) {
   return DOMPurify.sanitize(html || "");
 }
 
-// Minimal Gmail-style toolbar over a contentEditable div — no external
+// Minimal Gmail-style toolbar over a contentEditable div - no external
 // dependency, since bold/lists/links/attachments are all the app needs.
 function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, minHeight = 140 }) {
   const editorRef = useRef(null);
@@ -419,7 +419,7 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
     const safeUrl = url.replace(/"/g, "&quot;");
 
     // execCommand("createLink") silently does nothing if there's no active
-    // text selection — that looked like "the link just isn't there" to
+    // text selection - that looked like "the link just isn't there" to
     // anyone who clicked the button without first highlighting text. Fall
     // back to inserting the URL itself as the link text in that case.
     const selection = window.getSelection();
@@ -429,10 +429,10 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
     editorRef.current?.focus();
     if (hasSelection) {
       document.execCommand("createLink", false, url);
-      // execCommand doesn't let us style the anchor it just created directly —
+      // execCommand doesn't let us style the anchor it just created directly -
       // find it by href and apply the same inline style as the manual-insert
       // branch below. Inline (not stylesheet) styling matters here because
-      // Gmail/Outlook etc. strip <style> blocks — an unstyled <a> can render
+      // Gmail/Outlook etc. strip <style> blocks - an unstyled <a> can render
       // with no visible color/underline in some clients.
       const anchors = editorRef.current?.querySelectorAll(`a[href="${safeUrl}"]`) || [];
       const created = anchors[anchors.length - 1];
@@ -530,11 +530,11 @@ function RichTextEditor({ value, onChange, attachments, onAttachmentsChange, min
   );
 }
 
-// The unsubscribe line used to be a hidden, backend-only addition — it now
+// The unsubscribe line used to be a hidden, backend-only addition - it now
 // lives directly in the editable body (see DEFAULT_DISCLAIMER_HTML, seeded
 // into new drafts) so it shows up naturally in the live preview above this.
 // The only thing still added invisibly at send time is the 1x1 open-tracking
-// pixel, which has no visual form to preview — this is just a one-line note
+// pixel, which has no visual form to preview - this is just a one-line note
 // about that, for transparency.
 function AutoTrackingPixelNote() {
   return (
@@ -546,12 +546,12 @@ function AutoTrackingPixelNote() {
 
 // ---------- Brand ----------
 // AuthScreen and ResetPasswordPage moved to their own files (AuthScreen.jsx,
-// ResetPasswordPage.jsx) so they can be shared/lazy-loaded independently —
+// ResetPasswordPage.jsx) so they can be shared/lazy-loaded independently -
 // see main.jsx for how the three top-level screens are split.
 
 function GmailBanner({ user }) {
   if (!user) return null;
-  // The connected mailbox is shared company-wide now — only the workspace
+  // The connected mailbox is shared company-wide now - only the workspace
   // owner can (re)connect it (see requireOwner on /auth/google in the
   // backend). A plain member would otherwise hit a raw 403 clicking this.
   const isOwner = user.role === "owner";
@@ -561,8 +561,8 @@ function GmailBanner({ user }) {
       <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
         <span>
           {isOwner
-            ? t("Δεν έχετε συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό.")
-            : t("Το workspace σας δεν έχει συνδέσει Gmail ακόμα — ζήτησε από τον ιδιοκτήτη να το συνδέσει.")}
+            ? t("Δεν έχετε συνδέσει Gmail ακόμα - η αποστολή δεν θα δουλέψει χωρίς αυτό.")
+            : t("Το workspace σας δεν έχει συνδέσει Gmail ακόμα - ζήτησε από τον ιδιοκτήτη να το συνδέσει.")}
         </span>
         {isOwner && (
           <a
@@ -578,18 +578,18 @@ function GmailBanner({ user }) {
   }
 
   // Set once a send has failed with a Gmail auth error (revoked/expired
-  // access — see backend lib/gmailClient.js#isAuthError). The scheduler
+  // access - see backend lib/gmailClient.js#isAuthError). The scheduler
   // stops attempting sends for this account until this is cleared by a
   // successful reconnect, so this takes priority over the daily-cap notice
-  // below — a broken connection is a "nothing is sending" situation, not a
+  // below - a broken connection is a "nothing is sending" situation, not a
   // "almost sent the max" one.
   if (user.gmail.needsReconnect) {
     return (
       <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>
         <span>
           {isOwner
-            ? t("Η σύνδεση Gmail διακόπηκε (πιθανώς ανακλήθηκε η πρόσβαση) — οι αποστολές έχουν σταματήσει μέχρι να συνδεθεί ξανά.")
-            : t("Η σύνδεση Gmail του workspace διακόπηκε — ζήτησε από τον ιδιοκτήτη να τη συνδέσει ξανά.")}
+            ? t("Η σύνδεση Gmail διακόπηκε (πιθανώς ανακλήθηκε η πρόσβαση) - οι αποστολές έχουν σταματήσει μέχρι να συνδεθεί ξανά.")
+            : t("Η σύνδεση Gmail του workspace διακόπηκε - ζήτησε από τον ιδιοκτήτη να τη συνδέσει ξανά.")}
         </span>
         {isOwner && (
           <a
@@ -606,15 +606,15 @@ function GmailBanner({ user }) {
 
   // Partial breakage: some (but not all) mailboxes are down. Sending continues
   // on the healthy ones, so this is a softer amber warning rather than the red
-  // "stopped" one above — but still surfaced so a silently-lost mailbox (and
+  // "stopped" one above - but still surfaced so a silently-lost mailbox (and
   // its capacity) doesn't go unnoticed.
   if (user.gmail.someNeedReconnect) {
     return (
       <div className="flex items-center justify-between px-6 py-2.5 text-sm" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
         <span>
           {isOwner
-            ? t("{broken} από τα {total} mailbox χρειάζονται επανασύνδεση — η αποστολή συνεχίζει με μειωμένη χωρητικότητα.", { broken: user.gmail.brokenCount, total: user.gmail.mailboxCount })
-            : t("Ένα mailbox του workspace χρειάζεται επανασύνδεση — ζήτησε από τον ιδιοκτήτη να το φτιάξει.")}
+            ? t("{broken} από τα {total} mailbox χρειάζονται επανασύνδεση - η αποστολή συνεχίζει με μειωμένη χωρητικότητα.", { broken: user.gmail.brokenCount, total: user.gmail.mailboxCount })
+            : t("Ένα mailbox του workspace χρειάζεται επανασύνδεση - ζήτησε από τον ιδιοκτήτη να το φτιάξει.")}
         </span>
         {isOwner && (
           <a href={`${API_URL}/auth/google`} className="font-medium rounded-lg px-3 py-1.5 text-white shrink-0" style={{ backgroundColor: C.amber }}>
@@ -626,7 +626,7 @@ function GmailBanner({ user }) {
   }
 
   // Same daily cap the backend enforces on every send path (see
-  // lib/emailCap.js) — only worth interrupting people with once it's
+  // lib/emailCap.js) - only worth interrupting people with once it's
   // actually close, not on every normal day of sending.
   const { sentToday, dailyCap } = user.gmail;
   const usageRatio = dailyCap > 0 ? sentToday / dailyCap : 0;
@@ -640,7 +640,7 @@ function GmailBanner({ user }) {
     >
       <span>
         {capped
-          ? t("Το ημερήσιο όριο emails ({sent}/{cap}) έχει συμπληρωθεί — η αποστολή θα συνεχίσει αύριο.", { sent: sentToday, cap: dailyCap })
+          ? t("Το ημερήσιο όριο emails ({sent}/{cap}) έχει συμπληρωθεί - η αποστολή θα συνεχίσει αύριο.", { sent: sentToday, cap: dailyCap })
           : t("Πλησιάζετε το ημερήσιο όριο emails: {sent}/{cap} έχουν σταλεί σήμερα.", { sent: sentToday, cap: dailyCap })}
       </span>
     </div>
@@ -701,9 +701,9 @@ function NewContactModal({ onClose, onCreate }) {
             <input placeholder={t("Ετικέτες (χωρισμένες με κόμμα)")} value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
-          <input placeholder={t("Ζώνη ώρας (προαιρετικό, π.χ. Europe/London — για send window στην ώρα του παραλήπτη)")} value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
+          <input placeholder={t("Ζώνη ώρας (προαιρετικό, π.χ. Europe/London - για send window στην ώρα του παραλήπτη)")} value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder={t("Website (προαιρετικό — {{website}} σε emails)")} value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
+          <input placeholder={t("Website (προαιρετικό - {{website}} σε emails)")} value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div className="grid grid-cols-2 gap-2">
             <input placeholder="GMB" value={form.gmb} onChange={(e) => setForm((f) => ({ ...f, gmb: e.target.value }))}
@@ -717,17 +717,17 @@ function NewContactModal({ onClose, onCreate }) {
             <input placeholder="Google Reviews" value={form.googleReviews} onChange={(e) => setForm((f) => ({ ...f, googleReviews: e.target.value }))}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           </div>
-          <input placeholder={t("Report link (προαιρετικό — {{report_link}} σε emails)")} value={form.reportLink} onChange={(e) => setForm((f) => ({ ...f, reportLink: e.target.value }))}
+          <input placeholder={t("Report link (προαιρετικό - {{report_link}} σε emails)")} value={form.reportLink} onChange={(e) => setForm((f) => ({ ...f, reportLink: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
-          <input placeholder={t("LinkedIn profile URL (προαιρετικό — για LinkedIn outreach)")} value={form.linkedinProfileUrl} onChange={(e) => setForm((f) => ({ ...f, linkedinProfileUrl: e.target.value }))}
+          <input placeholder={t("LinkedIn profile URL (προαιρετικό - για LinkedIn outreach)")} value={form.linkedinProfileUrl} onChange={(e) => setForm((f) => ({ ...f, linkedinProfileUrl: e.target.value }))}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <div>
             <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
-              {t("Σχόλια")} <span style={{ fontWeight: 400 }}>{t("— διαθέσιμο ως {{comments}} σε emails")}</span>
+              {t("Σχόλια")} <span style={{ fontWeight: 400 }}>{t("- διαθέσιμο ως {{comments}} σε emails")}</span>
             </label>
             <RichTextEditor value={form.comments} onChange={(html) => setForm((f) => ({ ...f, comments: html }))} minHeight={70} />
           </div>
-          <textarea placeholder={t("Internal σχόλια (προαιρετικό — ΔΕΝ χρησιμοποιείται σε emails, μόνο εσωτερική χρήση)")}
+          <textarea placeholder={t("Internal σχόλια (προαιρετικό - ΔΕΝ χρησιμοποιείται σε emails, μόνο εσωτερική χρήση)")}
             value={form.internalNotes} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.value }))}
             rows={2} className="w-full rounded-lg px-3 py-2 text-sm border outline-none resize-none" style={{ borderColor: C.line, color: C.ink }} />
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
@@ -832,7 +832,7 @@ function LinkedInContactPanel({ contact, onChanged }) {
         </button>
       )}
 
-      {/* InMail — premium-only, works χωρίς σύνδεση */}
+      {/* InMail - premium-only, works χωρίς σύνδεση */}
       <div className="mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
         <button type="button" onClick={() => setInmailOpen((o) => !o)}
           className="flex items-center gap-1.5 text-xs font-medium" style={{ color: C.sky }}>
@@ -874,7 +874,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [comments, setComments] = useState("");
   const [savingComments, setSavingComments] = useState(false);
   const [commentsSaved, setCommentsSaved] = useState(false);
-  // Private, internal-only notes — never sent in an email, separate from
+  // Private, internal-only notes - never sent in an email, separate from
   // `comments` (which IS used as {{comments}} merge content). Same
   // dedicated-save pattern as comments, just its own field/handler so saving
   // one never clobbers the other.
@@ -883,7 +883,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
   const [internalNotesSaved, setInternalNotesSaved] = useState(false);
   // Editing name/firstName/lastName/phone/company/category/tags/website/
   // reportLink updates only Contact's own columns (see PATCH /contacts/:id)
-  // — it never touches emailLogs, notes, or offers, so the send
+  // - it never touches emailLogs, notes, or offers, so the send
   // history/timeline below is never affected by this.
   const [editingContact, setEditingContact] = useState(false);
   const [contactForm, setContactForm] = useState({
@@ -959,7 +959,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
       setNoteText("");
       await load();
     } catch {
-      // best-effort — the note box just stays populated if it failed
+      // best-effort - the note box just stays populated if it failed
     } finally {
       setSavingNote(false);
     }
@@ -970,7 +970,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
     try {
       await onSetFollowUp(contactId, value || null);
     } catch {
-      // ignore — value stays as typed, next reload will reconcile
+      // ignore - value stays as typed, next reload will reconcile
     }
   }
 
@@ -1039,7 +1039,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
             <button onClick={handleMarkReplied} disabled={markingReplied}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border"
               style={{ borderColor: C.line, color: C.mint, opacity: markingReplied ? 0.6 : 1 }}
-              title={t("Δεν διαβάζουμε το inbox σου — σημείωσε το χειροκίνητα όταν κάποιος απαντήσει, για να σταματήσει το sequence και να μετρήσει σωστά το reply rate.")}>
+              title={t("Δεν διαβάζουμε το inbox σου - σημείωσε το χειροκίνητα όταν κάποιος απαντήσει, για να σταματήσει το sequence και να μετρήσει σωστά το reply rate.")}>
               <Reply size={13} /> {t("Mark ως απάντησε")}
             </button>
             <button onClick={onCompose}
@@ -1089,7 +1089,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                       className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   </div>
                   <input value={contactForm.timezone} onChange={(e) => setContactForm((f) => ({ ...f, timezone: e.target.value }))}
-                    placeholder={t("Ζώνη ώρας (π.χ. Europe/London — για send window στην ώρα του παραλήπτη)")}
+                    placeholder={t("Ζώνη ώρας (π.χ. Europe/London - για send window στην ώρα του παραλήπτη)")}
                     className="w-full rounded-lg px-3 py-1.5 text-xs border outline-none" style={{ borderColor: C.line, color: C.ink }} />
                   <div className="grid grid-cols-2 gap-2">
                     <input value={contactForm.website} onChange={(e) => setContactForm((f) => ({ ...f, website: e.target.value }))}
@@ -1172,7 +1172,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
                         </a>
                       )}
                       {detail.reportLink && (
-                        // Routed through normalizeLinkUrl like website, not rendered raw —
+                        // Routed through normalizeLinkUrl like website, not rendered raw -
                         // it only ever passes through http(s)/mailto or gets an https://
                         // prefix, so a javascript:/data: value (e.g. from an imported CSV)
                         // can't execute when clicked.
@@ -1226,7 +1226,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
 
             <div>
               <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
-                <StickyNote size={13} /> {t("Σχόλια")} <span style={{ color: C.slate, fontWeight: 400 }}>{t("— διαθέσιμο ως {{comments}} σε emails")}</span>
+                <StickyNote size={13} /> {t("Σχόλια")} <span style={{ color: C.slate, fontWeight: 400 }}>{t("- διαθέσιμο ως {{comments}} σε emails")}</span>
               </label>
               <RichTextEditor
                 value={comments}
@@ -1249,7 +1249,7 @@ function ContactDetailDrawer({ contactId, onClose, onLoad, onAddNote, onDeleteNo
 
             <div>
               <label className="text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: C.slate }}>
-                <StickyNote size={13} /> {t("Internal σχόλια")} <span style={{ color: C.slate, fontWeight: 400 }}>{t("— εσωτερική χρήση μόνο, ΔΕΝ στέλνεται ποτέ σε email")}</span>
+                <StickyNote size={13} /> {t("Internal σχόλια")} <span style={{ color: C.slate, fontWeight: 400 }}>{t("- εσωτερική χρήση μόνο, ΔΕΝ στέλνεται ποτέ σε email")}</span>
               </label>
               <textarea
                 value={internalNotes}
@@ -1413,7 +1413,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
   const [detailContactId, setDetailContactId] = useState(null);
   const fileRef = useRef(null);
 
-  // The list is now fetched server-side — search/filters/pagination all
+  // The list is now fetched server-side - search/filters/pagination all
   // happen in the GET /contacts query (see routes/contacts.js) instead of
   // loading the company's entire contact list into the browser and
   // filtering it on every keystroke, which didn't scale as the list grew.
@@ -1427,7 +1427,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
 
   // Lets the global search box (in the sidebar) jump straight into a
   // contact's detail drawer from any view, without lifting detailContactId
-  // itself up to App — App just hands us the id once and we take it from there.
+  // itself up to App - App just hands us the id once and we take it from there.
   useEffect(() => {
     if (openContactId) {
       setDetailContactId(openContactId);
@@ -1435,14 +1435,14 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
     }
   }, [openContactId, onOpenContactHandled]);
 
-  // Debounced the same way GlobalSearch is — typing doesn't hit the network
+  // Debounced the same way GlobalSearch is - typing doesn't hit the network
   // on every keystroke, only 350ms after the user stops.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query.trim()), 350);
     return () => clearTimeout(t);
   }, [query]);
 
-  // Any filter change (besides paging itself) jumps back to page 1 —
+  // Any filter change (besides paging itself) jumps back to page 1 -
   // otherwise staying on, say, page 4 of a now much smaller filtered result
   // would just show an empty page.
   useEffect(() => {
@@ -1486,7 +1486,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
       setCategories(data.categories);
       setAllTags(data.tags);
     } catch {
-      // Non-critical — the filter dropdowns just keep whatever they had.
+      // Non-critical - the filter dropdowns just keep whatever they had.
     }
   }, []);
 
@@ -1590,7 +1590,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
 
   // Wrapped so the currently-loaded page of rows (name badge, follow-up
   // date, unsubscribed status, category/tags shown in the table) stays in
-  // sync after an edit made from inside the detail drawer — the drawer only
+  // sync after an edit made from inside the detail drawer - the drawer only
   // ever reloads its own detail view, it has no way to know this list exists.
   async function handleDrawerSetFollowUp(contactId, date) {
     await onSetFollowUp(contactId, date);
@@ -1846,14 +1846,14 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                         ) : (
                           <div className="flex items-center gap-1.5">
                             <Phone size={13} style={{ color: C.slate }} />
-                            —
+                            -
                           </div>
                         )}
                       </td>
                       <td className="py-3" style={{ color: C.ink }}>
                         <div className="flex items-center gap-1.5">
                           <Building2 size={13} style={{ color: C.slate }} />
-                          {c.company || "—"}
+                          {c.company || "-"}
                         </div>
                       </td>
                       <td className="py-3"><CategoryChip>{c.category}</CategoryChip></td>
@@ -1866,11 +1866,11 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                             <span className="truncate">{c.website}</span>
                           </a>
                         ) : (
-                          <span style={{ color: C.slate }}>—</span>
+                          <span style={{ color: C.slate }}>-</span>
                         )}
                       </td>
                       <td className="py-3" style={{ color: C.ink }}>
-                        {c.currentSequence ? t("{seq} · βήμα {n}", { seq: c.currentSequence, n: c.currentStep }) : "—"}
+                        {c.currentSequence ? t("{seq} · βήμα {n}", { seq: c.currentSequence, n: c.currentStep }) : "-"}
                       </td>
                       <td className="py-3">
                         <div className="flex gap-1 flex-wrap">
@@ -1885,7 +1885,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                           >
                             <CalendarClock size={12} /> {fmtDate(c.nextFollowUpAt)}
                           </span>
-                        ) : "—"}
+                        ) : "-"}
                       </td>
                       <td className="py-3 text-xs" style={{ color: C.slate }}>{fmtDate(c.lastActivityAt)}</td>
                       <td className="py-3">
@@ -2012,7 +2012,7 @@ function TemplateModal({ initial, onClose, onSave }) {
     setBody((b) => (b || "") + token);
   }
 
-  // Body is HTML now (rich text editor) — strip tags for word/char counts
+  // Body is HTML now (rich text editor) - strip tags for word/char counts
   // and spam-word checks so markup doesn't skew them.
   const plainBody = body.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ");
   const subjectSpam = findSpamWords(subject);
@@ -2074,7 +2074,7 @@ function TemplateModal({ initial, onClose, onSave }) {
               <p className="text-[11px]" style={{ color: C.amber }}>{t("⚠ Πιθανές λέξεις spam-trigger: {words}", { words: bodySpam.join(", ") })}</p>
             )}
             {!hasUnsubscribeLink(body) && body.length > 0 && (
-              <TipBanner>{t("Best practice: το email δεν έχει σύνδεσμο απεγγραφής — βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails. Πρόσθεσε ένα link με href {{unsubscribe_link}}.")}</TipBanner>
+              <TipBanner>{t("Best practice: το email δεν έχει σύνδεσμο απεγγραφής - βοηθά τη deliverability και είναι απαραίτητο για μαζικά cold emails. Πρόσθεσε ένα link με href {{unsubscribe_link}}.")}</TipBanner>
             )}
 
             {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
@@ -2087,8 +2087,8 @@ function TemplateModal({ initial, onClose, onSave }) {
             <p className="text-xs font-medium mb-2" style={{ color: C.slate }}>{t("Προεπισκόπηση (με δείγμα δεδομένων)")}</p>
             <Card className="p-4" style={{ backgroundColor: C.pale }}>
               <div className="text-xs mb-2" style={{ color: C.slate }}>{t("Προς:")} {MERGE_SAMPLE.name} &lt;{MERGE_SAMPLE.email}&gt;</div>
-              <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{renderPreview(subject) || "—"}</div>
-              <div className="text-sm" style={{ color: C.ink }} dangerouslySetInnerHTML={{ __html: renderPreview(body) || "—" }} />
+              <div className="text-sm font-semibold mb-3" style={{ color: C.ink }}>{renderPreview(subject) || "-"}</div>
+              <div className="text-sm" style={{ color: C.ink }} dangerouslySetInnerHTML={{ __html: renderPreview(body) || "-" }} />
               <AutoTrackingPixelNote />
               {attachments.length > 0 && (
                 <div className="flex gap-1.5 flex-wrap mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
@@ -2287,7 +2287,7 @@ function OfferOutcomeReasonModal({ status, onClose, onConfirm }) {
           {status === "accepted" ? t("Γιατί έγινε δεκτή;") : t("Γιατί απορρίφθηκε;")}
         </h3>
         <p className="text-xs mb-3" style={{ color: C.slate }}>
-          {t("Προαιρετικό — τροφοδοτεί το CRM reporting (λόγοι έγκρισης/απόρριψης).")}
+          {t("Προαιρετικό - τροφοδοτεί το CRM reporting (λόγοι έγκρισης/απόρριψης).")}
         </p>
         <textarea
           autoFocus
@@ -2319,7 +2319,7 @@ function OfferCard({ offer, onChangeStatus, onDelete, busy }) {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <div className="text-sm font-semibold truncate" style={{ color: C.ink }}>{offer.title}</div>
-          <div className="text-xs truncate mt-0.5" style={{ color: C.slate }}>{offer.contact?.name || "—"}</div>
+          <div className="text-xs truncate mt-0.5" style={{ color: C.slate }}>{offer.contact?.name || "-"}</div>
         </div>
         <button onClick={() => onDelete(offer.id)} disabled={busy} className="shrink-0" style={{ color: C.coral }}>
           <Trash2 size={13} />
@@ -2480,7 +2480,7 @@ function TestSendModal({ defaultEmail, onClose, onSend, subjects = [] }) {
             <select value={subject} onChange={(e) => setSubject(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
               {subjects.map((s, i) => (
-                <option key={i} value={s}>{i === 0 ? t("A (κύριο)") : t("Παραλλαγή {v}", { v: String.fromCharCode(65 + i) })} — {s}</option>
+                <option key={i} value={s}>{i === 0 ? t("A (κύριο)") : t("Παραλλαγή {v}", { v: String.fromCharCode(65 + i) })} - {s}</option>
               ))}
             </select>
           )}
@@ -2584,7 +2584,7 @@ function StepFields({
   const isEmail = channel === "email";
   const isInmail = channel === "linkedin_inmail";
   const isLinkedin = channel === "linkedin";
-  // Same spam-word check the template editor uses — surfaced here so a spammy
+  // Same spam-word check the template editor uses - surfaced here so a spammy
   // subject/body in a sequence step gets flagged before it ever sends.
   const spamWords = [
     ...new Set([
@@ -2601,7 +2601,7 @@ function StepFields({
   }
 
   // LinkedIn message / InMail steps: plain-text message (LinkedIn doesn't render
-  // HTML), optional subject for InMail. No templates/A/B/tracking/gating — those
+  // HTML), optional subject for InMail. No templates/A/B/tracking/gating - those
   // are email-only concepts.
   if (isLinkedin || isInmail) {
     return (
@@ -2735,7 +2735,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
   const isInmail = channel === "linkedin_inmail";
   const isMulti = channel === "multichannel";
   // The connection-request note applies whenever a LinkedIn *message* step may
-  // run against a not-yet-connected contact — that's pure-LinkedIn sequences
+  // run against a not-yet-connected contact - that's pure-LinkedIn sequences
   // and any multichannel sequence that contains a LinkedIn step.
   const showConnectionNote = isLinkedin || (isMulti && steps.some((s) => s.channel === "linkedin"));
   // Effective channel of a given step for rendering StepFields.
@@ -2801,7 +2801,7 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
 
         {steps.length < 3 && (
           <TipBanner tone="warn">
-            {t("Best practice: 3–5 follow-ups ανεβάζουν σημαντικά τα ποσοστά απάντησης. Σκέψου να προσθέσεις ακόμη βήματα πριν δημιουργήσεις το sequence.")}
+            {t("Best practice: 3-5 follow-ups ανεβάζουν σημαντικά τα ποσοστά απάντησης. Σκέψου να προσθέσεις ακόμη βήματα πριν δημιουργήσεις το sequence.")}
           </TipBanner>
         )}
 
@@ -2829,12 +2829,12 @@ function NewSequenceModal({ onClose, onCreate, templates }) {
           )}
           {isInmail && (
             <TipBanner tone="info">
-              {t("InMail sequence: κάθε βήμα στέλνει ένα InMail (με θέμα + μήνυμα) απευθείας, ακόμη και σε μη-συνδέσεις — δεν χρειάζεται αίτημα σύνδεσης. Απαιτεί premium LinkedIn και καταναλώνει InMail credits. Κάθε βήμα χρειάζεται θέμα και μήνυμα. Μόνο επαφές με LinkedIn URL θα εγγραφούν.")}
+              {t("InMail sequence: κάθε βήμα στέλνει ένα InMail (με θέμα + μήνυμα) απευθείας, ακόμη και σε μη-συνδέσεις - δεν χρειάζεται αίτημα σύνδεσης. Απαιτεί premium LinkedIn και καταναλώνει InMail credits. Κάθε βήμα χρειάζεται θέμα και μήνυμα. Μόνο επαφές με LinkedIn URL θα εγγραφούν.")}
             </TipBanner>
           )}
           {isMulti && (
             <TipBanner tone="info">
-              {t("Multichannel sequence: κάθε βήμα διαλέγει το δικό του κανάλι (Email / LinkedIn / InMail). Εγγράφονται όλες οι επαφές — τα βήματα LinkedIn/InMail παραλείπονται αυτόματα για επαφές χωρίς LinkedIn URL, ώστε να συνεχίζουν τα email.")}
+              {t("Multichannel sequence: κάθε βήμα διαλέγει το δικό του κανάλι (Email / LinkedIn / InMail). Εγγράφονται όλες οι επαφές - τα βήματα LinkedIn/InMail παραλείπονται αυτόματα για επαφές χωρίς LinkedIn URL, ώστε να συνεχίζουν τα email.")}
             </TipBanner>
           )}
           {showConnectionNote && (
@@ -3070,7 +3070,7 @@ function SequencesView({ sequences, loading, error, onReload, onCreate, template
             <div className="px-8 py-8 max-w-2xl">
               {active.steps.length < 3 && (
                 <TipBanner tone="warn">
-                  {t("Αυτό το sequence έχει {n} βήματα. Best practice: 3–5 follow-ups δίνουν σημαντικά καλύτερα reply rates.", { n: active.steps.length })}
+                  {t("Αυτό το sequence έχει {n} βήματα. Best practice: 3-5 follow-ups δίνουν σημαντικά καλύτερα reply rates.", { n: active.steps.length })}
                 </TipBanner>
               )}
               {active.steps.map((step, i) => (
@@ -3107,7 +3107,7 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Απεσταλμένα")}</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Όλα τα emails που στάλθηκαν — sequences και χειροκίνητα. Πάτησε ένα για το trace.")}</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Όλα τα emails που στάλθηκαν - sequences και χειροκίνητα. Πάτησε ένα για το trace.")}</p>
         </div>
         <button
           onClick={() => setComposeOpen(true)}
@@ -3165,11 +3165,11 @@ function InboxView({ activity, loading, error, onReload, setComposeOpen }) {
   );
 }
 
-// "Due today" dashboard — the one view meant to be opened first each
+// "Due today" dashboard - the one view meant to be opened first each
 // morning. Aggregates two independent kinds of "due" (manual follow-up
 // reminders on a contact, and automatic sequence sends) into a single list,
 // each row jumping into the contact's detail drawer via onSelectContact
-// (same relay used by global search — see handleSelectFromSearch in App()).
+// (same relay used by global search - see handleSelectFromSearch in App()).
 function DashboardView({ dashboard, loading, error, onReload, onSelectContact }) {
   const { followUps = [], sends = [] } = dashboard;
 
@@ -3177,7 +3177,7 @@ function DashboardView({ dashboard, loading, error, onReload, onSelectContact })
     <div className="h-full overflow-auto">
       <div className="px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Σήμερα")}</h1>
-        <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Ό,τι είναι εκκρεμές ή έληξε σήμερα — follow-ups και αυτόματα sequence sends.")}</p>
+        <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Ό,τι είναι εκκρεμές ή έληξε σήμερα - follow-ups και αυτόματα sequence sends.")}</p>
       </div>
       <div className="px-8 py-4 space-y-6">
         <ErrorNote message={error} onRetry={onReload} />
@@ -3274,13 +3274,13 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
       setTimeout(onClose, 900);
     } catch (err) {
       if (err instanceof ApiError && err.data?.error === "gmail_not_connected") {
-        setError(t("Δεν έχεις συνδέσει Gmail — σύνδεσε το από το μπάνερ στην κορυφή για να στείλεις."));
+        setError(t("Δεν έχεις συνδέσει Gmail - σύνδεσε το από το μπάνερ στην κορυφή για να στείλεις."));
       } else if (err instanceof ApiError && err.data?.error === "gmail_needs_reconnect") {
-        setError(t("Η σύνδεση Gmail διακόπηκε — συνδέσου ξανά από το μπάνερ στην κορυφή για να στείλεις."));
+        setError(t("Η σύνδεση Gmail διακόπηκε - συνδέσου ξανά από το μπάνερ στην κορυφή για να στείλεις."));
       } else if (err instanceof ApiError && err.data?.error === "contact_unsubscribed") {
-        setError(t("Η επαφή έχει κάνει unsubscribe — δεν επιτρέπεται αποστολή."));
+        setError(t("Η επαφή έχει κάνει unsubscribe - δεν επιτρέπεται αποστολή."));
       } else if (err instanceof ApiError && err.data?.error === "daily_send_cap_reached") {
-        setError(t("Συμπληρώθηκε το ημερήσιο όριο emails ({limit}) για την εταιρεία σας — δοκίμασε ξανά αύριο.", { limit: err.data.limit }));
+        setError(t("Συμπληρώθηκε το ημερήσιο όριο emails ({limit}) για την εταιρεία σας - δοκίμασε ξανά αύριο.", { limit: err.data.limit }));
       } else {
         setError(err instanceof ApiError ? err.message : t("Η αποστολή απέτυχε."));
       }
@@ -3306,7 +3306,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
           <div className="px-4 py-2.5 border-b text-sm" style={{ borderColor: C.line, color: C.ink }}>
             <select required value={contactId} onChange={(e) => setContactId(e.target.value)}
               className="w-full outline-none bg-white" style={{ color: contactId ? C.ink : C.slate }}>
-              <option value="">{t("Προς — επίλεξε επαφή…")}</option>
+              <option value="">{t("Προς - επίλεξε επαφή…")}</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>{c.name ? `${c.name} <${c.email}>` : c.email}</option>
               ))}
@@ -3325,7 +3325,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
           </div>
           {!gmailConnected && (
             <div className="px-4 py-2 text-xs" style={{ backgroundColor: `${C.amber}14`, color: "#7A5206" }}>
-              {t("Δεν έχεις συνδέσει Gmail ακόμα — η αποστολή δεν θα δουλέψει χωρίς αυτό.")}
+              {t("Δεν έχεις συνδέσει Gmail ακόμα - η αποστολή δεν θα δουλέψει χωρίς αυτό.")}
             </div>
           )}
           {error && <p className="px-4 py-2 text-xs" style={{ color: C.coral }}>{error}</p>}
@@ -3348,7 +3348,7 @@ function ComposeModal({ onClose, contacts, gmailConnected, onSend, initialContac
 
 // ---------- Campaigns ----------
 // A campaign is one message sent to many contacts, one-by-one with spacing
-// between sends (see scheduler.js's campaign tick) — distinct from a
+// between sends (see scheduler.js's campaign tick) - distinct from a
 // Sequence, which is a multi-step nurture with day-scale delays per contact.
 function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
   const [name, setName] = useState("");
@@ -3369,7 +3369,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [contacts]);
 
-  // Segmentation by tag, same as the Contacts view — lets a campaign target
+  // Segmentation by tag, same as the Contacts view - lets a campaign target
   // e.g. everyone tagged "warm-lead" without also filtering by category.
   const tags = useMemo(() => {
     const set = new Set();
@@ -3463,7 +3463,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
             <input required placeholder={t("Θέμα (π.χ. Γρήγορη ιδέα για το {{company}})")} value={subject} onChange={(e) => setSubject(e.target.value)}
               className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
 
-            {/* A/B subject test — each recipient gets one of these at random;
+            {/* A/B subject test - each recipient gets one of these at random;
                 results under Analytics → A/B. */}
             <div className="rounded-lg border px-3 py-2 space-y-2" style={{ borderColor: C.line }}>
               <div className="flex items-center justify-between">
@@ -3500,7 +3500,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
             </div>
             <RichTextEditor value={body} onChange={setBody} attachments={attachments} onAttachmentsChange={setAttachments} minHeight={160} />
             {!hasUnsubscribeLink(body) && body.length > 0 && (
-              <TipBanner>{t("Best practice: το email δεν έχει σύνδεσμο απεγγραφής — ιδιαίτερα σημαντικό για μαζικές αποστολές σαν campaign.")}</TipBanner>
+              <TipBanner>{t("Best practice: το email δεν έχει σύνδεσμο απεγγραφής - ιδιαίτερα σημαντικό για μαζικές αποστολές σαν campaign.")}</TipBanner>
             )}
             <AutoTrackingPixelNote />
 
@@ -3509,7 +3509,7 @@ function NewCampaignModal({ onClose, onCreate, contacts, templates }) {
               <input type="number" min={1} max={1440} value={intervalMinutes} onChange={(e) => setIntervalMinutes(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
               <p className="text-[11px] mt-1" style={{ color: C.slate }}>
-                {t("Τα emails φεύγουν ένα-ένα, όχι όλα μαζί — π.χ. με 2 λεπτά, {n} επαφές θα χρειαστούν περίπου {mins} λεπτά για να ολοκληρωθούν.", { n: selectedIds.size, mins: Math.round((selectedIds.size - 1) * (Number(intervalMinutes) || 2)) })}
+                {t("Τα emails φεύγουν ένα-ένα, όχι όλα μαζί - π.χ. με 2 λεπτά, {n} επαφές θα χρειαστούν περίπου {mins} λεπτά για να ολοκληρωθούν.", { n: selectedIds.size, mins: Math.round((selectedIds.size - 1) * (Number(intervalMinutes) || 2)) })}
               </p>
             </div>
 
@@ -3732,7 +3732,7 @@ function CampaignsView({ campaigns, loading, error, onReload, contacts, template
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>Campaigns</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Ένα μήνυμα σε πολλές επαφές, ένα-ένα με απόσταση — όχι μαζική αποστολή.")}</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Ένα μήνυμα σε πολλές επαφές, ένα-ένα με απόσταση - όχι μαζική αποστολή.")}</p>
         </div>
         <button onClick={() => setShowNew(true)} className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-white shrink-0" style={{ backgroundColor: C.sky }}>
           <Megaphone size={15} /> {t("Νέο campaign")}
@@ -3872,7 +3872,7 @@ function NewTeammateModal({ onClose, onInvite }) {
           <input required type="password" minLength={10} placeholder={t("Κωδικός (τουλάχιστον 10 χαρακτήρες)")} value={password} onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
           <p className="text-xs" style={{ color: C.slate }}>
-            {t("Ο συνεργάτης θα βλέπει τις ίδιες επαφές, sequences, templates και campaigns με εσένα — μοιράζεστε το ίδιο workspace.")}
+            {t("Ο συνεργάτης θα βλέπει τις ίδιες επαφές, sequences, templates και campaigns με εσένα - μοιράζεστε το ίδιο workspace.")}
           </p>
           {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
           <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
@@ -3884,7 +3884,7 @@ function NewTeammateModal({ onClose, onInvite }) {
   );
 }
 
-// Owner inviting someone who ALREADY has an SDLoop account elsewhere — this
+// Owner inviting someone who ALREADY has an SDLoop account elsewhere - this
 // can't just create a Membership directly the way NewTeammateModal does,
 // since the target already owns their own account/password. It becomes a
 // pending CompanyInvite instead; a Membership only appears once they accept
@@ -3935,7 +3935,7 @@ function InviteExistingModal({ onClose, onInvite }) {
               </select>
             </div>
             <p className="text-xs" style={{ color: C.slate }}>
-              {t("Ο χρήστης πρέπει ήδη να έχει λογαριασμό SDLoop. Θα λάβει μια πρόσκληση που μπορεί να αποδεχτεί ή να απορρίψει — δεν προστίθεται αυτόματα.")}
+              {t("Ο χρήστης πρέπει ήδη να έχει λογαριασμό SDLoop. Θα λάβει μια πρόσκληση που μπορεί να αποδεχτεί ή να απορρίψει - δεν προστίθεται αυτόματα.")}
             </p>
             {error && <p className="text-xs rounded-lg px-3 py-2" style={{ backgroundColor: `${C.coral}14`, color: C.coral }}>{error}</p>}
             <button type="submit" disabled={busy} className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white" style={{ backgroundColor: C.sky, opacity: busy ? 0.7 : 1 }}>
@@ -3949,7 +3949,7 @@ function InviteExistingModal({ onClose, onInvite }) {
 }
 
 // Visible to every teammate; only an "owner" gets invite/remove actions.
-// Deliberately no "promote to owner" here yet — one owner per company this
+// Deliberately no "promote to owner" here yet - one owner per company this
 // round, matching the backend (routes/team.js refuses to remove an owner).
 // Timezone-aware send-window settings (see backend lib/sendWindow.js). Fetches
 // and saves its own /company/settings, so it drops into the Team view without
@@ -4049,7 +4049,7 @@ function SendWindowCard({ isOwner }) {
         </div>
       </div>
 
-      {/* Email tracking on/off — deliverability */}
+      {/* Email tracking on/off - deliverability */}
       <div className="mt-4 pt-4 border-t" style={{ borderColor: C.line }}>
         <div className="flex items-center justify-between mb-1">
           <div className="text-sm font-medium" style={{ color: C.ink }}>Email tracking</div>
@@ -4062,7 +4062,7 @@ function SendWindowCard({ isOwner }) {
         <p className="text-xs" style={{ color: C.slate }}>
           {s.emailTrackingEnabled !== false
             ? t("Καταγράφονται opens & clicks (open pixel + rewriting των links).")
-            : t("Clean αποστολή — χωρίς open pixel και χωρίς rewriting των links, για καλύτερο deliverability. Δεν θα υπάρχουν στατιστικά open/click.")}
+            : t("Clean αποστολή - χωρίς open pixel και χωρίς rewriting των links, για καλύτερο deliverability. Δεν θα υπάρχουν στατιστικά open/click.")}
         </p>
       </div>
 
@@ -4079,29 +4079,29 @@ function SendWindowCard({ isOwner }) {
         <p className="text-xs" style={{ color: C.slate }}>
           {s.unsubscribeEnabled !== false
             ? t("Προστίθεται List-Unsubscribe header + ο σύνδεσμος {{unsubscribe_link}} λειτουργεί. Συνιστάται για deliverability.")
-            : t("Χωρίς List-Unsubscribe header· το {{unsubscribe_link}} αφαιρείται από το κείμενο — 100% clean 1:1 αποστολή. Πρόσεξε τη συμμόρφωση (σε bulk απαιτείται unsubscribe).")}
+            : t("Χωρίς List-Unsubscribe header· το {{unsubscribe_link}} αφαιρείται από το κείμενο - 100% clean 1:1 αποστολή. Πρόσεξε τη συμμόρφωση (σε bulk απαιτείται unsubscribe).")}
         </p>
 
         {s.unsubscribeEnabled !== false && (
           <div className="mt-3 space-y-3">
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
-                {t("Κείμενο unsubscribe στο email")} <span style={{ fontWeight: 400 }}>{t("— seed σε νέα emails· πρέπει να περιέχει {{unsubscribe_link}}")}</span>
+                {t("Κείμενο unsubscribe στο email")} <span style={{ fontWeight: 400 }}>{t("- seed σε νέα emails· πρέπει να περιέχει {{unsubscribe_link}}")}</span>
               </label>
               <textarea disabled={!isOwner} value={s.unsubscribeText || ""} onChange={(e) => update({ unsubscribeText: e.target.value })}
                 rows={3}
                 className="w-full rounded-md px-2 py-1.5 text-xs border bg-white font-mono" style={{ borderColor: C.line, color: C.ink }} />
               {(s.unsubscribeText || "").indexOf("{{unsubscribe_link}}") === -1 && (
-                <p className="text-[11px] mt-1" style={{ color: C.amber }}>{t("⚠ Λείπει το {{unsubscribe_link}} — ο σύνδεσμος δεν θα λειτουργεί.")}</p>
+                <p className="text-[11px] mt-1" style={{ color: C.amber }}>{t("⚠ Λείπει το {{unsubscribe_link}} - ο σύνδεσμος δεν θα λειτουργεί.")}</p>
               )}
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Σελίδα επιβεβαίωσης — τίτλος")}</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Σελίδα επιβεβαίωσης - τίτλος")}</label>
               <input disabled={!isOwner} value={s.unsubscribeConfirmTitle || ""} onChange={(e) => update({ unsubscribeConfirmTitle: e.target.value })}
                 className="w-full rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Σελίδα επιβεβαίωσης — μήνυμα")}</label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("Σελίδα επιβεβαίωσης - μήνυμα")}</label>
               <input disabled={!isOwner} value={s.unsubscribeConfirmMessage || ""} onChange={(e) => update({ unsubscribeConfirmMessage: e.target.value })}
                 className="w-full rounded-md px-2 py-1.5 text-xs border bg-white" style={{ borderColor: C.line, color: C.ink }} />
             </div>
@@ -4203,14 +4203,14 @@ function UnipileSettingsCard({ onSaved }) {
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>
-                {t("Access token")} {state?.unipileAccessTokenSet && <span style={{ color: C.mint, fontWeight: 400 }}>{t("— έχει οριστεί (κενό = ίδιο)")}</span>}
+                {t("Access token")} {state?.unipileAccessTokenSet && <span style={{ color: C.mint, fontWeight: 400 }}>{t("- έχει οριστεί (κενό = ίδιο)")}</span>}
               </label>
               <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off"
                 placeholder={state?.unipileAccessTokenSet ? t("••••••••  (άφησε κενό για να μη το αλλάξεις)") : "X-API-KEY access token"}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none" style={{ borderColor: C.line, color: C.ink }} />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("InMail API tier")} <span style={{ fontWeight: 400 }}>{t("— ανάλογα με το premium seat σου")}</span></label>
+              <label className="text-xs font-medium mb-1 block" style={{ color: C.slate }}>{t("InMail API tier")} <span style={{ fontWeight: 400 }}>{t("- ανάλογα με το premium seat σου")}</span></label>
               <select value={inmailApi} onChange={(e) => setInmailApi(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-sm border outline-none bg-white" style={{ borderColor: C.line, color: C.ink }}>
                 <option value="classic">Classic (Premium / Sales Navigator)</option>
@@ -4406,7 +4406,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-8 py-5 border-b" style={{ borderColor: C.line }}>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: C.ink, fontFamily: "Sora, sans-serif" }}>{t("Ομάδα")}</h1>
-          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Οι συνεργάτες στο workspace σου — μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.")}</p>
+          <p className="text-sm mt-0.5" style={{ color: C.slate }}>{t("Οι συνεργάτες στο workspace σου - μοιράζεστε τις ίδιες επαφές και το ίδιο Gmail.")}</p>
         </div>
         {isOwner && (
           <div className="flex items-center gap-2 shrink-0">
@@ -4433,7 +4433,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
               {invites.map((inv) => (
                 <div key={inv.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: C.pale }}>
                   <div className="text-sm" style={{ color: C.ink }}>
-                    {inv.email} <span style={{ color: C.slate }}>— {inv.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")} · {fmtDate(inv.createdAt)}</span>
+                    {inv.email} <span style={{ color: C.slate }}>- {inv.role === "owner" ? t("Ιδιοκτήτης") : t("Μέλος")} · {fmtDate(inv.createdAt)}</span>
                   </div>
                   <button onClick={() => onRevokeInvite(inv.id)} title={t("Ανάκληση")} style={{ color: C.coral }}>
                     <Trash2 size={13} />
@@ -4456,7 +4456,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
               </a>
             </div>
             <p className="text-xs mb-3" style={{ color: C.slate }}>
-              {t("Οι αποστολές μοιράζονται αυτόματα ανάμεσα σε όλα τα συνδεδεμένα mailbox — περισσότερα mailbox σημαίνουν μεγαλύτερη ημερήσια χωρητικότητα αποστολών.")}
+              {t("Οι αποστολές μοιράζονται αυτόματα ανάμεσα σε όλα τα συνδεδεμένα mailbox - περισσότερα mailbox σημαίνουν μεγαλύτερη ημερήσια χωρητικότητα αποστολών.")}
             </p>
             <ErrorNote message={mailboxError} />
             {(!gmailAccounts || gmailAccounts.length === 0) ? (
@@ -4509,7 +4509,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
                   {members.map((m) => (
                     <tr key={m.id} className="border-t" style={{ borderColor: C.line }}>
                       <td className="px-4 py-3">
-                        <div className="font-medium" style={{ color: C.ink }}>{m.name || "—"}</div>
+                        <div className="font-medium" style={{ color: C.ink }}>{m.name || "-"}</div>
                         <div className="text-xs" style={{ color: C.slate }}>{m.email}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -4544,7 +4544,7 @@ function TeamView({ members, loading, error, onReload, onInvite, onRemove, curre
 
 // Owner-only management of inbound lead sources: generic webhook tokens
 // (WordPress form plugins, Zapier/Make, any leadgen tool with an outgoing
-// webhook) and connected Meta Lead Ads pages (direct Graph API integration —
+// webhook) and connected Meta Lead Ads pages (direct Graph API integration -
 // see routes/integrations.js). Non-owners see a locked message, same
 // treatment as the mailbox section inside TeamView.
 function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWebhook, onRotateWebhook, onDeleteWebhook, onConnectMeta, onDisconnectMeta, linkedinPendingConnect, onFinalizeLinkedIn, onDisconnectLinkedIn, recentLeads, onLoadRecentLeads }) {
@@ -4570,7 +4570,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
       setCopiedId(id);
       setTimeout(() => setCopiedId(""), 1500);
     } catch {
-      // Clipboard API can fail silently on some browsers/permissions —
+      // Clipboard API can fail silently on some browsers/permissions -
       // the URL is still visible in the row, just not auto-copied.
     }
   }
@@ -4590,7 +4590,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
   }
 
   async function handleRotate(id) {
-    if (!window.confirm(t("Η παλιά διεύθυνση θα σταματήσει να δουλεύει — θα χρειαστεί να ενημερώσεις τη φόρμα/plugin με τη νέα. Συνέχεια;"))) return;
+    if (!window.confirm(t("Η παλιά διεύθυνση θα σταματήσει να δουλεύει - θα χρειαστεί να ενημερώσεις τη φόρμα/plugin με τη νέα. Συνέχεια;"))) return;
     setActionError("");
     try {
       await onRotateWebhook(id);
@@ -4749,7 +4749,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
         <Card className="p-5">
           <div className="text-sm font-semibold mb-1" style={{ color: C.ink }}>Meta Lead Ads</div>
           <p className="text-xs mb-3" style={{ color: C.slate }}>
-            {t("Απευθείας σύνδεση σελίδας Facebook/Instagram μέσω Graph API. Χρειάζεται το Page ID και ένα Page Access Token με δικαίωμα leads_retrieval — δες το SETUP.md για τα βήματα δημιουργίας Meta App.")}
+            {t("Απευθείας σύνδεση σελίδας Facebook/Instagram μέσω Graph API. Χρειάζεται το Page ID και ένα Page Access Token με δικαίωμα leads_retrieval - δες το SETUP.md για τα βήματα δημιουργίας Meta App.")}
           </p>
           {metaConnections.length > 0 && (
             <div className="space-y-2 mb-4">
@@ -4805,7 +4805,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
         <Card className="p-5">
           <div className="text-sm font-semibold mb-1" style={{ color: C.ink }}>LinkedIn Lead Gen Forms</div>
           <p className="text-xs mb-3" style={{ color: C.slate }}>
-            {t("Απευθείας σύνδεση μέσω LinkedIn's Lead Sync API. Χρειάζεται έγκριση από το LinkedIn (Lead Sync API access) πριν λειτουργήσει για πραγματικά organizations — δες το SETUP.md. Μέχρι τότε η σύνδεση αποθηκεύεται αλλά δεν θα λαμβάνει leads.")}
+            {t("Απευθείας σύνδεση μέσω LinkedIn's Lead Sync API. Χρειάζεται έγκριση από το LinkedIn (Lead Sync API access) πριν λειτουργήσει για πραγματικά organizations - δες το SETUP.md. Μέχρι τότε η σύνδεση αποθηκεύεται αλλά δεν θα λαμβάνει leads.")}
           </p>
           {linkedinConnections.length > 0 && (
             <div className="space-y-2 mb-4">
@@ -4828,7 +4828,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
           )}
           {linkedinPendingConnect ? (
             <form onSubmit={handleFinalizeLinkedIn} className="space-y-2">
-              <p className="text-xs" style={{ color: C.sky }}>{t("Η σύνδεση με το LinkedIn έγινε — πρόσθεσε το Organization URN για να ολοκληρωθεί.")}</p>
+              <p className="text-xs" style={{ color: C.sky }}>{t("Η σύνδεση με το LinkedIn έγινε - πρόσθεσε το Organization URN για να ολοκληρωθεί.")}</p>
               <input
                 value={linkedinForm.organizationUrn}
                 onChange={(e) => setLinkedinForm({ ...linkedinForm, organizationUrn: e.target.value })}
@@ -4888,7 +4888,7 @@ function IntegrationsView({ data, loading, error, onReload, isOwner, onCreateWeb
 }
 
 // Shown right after login/reload whenever the current account has one or
-// more pending CompanyInvites (see routes/team.js#invite-existing) — i.e.
+// more pending CompanyInvites (see routes/team.js#invite-existing) - i.e.
 // someone already added them by email and is waiting on a yes/no. "Αργότερα"
 // just hides it for this session (the invite is still pending and will show
 // again next login); Accept/Decline actually resolve it server-side.
@@ -5004,13 +5004,13 @@ export default function App() {
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templatesError, setTemplatesError] = useState("");
 
-  // My own company's teammates — visible to everyone on the team; only an
+  // My own company's teammates - visible to everyone on the team; only an
   // "owner" gets invite/remove actions (see TeamView).
   const [teamMembers, setTeamMembers] = useState([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState("");
   // Invites THIS company has sent to existing accounts, still awaiting a
-  // response — separate from teamMembers above (those are actual
+  // response - separate from teamMembers above (those are actual
   // Memberships; these are still pending). Owner-only, so left empty (and
   // never fetched) for a regular member.
   const [teamInvites, setTeamInvites] = useState([]);
@@ -5029,7 +5029,7 @@ export default function App() {
     setContactsError("");
     try {
       // /contacts returns a paginated object ({ contacts, total, dueCount, ... }),
-      // not a bare array — extract the rows. Request the max page so the
+      // not a bare array - extract the rows. Request the max page so the
       // recipient pickers / category+tag facets built from this list aren't
       // truncated to the default page size. (Defensive: also accept a bare
       // array in case the endpoint shape changes back.)
@@ -5099,14 +5099,14 @@ export default function App() {
     }
   }, []);
 
-  // Cheap counts for the sidebar badges — fetched on its own so the badges can
+  // Cheap counts for the sidebar badges - fetched on its own so the badges can
   // render before the heavy lists do. Silent on failure (badges just fall back
   // to list lengths).
   const loadSummary = useCallback(async () => {
     try {
       setSummary(await api.get("/dashboard/summary"));
     } catch {
-      /* non-critical — counts fall back to list lengths */
+      /* non-critical - counts fall back to list lengths */
     }
   }, []);
 
@@ -5184,7 +5184,7 @@ export default function App() {
     try {
       setTeamMembers(await api.get("/team"));
       // Only an owner can see/manage pending invites (GET /team/invites is
-      // owner-only) — a plain 403 here for a regular member is expected, not
+      // owner-only) - a plain 403 here for a regular member is expected, not
       // an error worth surfacing.
       try {
         setTeamInvites(await api.get("/team/invites"));
@@ -5203,7 +5203,7 @@ export default function App() {
     setOffersError("");
     try {
       // /offers returns a paginated object ({ offers, total, ... }), not a bare
-      // array — extract the rows (the offers board calls .filter/.map on this).
+      // array - extract the rows (the offers board calls .filter/.map on this).
       const res = await api.get("/offers?pageSize=200");
       setOffers(Array.isArray(res) ? res : res.offers || []);
     } catch (err) {
@@ -5218,7 +5218,7 @@ export default function App() {
     setCampaignsError("");
     try {
       // /campaigns returns a paginated object ({ campaigns, total, ... }), not
-      // a bare array — extract the rows (dashboard stats + list render call
+      // a bare array - extract the rows (dashboard stats + list render call
       // .filter/.map on this). Max page size so counts aren't truncated.
       const res = await api.get("/campaigns?pageSize=200");
       setCampaigns(Array.isArray(res) ? res : res.campaigns || []);
@@ -5231,8 +5231,8 @@ export default function App() {
 
   // Loaded once on login: the dashboard's own data, plus the broadly-shared
   // lists that many tabs read (contact pickers, sequence/enroll dropdowns,
-  // template insert). Everything else — analytics, inbox, offers, campaigns,
-  // integrations, team — is fetched only when its tab is opened (see the
+  // template insert). Everything else - analytics, inbox, offers, campaigns,
+  // integrations, team - is fetched only when its tab is opened (see the
   // view-gated effect below), so login fires ~5 requests instead of ~10. That
   // matters most right after a cold start, when the backend is still waking up.
   const loadCore = useCallback(() => {
@@ -5257,7 +5257,7 @@ export default function App() {
     }
 
     // Same idea for the LinkedIn OAuth redirect (?linkedin_connected=pending|0)
-    // — "pending" means the token exchange succeeded but the connection still
+    // - "pending" means the token exchange succeeded but the connection still
     // needs an organization URN to attach to (see routes/integrations.js's
     // /linkedin/finalize), so send the owner straight to the Integrations tab
     // to finish that step rather than leaving them on whatever tab they left.
@@ -5290,7 +5290,7 @@ export default function App() {
 
   // Load the workspace's editable unsubscribe footer once, so new draft bodies
   // (compose, sequence steps, campaigns, templates) seed from the configured
-  // text instead of the hardcoded default. Best-effort — falls back silently.
+  // text instead of the hardcoded default. Best-effort - falls back silently.
   useEffect(() => {
     if (authState !== "authed") return;
     api.get("/company/settings")
@@ -5299,7 +5299,7 @@ export default function App() {
   }, [authState]);
 
   // Analytics/Inbox numbers otherwise only change on the actions we happen to
-  // remember to refresh after (see handleManualSend etc. above) — that misses
+  // remember to refresh after (see handleManualSend etc. above) - that misses
   // tracking events (opens/clicks/unsubscribes) which land asynchronously
   // whenever the recipient acts, with no corresponding frontend call at all.
   // Re-pull the relevant data the moment the user actually looks at that tab,
@@ -5317,13 +5317,13 @@ export default function App() {
     if (view === "offers") loadOffers();
     if (view === "team") loadTeam();
     // Running campaigns send in the background via the scheduler, one
-    // recipient at a time — reload whenever this tab is actually open so
+    // recipient at a time - reload whenever this tab is actually open so
     // progress (sent/pending counts) looks live rather than stuck at
     // whatever it was on last page load.
     if (view === "campaigns") loadCampaigns();
   }, [view, authState, loadAnalytics, loadActivity, loadDashboard, loadIntegrations, loadOffers, loadTeam, loadCampaigns]);
 
-  // Gated on whichever tab is actually open — this used to unconditionally
+  // Gated on whichever tab is actually open - this used to unconditionally
   // refresh analytics/activity/dashboard/campaigns every tick regardless of
   // which view the user was looking at, so e.g. someone sitting on Contacts
   // all day still triggered a full Analytics reload every 90s for nobody.
@@ -5333,7 +5333,7 @@ export default function App() {
     if (authState !== "authed") return;
     const id = setInterval(() => {
       // Skip the round-trip entirely while the tab isn't visible (switched
-      // away, minimized, different tab focused) — there's no one looking at
+      // away, minimized, different tab focused) - there's no one looking at
       // the result, so it was just burning requests/battery every tick for
       // nothing. Whatever's stale gets refreshed as soon as the tab is
       // focused again via the visibilitychange listener below.
@@ -5342,7 +5342,7 @@ export default function App() {
       if (view === "inbox") loadActivity();
       if (view === "dashboard") loadDashboard();
       if (view === "campaigns") loadCampaigns();
-    }, 90000); // was 30s — 90s cuts request volume/egress 3x with no real loss of freshness
+    }, 90000); // was 30s - 90s cuts request volume/egress 3x with no real loss of freshness
     return () => clearInterval(id);
   }, [authState, view, loadAnalytics, loadActivity, loadDashboard, loadCampaigns]);
 
@@ -5363,7 +5363,7 @@ export default function App() {
     try {
       await api.post("/auth/logout");
     } catch {
-      // Even if the request fails, drop the client-side session state —
+      // Even if the request fails, drop the client-side session state -
       // worst case the cookie is still valid server-side until it expires.
     }
     setUser(null);
@@ -5380,7 +5380,7 @@ export default function App() {
 
   // Switching companies changes literally every piece of company-scoped
   // state on this page (contacts, sequences, templates, offers, campaigns,
-  // gmail connection...) — rather than carefully resetting each one here and
+  // gmail connection...) - rather than carefully resetting each one here and
   // risking something stale slipping through, a full reload re-runs the
   // normal auth-gated load path from scratch against the new session
   // (session.activeCompanyId is set server-side first, so the reload's
@@ -5410,7 +5410,7 @@ export default function App() {
   // down as ContactDetailDrawer's onLoad prop, which its own `load`
   // useCallback depends on. Before this was memoized, a brand-new function
   // was created here on every App render (e.g. the 30s background poll
-  // updating analytics/activity/campaigns elsewhere) — that changed `load`'s
+  // updating analytics/activity/campaigns elsewhere) - that changed `load`'s
   // identity too, re-firing its effect and silently overwriting whatever the
   // user was mid-typing in the contact edit form. Now it only reloads when
   // contactId actually changes (a different contact opened).
@@ -5514,7 +5514,7 @@ export default function App() {
   async function handleManualSend(data) {
     await api.post("/send", data);
     // Sends move the sent/opened/reply counts on the Analytics board and the
-    // Inbox list — refresh both immediately instead of waiting for a tab
+    // Inbox list - refresh both immediately instead of waiting for a tab
     // switch or the next poll (see the polling effect below).
     await Promise.all([loadActivity(), loadContacts(), loadAnalytics()]);
   }
@@ -5559,13 +5559,13 @@ export default function App() {
   }
 
   // Freeform personalization notes, editable straight from the contact
-  // drawer — no contacts list refresh needed since comments aren't shown in
+  // drawer - no contacts list refresh needed since comments aren't shown in
   // the table, only used as {{comments}} merge content when composing.
   async function handleUpdateComments(contactId, comments) {
     await api.patch(`/contacts/${contactId}`, { comments });
   }
 
-  // Private, internal-only notes — same no-list-refresh rationale as
+  // Private, internal-only notes - same no-list-refresh rationale as
   // comments (not shown in the contacts table), kept as its own handler so
   // it's clear this field is never used as a merge tag / sent in an email.
   async function handleUpdateInternalNotes(contactId, internalNotes) {
@@ -5574,7 +5574,7 @@ export default function App() {
 
   // Editing name/phone/company/category/tags from the contact drawer. Unlike
   // comments, these fields ARE shown in the contacts table, so refresh the
-  // list too — PATCH only ever touches the Contact row itself, so send
+  // list too - PATCH only ever touches the Contact row itself, so send
   // history/notes/offers are untouched by this.
   async function handleUpdateContact(contactId, data) {
     await api.patch(`/contacts/${contactId}`, data);
@@ -5616,7 +5616,7 @@ export default function App() {
   }
   async function handleAcceptInvite(id) {
     await api.post(`/team/invites/${id}/accept`);
-    // A new Membership can change the active company/gmail/permissions —
+    // A new Membership can change the active company/gmail/permissions -
     // simplest to just reload, same as handleSwitchCompany, rather than
     // patching a dozen pieces of state by hand.
     window.location.reload();
@@ -5628,7 +5628,7 @@ export default function App() {
   async function handleDisconnectMailbox(gmailAccountId) {
     await api.post("/auth/google/disconnect", { gmailAccountId });
     // The Gmail summary/list lives on `user`, not a separately-loaded
-    // resource — simplest to just re-fetch it rather than hand-patch the
+    // resource - simplest to just re-fetch it rather than hand-patch the
     // aggregate sentToday/dailyCap/needsReconnect fields on the frontend.
     setUser(await api.get("/auth/me"));
   }
@@ -5666,7 +5666,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-full" style={{ backgroundColor: C.canvas, fontFamily: "Inter, sans-serif" }}>
+    <div className="flex h-screen w-full overflow-hidden" style={{ backgroundColor: C.canvas, fontFamily: "Inter, sans-serif" }}>
       {!inviteBannerDismissed && user?.pendingInvites?.length > 0 && (
         <InviteResponseModal
           invites={user.pendingInvites}
@@ -5703,7 +5703,7 @@ export default function App() {
 
         <GlobalSearch onSelectContact={handleSelectFromSearch} dark />
 
-        <div className="px-3 space-y-0.5 flex-1 overflow-y-auto">
+        <div className="px-3 space-y-0.5 flex-1 min-h-0 overflow-y-auto">
           <NavItem dark icon={CalendarClock} label={t("Σήμερα")} active={view === "dashboard"} onClick={() => { setView("dashboard"); setSidebarOpen(false); }} count={counts.dueToday} />
           <NavItem dark icon={Mail} label={t("Απεσταλμένα")} active={view === "inbox"} onClick={() => { setView("inbox"); setSidebarOpen(false); }} count={counts.inbox} />
           <NavItem dark icon={Users} label={t("Επαφές")} active={view === "contacts"} onClick={() => { setView("contacts"); setSidebarOpen(false); }} count={counts.contacts} />
@@ -5752,7 +5752,7 @@ export default function App() {
       </div>
 
       {/* Main */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: C.line, backgroundColor: "#FFFFFF" }}>
           <button onClick={() => setSidebarOpen(true)} className="text-slate-500 hover:text-slate-700">
             <Menu size={20} />
@@ -5772,7 +5772,7 @@ export default function App() {
           </div>
         )}
         <GmailBanner user={user} />
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 min-h-0">
           {view === "dashboard" && (
             <DashboardView dashboard={dashboard} loading={dashboardLoading} error={dashboardError} onReload={loadDashboard} onSelectContact={handleSelectFromSearch} />
           )}
