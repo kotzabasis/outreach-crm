@@ -34,6 +34,7 @@ const LIGHT = {
   onDarkMuted: "#7E90AE",
   canvas: "#F4F7FB",
   surface: "#FFFFFF",
+  zebra: "#FAFCFE",
   shadow: "0 1px 2px rgba(16,25,43,0.04), 0 4px 12px rgba(16,25,43,0.06)",
 };
 const DARK = {
@@ -52,6 +53,7 @@ const DARK = {
   onDarkMuted: "#7E90AE",
   canvas: "#0B1220",     // page background
   surface: "#141E30",    // card/input background
+  zebra: "rgba(255,255,255,0.03)", // subtle alternating row tint
   shadow: "0 1px 2px rgba(0,0,0,0.4), 0 6px 18px rgba(0,0,0,0.45)",
 };
 

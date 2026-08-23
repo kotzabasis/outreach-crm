@@ -278,7 +278,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
         </div>
         {tab === "email" && (
           <div className="flex flex-wrap items-center gap-2 mt-3">
-            <div className="flex rounded-lg p-0.5 border" style={{ borderColor: C.line, backgroundColor: "#fff" }}>
+            <div className="flex rounded-lg p-0.5 border" style={{ borderColor: C.line, backgroundColor: C.surface }}>
               {RANGES.map(([key]) => (
                 <button key={key} type="button" onClick={() => setRange(key)}
                   className="rounded-md px-2.5 py-1 text-[11px] font-medium"
@@ -375,7 +375,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                 </thead>
                 <tbody>
                   {(ov?.perSequence || []).map((s, i) => (
-                    <tr key={s.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? "#FAFCFE" : "transparent" }}>
+                    <tr key={s.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? C.zebra : "transparent" }}>
                       <td className="py-2.5 font-medium" style={{ color: C.ink }}>{s.name}</td>
                       <td className="py-2.5 text-right tabular-nums" style={{ color: C.ink }}>{s.sent}</td>
                       <td className="py-2.5 text-right tabular-nums" style={{ color: C.ink }}>{pct(s.opened, s.sent)}</td>
@@ -403,7 +403,7 @@ function AnalyticsView({ overview, timeline, crmOverview, loading, error, onRelo
                 </thead>
                 <tbody>
                   {(ov?.perCampaign || []).map((c, i) => (
-                    <tr key={c.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? "#FAFCFE" : "transparent" }}>
+                    <tr key={c.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? C.zebra : "transparent" }}>
                       <td className="py-2.5 font-medium" style={{ color: C.ink }}>{c.name}</td>
                       <td className="py-2.5"><CampaignStatusBadge status={c.status} /></td>
                       <td className="py-2.5 text-right tabular-nums" style={{ color: C.ink }}>{c.sent}</td>

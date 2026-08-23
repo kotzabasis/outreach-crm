@@ -123,12 +123,12 @@ function NewCompanyModal({ onClose, onCreate, users }) {
           <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: C.pale }}>
             <button type="button" onClick={() => setOwnerMode("new")}
               className="flex-1 rounded-md py-1.5 text-xs font-medium"
-              style={{ backgroundColor: ownerMode === "new" ? "white" : "transparent", color: ownerMode === "new" ? C.ink : C.slate }}>
+              style={{ backgroundColor: ownerMode === "new" ? C.surface : "transparent", color: ownerMode === "new" ? C.ink : C.slate }}>
               {t("Νέος ιδιοκτήτης")}
             </button>
             <button type="button" onClick={() => setOwnerMode("existing")}
               className="flex-1 rounded-md py-1.5 text-xs font-medium"
-              style={{ backgroundColor: ownerMode === "existing" ? "white" : "transparent", color: ownerMode === "existing" ? C.ink : C.slate }}>
+              style={{ backgroundColor: ownerMode === "existing" ? C.surface : "transparent", color: ownerMode === "existing" ? C.ink : C.slate }}>
               {t("Υπάρχων χρήστης")}
             </button>
           </div>

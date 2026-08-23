@@ -2022,7 +2022,7 @@ function ContactsView({ sequences, onUpload, onCreate, onEnroll, onLoadDetail, o
                 </thead>
                 <tbody>
                   {rows.map((c, i) => (
-                    <tr key={c.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? "#FAFCFE" : "transparent" }}>
+                    <tr key={c.id} className="border-t transition-colors hover:bg-slate-50" style={{ borderColor: C.line, backgroundColor: i % 2 ? C.zebra : "transparent" }}>
                       <td className="py-3">
                         <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
                       </td>
@@ -2298,7 +2298,7 @@ function TemplateModal({ initial, onClose, onSave }) {
               {attachments.length > 0 && (
                 <div className="flex gap-1.5 flex-wrap mt-3 pt-3 border-t" style={{ borderColor: C.line }}>
                   {attachments.map((a, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]" style={{ backgroundColor: "#fff", color: C.navy }}>
+                    <span key={i} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px]" style={{ backgroundColor: C.pale, color: C.navy }}>
                       <Paperclip size={10} /> {a.filename}
                     </span>
                   ))}
@@ -2825,7 +2825,7 @@ function StepFields({
   return (
     <>
       {templates.length > 0 && (
-        <div className="flex rounded-lg p-0.5 mb-3 w-fit" style={{ backgroundColor: "#fff" }}>
+        <div className="flex rounded-lg p-0.5 mb-3 w-fit" style={{ backgroundColor: C.pale }}>
           {["inline", "template"].map((m) => (
             <button key={m} type="button"
               onClick={() => setMode(m)}
@@ -4298,7 +4298,7 @@ function SendWindowCard({ isOwner }) {
           {DAYS.map(([d, label]) => (
             <button key={d} type="button" disabled={!isOwner} onClick={() => toggleDay(d)}
               className="rounded-md px-2 py-1 text-[11px] font-medium border"
-              style={{ borderColor: C.line, backgroundColor: days.includes(d) ? C.sky : "#fff", color: days.includes(d) ? "#fff" : C.slate }}>
+              style={{ borderColor: C.line, backgroundColor: days.includes(d) ? C.sky : C.surface, color: days.includes(d) ? "#fff" : C.slate }}>
               {t(label)}
             </button>
           ))}

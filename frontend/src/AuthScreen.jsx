@@ -91,7 +91,7 @@ export function AuthScreen({ onAuthenticated }) {
                   type="button"
                   onClick={() => switchMode(m)}
                   className="flex-1 rounded-md py-1.5 text-sm font-medium transition-colors"
-                  style={{ backgroundColor: mode === m ? "#fff" : "transparent", color: mode === m ? C.navy : C.slate }}
+                  style={{ backgroundColor: mode === m ? C.surface : "transparent", color: mode === m ? C.navy : C.slate }}
                 >
                   {m === "login" ? t("Σύνδεση") : t("Εγγραφή")}
                 </button>
